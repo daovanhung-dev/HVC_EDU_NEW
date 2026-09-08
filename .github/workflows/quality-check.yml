@@ -1,0 +1,33 @@
+name: Quality Check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test:run
+      - run: npm run build
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for common secret patterns
+        run: |
+          ! grep -RInE 'sb_secret_[A-Za-z0-9_-]{20,}|service_role_[A-Za-z0-9_-]{20,}|SUPABASE_DB_PASSWORD=[^$]' \
+            --exclude-dir=.git --exclude-dir=node_modules --exclude='*.md' --exclude='quality-check.yml' .

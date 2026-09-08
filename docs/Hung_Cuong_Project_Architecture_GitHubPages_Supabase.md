@@ -1,12 +1,12 @@
 # PROJECT ARCHITECTURE — HÙNG CƯỜNG MANAGEMENT SYSTEM
 
-**Version:** 2.0  
-**Business baseline:** BD v1.0  
-**Deployment target:** GitHub Pages + Supabase  
-**Frontend:** Vue 3 + TypeScript + Vite  
-**Backend platform:** Supabase (PostgreSQL + Auth + Edge Functions + Realtime + Storage)  
-**Architecture style:** Serverless Modular Monolith / Feature-first  
-**Timezone:** `Asia/Ho_Chi_Minh`  
+**Version:** 2.0
+**Business baseline:** BD v1.0
+**Deployment target:** GitHub Pages + Supabase
+**Frontend:** Vue 3 + TypeScript + Vite
+**Backend platform:** Supabase (PostgreSQL + Auth + Edge Functions + Realtime + Storage)
+**Architecture style:** Serverless Modular Monolith / Feature-first
+**Timezone:** `Asia/Ho_Chi_Minh`
 **Currency:** `VND`
 
 ---
@@ -54,10 +54,10 @@ Runtime:
 │                   │       │                          │
 │ Static HTML/CSS/JS│       │ Auth                     │
 └───────────────────┘       │ PostgreSQL               │
-                            │ Row Level Security        │
-                            │ Edge Functions            │
-                            │ Realtime                  │
-                            │ Storage                   │
+                            │ Row Level Security       │
+                            │ Edge Functions           │
+                            │ Realtime                 │
+                            │ Storage                  │
                             └────────────┬─────────────┘
                                          │
                                          ▼
@@ -2070,28 +2070,28 @@ Production có thể thêm manual approval trước `db push`.
 
 # 62. Công nghệ cuối cùng
 
-| Layer | Technology |
-|---|---|
-| Frontend | Vue 3 |
-| Language | TypeScript |
-| Build | Vite |
-| State | Pinia |
-| Router | Vue Router |
-| UI | Bootstrap 5 |
-| Hosting | GitHub Pages |
-| Authentication | Supabase Auth |
-| Database | Supabase PostgreSQL |
-| Authorization | PostgreSQL RLS + Permission Groups |
-| Backend Logic | Supabase Edge Functions |
-| Complex DB Transaction | PostgreSQL Functions / RPC |
-| Realtime | Supabase Realtime |
-| File Storage | Supabase Storage |
-| Migration | Supabase CLI |
-| CI/CD Frontend | GitHub Actions |
-| CI/CD Backend | GitHub Actions + Supabase CLI |
-| Testing | Vitest + DB/RLS tests |
-| Currency | VND |
-| Timezone | Asia/Ho_Chi_Minh |
+| Layer                  | Technology                         |
+| ---------------------- | ---------------------------------- |
+| Frontend               | Vue 3                              |
+| Language               | TypeScript                         |
+| Build                  | Vite                               |
+| State                  | Pinia                              |
+| Router                 | Vue Router                         |
+| UI                     | Bootstrap 5                        |
+| Hosting                | GitHub Pages                       |
+| Authentication         | Supabase Auth                      |
+| Database               | Supabase PostgreSQL                |
+| Authorization          | PostgreSQL RLS + Permission Groups |
+| Backend Logic          | Supabase Edge Functions            |
+| Complex DB Transaction | PostgreSQL Functions / RPC         |
+| Realtime               | Supabase Realtime                  |
+| File Storage           | Supabase Storage                   |
+| Migration              | Supabase CLI                       |
+| CI/CD Frontend         | GitHub Actions                     |
+| CI/CD Backend          | GitHub Actions + Supabase CLI      |
+| Testing                | Vitest + DB/RLS tests              |
+| Currency               | VND                                |
+| Timezone               | Asia/Ho_Chi_Minh                   |
 
 ---
 
