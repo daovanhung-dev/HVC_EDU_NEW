@@ -29,7 +29,7 @@ async function submit() {
   <div class="card border-0 shadow-sm">
     <div class="card-body p-4 p-lg-5">
       <h2 class="h5 mb-1">Đổi mật khẩu</h2>
-      <p class="text-secondary small mb-4">Vui lòng đổi mật khẩu trước khi sử dụng hệ thống.</p>
+      <p class="text-secondary small mb-4">Bạn có thể cập nhật mật khẩu khi cần.</p>
       <div v-if="errorMessage" class="alert alert-danger small">{{ errorMessage }}</div>
       <div v-if="message" class="alert alert-success small">{{ message }}</div>
       <form @submit.prevent="submit">

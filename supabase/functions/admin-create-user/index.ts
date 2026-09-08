@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
     const email = body.email || syntheticEmail(username)
     const created = await admin.auth.admin.createUser({ email, password, email_confirm: true, phone: body.phone || undefined })
     if (created.error || !created.data.user) throw created.error || new Error('AUTH_CREATE_FAILED')
-    const profile = await admin.from('profiles').insert({ user_id: created.data.user.id, role, username, display_name: displayName, email, phone: body.phone || null, created_by: caller.profile.id, force_password_change: true }).select('id,user_id,role,username,display_name').single()
+    const profile = await admin.from('profiles').insert({ user_id: created.data.user.id, role, username, display_name: displayName, email, phone: body.phone || null, created_by: caller.profile.id, force_password_change: false }).select('id,user_id,role,username,display_name').single()
     if (profile.error || !profile.data) {
       await admin.auth.admin.deleteUser(created.data.user.id)
       throw profile.error || new Error('PROFILE_CREATE_FAILED')

@@ -74,7 +74,7 @@ describe('auth store password-change flow', () => {
     mocks.supabase.rpc.mockResolvedValue({ error: null })
   })
 
-  it('hydrates a new account with force_password_change enabled', async () => {
+  it('hydrates the profile force-password flag without changing its value', async () => {
     mocks.profileRows.push(profile(true))
     mocks.supabase.auth.getSession.mockResolvedValue({ data: { session } })
     const auth = useAuthStore()

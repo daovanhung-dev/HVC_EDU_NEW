@@ -57,11 +57,11 @@ describe('authentication route guard', () => {
     permissions.loaded = true
   })
 
-  it('redirects a first-login account to change-password', async () => {
+  it('allows an account with a legacy force flag to enter Dashboard', async () => {
     mocks.profileRows.push(profile(true))
     await router.push('/dashboard?case=forced')
 
-    expect(router.currentRoute.value.path).toBe('/auth/change-password')
+    expect(router.currentRoute.value.path).toBe('/dashboard')
   })
 
   it('allows an account with the cleared flag to enter Dashboard', async () => {

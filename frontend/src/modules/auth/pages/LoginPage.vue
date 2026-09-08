@@ -14,7 +14,7 @@ async function submit() {
   errorMessage.value = ''
   try {
     await auth.login(identifier.value.trim(), password.value)
-    await router.push(auth.forcePasswordChange ? '/auth/change-password' : '/dashboard')
+    await router.push('/dashboard')
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'Không thể đăng nhập'
   }

@@ -55,7 +55,6 @@ router.beforeEach(async (to) => {
   if (to.meta.requiresAuth && !auth.isAuthenticated) return '/login'
   if (to.name === 'login' && auth.isAuthenticated) return '/dashboard'
   if (auth.isAuthenticated) await permissions.load()
-  if (auth.isAuthenticated && auth.forcePasswordChange && to.name !== 'change-password') return '/auth/change-password'
   if (to.meta.adminOnly && !auth.isAdmin) return '/dashboard'
   if (to.meta.rootOnly && auth.role !== 'ROOT_ADMIN') return '/dashboard'
   if (to.meta.staffOnly && !auth.isStaff) return '/dashboard'
