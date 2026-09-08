@@ -38,7 +38,7 @@ Bootstrap ROOT interactively without writing credentials to disk:
 bash scripts/bootstrap-root.sh
 ```
 
-Trước khi chạy script, đặt `CUSTOM_BOOTSTRAP_SECRET` trong Supabase Edge Function Secrets. Giá trị này không nằm trong repository.
+Script tự kiểm tra Supabase CLI, tự sinh và set `CUSTOM_BOOTSTRAP_SECRET` nếu secret chưa tồn tại. Nếu secret đã tồn tại nhưng không biết giá trị, cần rotate secret rồi truyền trong cùng phiên terminal; không đưa giá trị vào repository.
 
 Deploy production cần cấu hình `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF` và `SUPABASE_DB_PASSWORD` trong secret manager. Không đưa secret key hoặc database password vào frontend.
 
@@ -53,6 +53,8 @@ VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 VITE_APP_BASE_PATH=/hung-cuong-management/
 ```
+
+Hai biến đầu tiên là bắt buộc để workflow build frontend. Nếu chưa cấu hình, workflow sẽ dừng ở bước `Validate public build configuration` và hiển thị tên biến còn thiếu.
 
 Nếu muốn chạy workflow migration/function thủ công từ tab Actions, tạo thêm Actions Secrets:
 

@@ -31,12 +31,25 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
-        run: test -n "$VITE_SUPABASE_URL" && test -n "$VITE_SUPABASE_PUBLISHABLE_KEY"
+        run: |
+          missing=0
+          if [[ -z "${VITE_SUPABASE_URL:-}" ]]; then
+            echo "::error title=Missing GitHub Variable::VITE_SUPABASE_URL chưa được cấu hình."
+            missing=1
+          fi
+          if [[ -z "${VITE_SUPABASE_PUBLISHABLE_KEY:-}" ]]; then
+            echo "::error title=Missing GitHub Variable::VITE_SUPABASE_PUBLISHABLE_KEY chưa được cấu hình."
+            missing=1
+          fi
+          if [[ "$missing" -ne 0 ]]; then
+            echo "Vào Settings → Secrets and variables → Actions → Variables của repository để tạo hai biến trên."
+            exit 1
+          fi
       - run: npm run build
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
-          VITE_APP_BASE_PATH: ${{ vars.VITE_APP_BASE_PATH }}
+          VITE_APP_BASE_PATH: ${{ vars.VITE_APP_BASE_PATH || '/hung-cuong-management/' }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

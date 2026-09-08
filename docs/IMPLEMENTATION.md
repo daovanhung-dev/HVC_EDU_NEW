@@ -21,4 +21,4 @@ Secret key, database password, access token và bootstrap secret chỉ được 
 3. Nếu dùng workflow backend, đặt Secrets: `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`, `SUPABASE_DB_PASSWORD`.
 4. Workflow Supabase chạy thủ công từ tab Actions để tránh yêu cầu database secret trong lần deploy Pages đầu; backend hiện đã được apply/deploy.
 5. Cấu hình Auth Site URL/redirect URL tới GitHub Pages.
-6. Đặt `CUSTOM_BOOTSTRAP_SECRET` ngoài source, bootstrap ROOT một lần và đổi mật khẩu ngay lần đăng nhập đầu.
+6. Chạy `scripts/bootstrap-root.sh`; script tự sinh/set `CUSTOM_BOOTSTRAP_SECRET` nếu chưa có, bootstrap ROOT một lần và đổi mật khẩu ngay lần đăng nhập đầu.
