@@ -17,6 +17,7 @@ export const useAuthStore = defineStore('auth', () => {
   const profile = ref<Profile | null>(null)
   const initialized = ref(false)
   const loading = ref(false)
+  let hydrateVersion = 0
 
   const isAuthenticated = computed(() => Boolean(session.value && user.value && profile.value))
   const role = computed<Role | null>(() => profile.value?.role || null)
@@ -30,13 +31,17 @@ export const useAuthStore = defineStore('auth', () => {
   const isStudent = computed(() => role.value === 'STUDENT')
 
   async function hydrate(currentSession: Session | null) {
-    session.value = currentSession
-    user.value = currentSession?.user || null
-    profile.value = null
-    if (currentSession?.user) {
-      const { data } = await supabase.from('profiles').select('*').eq('user_id', currentSession.user.id).maybeSingle()
-      profile.value = data as Profile | null
+    const version = ++hydrateVersion
+    const nextUser = currentSession?.user || null
+    let nextProfile: Profile | null = null
+    if (nextUser) {
+      const { data } = await supabase.from('profiles').select('*').eq('user_id', nextUser.id).maybeSingle()
+      nextProfile = data as Profile | null
     }
+    if (version !== hydrateVersion) return
+    session.value = currentSession
+    user.value = nextUser
+    profile.value = nextProfile
   }
 
   async function initialize() {
@@ -69,11 +74,12 @@ export const useAuthStore = defineStore('auth', () => {
   async function updatePassword(password: string) {
     const { error } = await supabase.auth.updateUser({ password })
     if (error) throw error
+    const { error: profileError } = await supabase.rpc('clear_force_password_change')
+    if (profileError) throw profileError
     if (profile.value) {
       profile.value = { ...profile.value, force_password_change: false }
-      const { error: profileError } = await supabase.rpc('clear_force_password_change')
-      if (profileError) throw profileError
     }
+    await hydrate(session.value)
   }
 
   async function signOut() {
