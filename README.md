@@ -46,7 +46,7 @@ Deploy production cần cấu hình `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_R
 
 Tạo public repository tên `hung-cuong-management`, push branch `main`, sau đó vào `Settings → Pages` chọn `GitHub Actions`. Workflow `Deploy Frontend` sẽ tự chạy sau mỗi lần push.
 
-Tạo GitHub Actions Variables (không phải Secrets):
+Tạo GitHub Actions Variables (khuyến nghị) hoặc Repository secrets với đúng tên sau:
 
 ```text
 VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
@@ -54,7 +54,7 @@ VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 VITE_APP_BASE_PATH=/hung-cuong-management/
 ```
 
-Hai biến đầu tiên là bắt buộc để workflow build frontend. Nếu chưa cấu hình, workflow sẽ dừng ở bước `Validate public build configuration` và hiển thị tên biến còn thiếu.
+Hai giá trị đầu tiên là bắt buộc để workflow build frontend. Workflow ưu tiên `Variables` và tự fallback sang `Repository secrets`, nên có thể dùng cấu hình hiện tại nếu bạn đã tạo secrets với đúng tên. Nếu chưa cấu hình, workflow sẽ dừng ở bước `Validate public build configuration` và hiển thị tên giá trị còn thiếu.
 `VITE_APP_BASE_PATH` là tùy chọn trong workflow; nếu bỏ trống, workflow tự dùng slug repository hiện tại (ví dụ repository `HVC_EDU_NEW` dùng `/HVC_EDU_NEW/`).
 
 Nếu muốn chạy workflow migration/function thủ công từ tab Actions, tạo thêm Actions Secrets:
