@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
       if (!studentCode) throw new Error('STUDENT_CODE_GENERATION_FAILED')
       const student = await admin.from('students').insert({ user_id: created.data.user.id, student_code: studentCode, full_name: body.student?.full_name || body.display_name || body.username, parent_name: body.student?.parent_name || null, parent_phone: body.student?.parent_phone || null, email, phone: body.phone || null, created_by: caller.user.id }).select('id,student_code').single()
       if (student.error) { await admin.auth.admin.deleteUser(created.data.user.id); throw student.error }
-    } else {
+    } else if (role !== 'ADMIN') {
       const staff = await admin.from('staff').insert({ user_id: created.data.user.id, staff_type: role, staff_code: body.staff?.staff_code || null, full_name: body.staff?.full_name || body.display_name || body.username, email, phone: body.phone || null, created_by: caller.user.id }).select('id,staff_code').single()
       if (staff.error) { await admin.auth.admin.deleteUser(created.data.user.id); throw staff.error }
     }
