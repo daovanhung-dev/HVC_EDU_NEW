@@ -55,6 +55,7 @@ VITE_APP_BASE_PATH=/hung-cuong-management/
 ```
 
 Hai biến đầu tiên là bắt buộc để workflow build frontend. Nếu chưa cấu hình, workflow sẽ dừng ở bước `Validate public build configuration` và hiển thị tên biến còn thiếu.
+`VITE_APP_BASE_PATH` là tùy chọn trong workflow; nếu bỏ trống, workflow tự dùng slug repository hiện tại (ví dụ repository `HVC_EDU_NEW` dùng `/HVC_EDU_NEW/`).
 
 Nếu muốn chạy workflow migration/function thủ công từ tab Actions, tạo thêm Actions Secrets:
 
