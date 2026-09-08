@@ -1,0 +1,17 @@
+create index class_months_class_idx on public.class_months(class_id, year, month);
+create index class_month_students_student_idx on public.class_month_students(student_id);
+create index class_month_staff_staff_idx on public.class_month_staff(staff_id);
+create index sessions_class_month_start_idx on public.sessions(class_month_id, scheduled_start_at);
+create index sessions_status_idx on public.sessions(status);
+create index session_students_student_idx on public.session_students(student_id);
+create index student_attendances_session_student_idx on public.student_attendances(session_id, student_id);
+create index timesheets_status_idx on public.timesheets(status);
+create index tuition_records_status_idx on public.tuition_records(status);
+create index payroll_items_staff_idx on public.payroll_items(staff_id);
+create index payroll_periods_year_month_idx on public.payroll_periods(year, month);
+create index accounting_transactions_date_idx on public.accounting_transactions(transaction_date);
+create index accounting_transactions_direction_idx on public.accounting_transactions(direction);
+create index notifications_user_read_idx on public.notifications(user_id, read_at);
+create index audit_logs_entity_idx on public.audit_logs(entity_type, entity_id);
+create index audit_logs_created_at_idx on public.audit_logs(created_at);
+create unique index sessions_month_start_uidx on public.sessions(class_month_id, scheduled_start_at);

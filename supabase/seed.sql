@@ -1,0 +1,2 @@
+-- Master data is seeded by migration 0019_seed_master.sql.
+-- Keep this file intentionally empty so `supabase db reset` remains deterministic.

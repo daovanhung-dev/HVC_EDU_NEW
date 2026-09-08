@@ -1,0 +1,16 @@
+create type public.user_role as enum ('ROOT_ADMIN', 'ADMIN', 'TEACHER', 'ASSISTANT', 'STUDENT');
+create type public.account_status as enum ('ACTIVE', 'INACTIVE', 'LOCKED');
+create type public.entity_status as enum ('ACTIVE', 'INACTIVE', 'ARCHIVED');
+create type public.class_month_status as enum ('DRAFT', 'ACTIVE', 'ARCHIVED');
+create type public.capacity_policy as enum ('WARNING', 'BLOCK', 'UNLIMITED');
+create type public.session_status as enum ('SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED');
+create type public.attendance_status as enum ('PRESENT', 'LATE', 'ABSENT', 'EXCUSED');
+create type public.timesheet_status as enum ('PENDING', 'APPROVED', 'REJECTED');
+create type public.salary_method as enum ('PERCENTAGE', 'FIXED');
+create type public.payroll_status as enum ('DRAFT', 'CONFIRMED', 'PAID');
+create type public.tuition_status as enum ('UNPAID', 'PAID');
+create type public.adjustment_type as enum ('BONUS', 'PENALTY');
+create type public.transaction_type as enum ('AUTO', 'MANUAL', 'ADJUSTMENT');
+create type public.transaction_direction as enum ('INCOME', 'EXPENSE');
+create type public.payment_method as enum ('CASH', 'BANK_TRANSFER', 'OTHER');
+create type public.notification_channel as enum ('IN_APP');
