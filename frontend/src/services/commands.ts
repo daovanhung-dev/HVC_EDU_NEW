@@ -117,3 +117,9 @@ export async function addClassMonthSchedule(input: { class_month_id: string; day
   if (error) throw error
   return data
 }
+
+export async function addClassMonthScheduleStaff(input: { schedule_id: string; staff_id: string; assignment_role: 'TEACHER' | 'ASSISTANT' }) {
+  const { data, error } = await supabase.from('class_month_schedule_staff').insert(input).select('*').single()
+  if (error) throw error
+  return data
+}

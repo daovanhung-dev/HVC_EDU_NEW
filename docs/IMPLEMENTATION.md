@@ -46,6 +46,22 @@ npm run import:class-schedules
 
 The schedule importer deliberately does not activate the ClassMonths, generate sessions, or create tuition records. Review the draft schedule in the admin ClassMonth screen before activation.
 
+## Staff and per-slot schedule import
+
+`supabase/migrations/0033_class_month_schedule_staff.sql` adds per-slot staff mapping. When a ClassMonth is activated in the future, mapped schedules populate `session_staff` from `class_month_schedule_staff`; older ClassMonths without mappings keep the `class_month_staff` fallback.
+
+`scripts/import-staff-schedule.ts` reuses the existing Nguyễn Mạnh Cường account, creates or reuses the remaining Hùng Cường staff accounts through `admin-create-user`, assigns the 9 class-month staff records, replaces the Toán 6 Saturday draft slot with Sunday, and creates the 16 per-slot mappings for September 2026. It stops on identity/data conflicts and never resets an existing password.
+
+```bash
+export VITE_SUPABASE_URL="https://YOUR_PROJECT_REF.supabase.co"
+export VITE_SUPABASE_PUBLISHABLE_KEY="sb_publishable_..."
+export ROOT_IDENTIFIER="ADMIN"
+export ROOT_PASSWORD="..."
+npm run import:staff-schedule
+```
+
+The importer requires the four September 2026 ClassMonths to remain `DRAFT`; it does not generate sessions, tuition, or alter completed history. Generated staff credentials are written only to the local-only `docs/accounts/staff_accounts_2026-09.md` file, which is ignored by Git and should be removed or rotated after handoff.
+
 ## Deployment
 
 1. Tạo public GitHub repository `hung-cuong-management`, push branch `main` và chọn Pages source là GitHub Actions.
