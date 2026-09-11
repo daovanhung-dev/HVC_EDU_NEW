@@ -46,6 +46,20 @@ npm run import:class-schedules
 
 The schedule importer deliberately does not activate the ClassMonths, generate sessions, or create tuition records. Review the draft schedule in the admin ClassMonth screen before activation.
 
+## Student password rotation
+
+`scripts/rotate-student-passwords.ts` rotates the 47 existing student accounts to a normalized full-name prefix plus a unique three-digit random suffix. It preserves student codes, usernames, names, classes and memberships, sets `force_password_change` to `false`, and verifies login through both username and student code.
+
+The root-only `admin-set-password` Edge Function performs the Auth password update and writes an audit entry without recording the password. The script uses an ignored, mode `600` checkpoint under `docs/accounts` and updates `docs/accounts/student-accounts.md` only after all 47 accounts pass verification. Passwords are never printed to logs.
+
+```bash
+export VITE_SUPABASE_URL="https://YOUR_PROJECT_REF.supabase.co"
+export VITE_SUPABASE_PUBLISHABLE_KEY="sb_publishable_..."
+export ROOT_IDENTIFIER="ADMIN"
+export ROOT_PASSWORD="..."
+npm run rotate:student-passwords
+```
+
 ## Staff and per-slot schedule import
 
 `supabase/migrations/0033_class_month_schedule_staff.sql` adds per-slot staff mapping. When a ClassMonth is activated in the future, mapped schedules populate `session_staff` from `class_month_schedule_staff`; older ClassMonths without mappings keep the `class_month_staff` fallback.
