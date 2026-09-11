@@ -10,6 +10,11 @@ export function sessionUnitValue(monthlyFee: number, scheduledSessionCount: numb
   return Math.round(monthlyFee / scheduledSessionCount)
 }
 
+export function sessionUnitValueFromSnapshot(sessionFeeSnapshot: number, monthlyFee: number, scheduledSessionCount: number): number {
+  if (sessionFeeSnapshot < 0) throw new Error('INVALID_SESSION_FEE_INPUT')
+  return sessionFeeSnapshot > 0 ? Math.trunc(sessionFeeSnapshot) : sessionUnitValue(monthlyFee, scheduledSessionCount)
+}
+
 export function sessionRevenue(lines: Array<{ sessionUnitValue: number; attendance: AttendanceStatus }>): number {
   return lines.reduce((sum, line) => sum + (line.attendance === 'PRESENT' || line.attendance === 'LATE' ? line.sessionUnitValue : 0), 0)
 }

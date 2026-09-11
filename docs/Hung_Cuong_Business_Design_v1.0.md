@@ -1060,6 +1060,7 @@ Mỗi lớp có:
 
 ```text
 default_monthly_fee
+default_session_fee
 ```
 
 Ví dụ:
@@ -1199,6 +1200,8 @@ Nếu thay đổi:
 # 57. Doanh thu quy đổi buổi học
 
 Do học phí thu theo tháng nhưng lương tính theo session, hệ thống phải quy đổi.
+
+Nếu ClassMonth có cấu hình `session_fee_snapshot` lớn hơn 0, hệ thống dùng trực tiếp giá trị đó làm doanh thu quy đổi mỗi buổi. Nếu không có, hệ thống giữ công thức tương thích ngược bên dưới.
 
 Mỗi học sinh:
 

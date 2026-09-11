@@ -14,6 +14,38 @@ Secret key, database password, access token và bootstrap secret chỉ được 
 - M8: unit test business calculations, typecheck, Deno check, schema lint và smoke checks; RLS/UAT production cần chạy sau khi có ROOT test account.
 - M9: workflow GitHub Pages/Supabase đã sẵn sàng; bước cuối cần tạo repository, khai báo Variables/Secrets, cấu hình Auth URL và bootstrap ROOT one-time.
 
+## Student roster import
+
+`scripts/import-student-roster.ts` imports the current 47-student Math roster through the existing authenticated Edge Functions and RLS-protected tables. It is intentionally idempotent by student code and class code: matching records are reused, conflicting records stop the import, and existing passwords are never reset.
+
+Run it from the repository root with a ROOT account session supplied through environment variables:
+
+```bash
+export VITE_SUPABASE_URL="https://YOUR_PROJECT_REF.supabase.co"
+export VITE_SUPABASE_PUBLISHABLE_KEY="sb_publishable_..."
+export ROOT_IDENTIFIER="ADMIN"
+export ROOT_PASSWORD="..."
+npm run import:student-roster
+```
+
+The script writes the generated credentials to `docs/accounts/student-accounts.md` and never prints passwords. The account document is confidential and should be removed or the passwords rotated after handoff.
+
+Class fees are stored separately as `default_session_fee`; `default_monthly_fee` remains zero until monthly tuition is configured. A future ClassMonth can snapshot `session_fee_snapshot` and use it as the session revenue unit while preserving the existing monthly-fee fallback.
+
+## September 2026 schedule import
+
+`scripts/import-class-schedules.ts` creates or reuses the four September 2026 `ClassMonth` records in `DRAFT`, snapshots the 47 existing memberships, and imports the eight weekly schedules from the center timetable. It stores rooms in `class_month_schedules.room` and is idempotent; mismatched existing data stops the import without overwriting it.
+
+```bash
+export VITE_SUPABASE_URL="https://YOUR_PROJECT_REF.supabase.co"
+export VITE_SUPABASE_PUBLISHABLE_KEY="sb_publishable_..."
+export ROOT_IDENTIFIER="ADMIN"
+export ROOT_PASSWORD="..."
+npm run import:class-schedules
+```
+
+The schedule importer deliberately does not activate the ClassMonths, generate sessions, or create tuition records. Review the draft schedule in the admin ClassMonth screen before activation.
+
 ## Deployment
 
 1. Tạo public GitHub repository `hung-cuong-management`, push branch `main` và chọn Pages source là GitHub Actions.

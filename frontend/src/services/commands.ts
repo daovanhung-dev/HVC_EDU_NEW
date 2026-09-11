@@ -88,7 +88,7 @@ export function exportReport(type: ReportType, format: ReportFormat, filters: Re
   return invokeFunction<{ type: ReportType; format: ReportFormat; filters: ReportFilters }, FileExport>('report-export', { type, format, filters })
 }
 
-export async function createClass(input: { code: string; name: string; subject_id: string; grade_id: string; default_monthly_fee: number; max_students?: number | null; capacity_policy?: 'WARNING' | 'BLOCK' | 'UNLIMITED' }) {
+export async function createClass(input: { code: string; name: string; subject_id: string; grade_id: string; default_monthly_fee: number; default_session_fee?: number; max_students?: number | null; capacity_policy?: 'WARNING' | 'BLOCK' | 'UNLIMITED' }) {
   const { data, error } = await supabase.from('classes').insert(input).select('*').single()
   if (error) throw error
   return data
@@ -100,7 +100,7 @@ export async function createClassMonth(input: { class_id: string; year: number; 
   return data
 }
 
-export async function addClassMonthStudent(input: { class_month_id: string; student_id: string; membership_start_date: string; membership_end_date?: string | null; monthly_fee_snapshot: number }) {
+export async function addClassMonthStudent(input: { class_month_id: string; student_id: string; membership_start_date: string; membership_end_date?: string | null; monthly_fee_snapshot: number; session_fee_snapshot?: number }) {
   const { data, error } = await supabase.from('class_month_students').insert(input).select('*').single()
   if (error) throw error
   return data
@@ -112,7 +112,7 @@ export async function addClassMonthStaff(input: { class_month_id: string; staff_
   return data
 }
 
-export async function addClassMonthSchedule(input: { class_month_id: string; day_of_week: number; start_time: string; end_time: string }) {
+export async function addClassMonthSchedule(input: { class_month_id: string; day_of_week: number; start_time: string; end_time: string; room?: string | null }) {
   const { data, error } = await supabase.from('class_month_schedules').insert(input).select('*').single()
   if (error) throw error
   return data

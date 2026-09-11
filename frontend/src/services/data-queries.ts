@@ -35,8 +35,12 @@ export function getClassMonths() {
   return unwrap(supabase.from('class_months').select('*,classes(name,code)').order('year', { ascending: false }).order('month', { ascending: false }))
 }
 
+export function getClassMonthSchedules(classMonthId: string) {
+  return unwrap(supabase.from('class_month_schedules').select('id,class_month_id,day_of_week,start_time,end_time,room,status').eq('class_month_id', classMonthId).order('day_of_week').order('start_time'))
+}
+
 export function getMySessions() {
-  return unwrap(supabase.from('sessions').select('*,class_months(classes(name,code))').order('scheduled_start_at', { ascending: false }))
+  return unwrap(supabase.from('sessions').select('*,class_months(classes(name,code)),class_month_schedules(room)').order('scheduled_start_at', { ascending: false }))
 }
 
 export async function getMyStaff() {

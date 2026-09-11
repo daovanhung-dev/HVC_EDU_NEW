@@ -11,6 +11,10 @@
     "typecheck": "npm run typecheck --workspace frontend",
     "test": "npm run test --workspace frontend",
     "test:run": "npm run test:run --workspace frontend",
+    "import:student-roster": "deno run --allow-net --allow-env --allow-read --allow-write scripts/import-student-roster.ts",
+    "test:student-roster": "deno test --allow-env scripts/import-student-roster.test.ts",
+    "import:class-schedules": "deno run --allow-net --allow-env --allow-read scripts/import-class-schedules.ts",
+    "test:class-schedules": "deno test --allow-env scripts/import-class-schedules.test.ts",
     "preview": "npm run preview --workspace frontend"
   },
   "engines": {
