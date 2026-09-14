@@ -139,6 +139,7 @@ export interface ClassStudentHistoryRow {
   scheduled_end_at: string
   status: SessionStatus
   revenue_snapshot: number
+  session_note?: string | null
   class_months?: { year: number; month: number; classes?: { code: string; name: string } | null } | null
   attendance: {
     id: string
@@ -146,9 +147,15 @@ export interface ClassStudentHistoryRow {
     late_minutes: number | null
     absence_reason: string | null
     homework_score: number | null
+    homework_note: string | null
+    understanding_score: number | null
+    attitude_score: number | null
+    positive_feedback_count: number | null
+    positive_feedback_raw: string | null
     comment: string | null
     updated_at: string
   } | null
+  assessment_snapshot: Record<string, unknown> | null
 }
 
 export interface ClassProfitSummary {

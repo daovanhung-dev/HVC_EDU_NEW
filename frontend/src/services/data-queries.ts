@@ -68,14 +68,15 @@ export async function getClassMonthScheduleStaffDetails(classMonthId: string): P
 }
 
 export async function getClassStudentHistory(classId: string, studentId: string): Promise<ClassStudentHistoryRow[]> {
-  const sessions = await unwrap<any[]>(supabase.from('sessions').select('id,class_month_id,schedule_id,scheduled_start_at,scheduled_end_at,status,revenue_snapshot,class_months!inner(year,month,classes(code,name),class_id)').eq('class_months.class_id', classId).order('scheduled_start_at', { ascending: false }))
+  const sessions = await unwrap<any[]>(supabase.from('sessions').select('id,class_month_id,schedule_id,scheduled_start_at,scheduled_end_at,status,revenue_snapshot,session_note,class_months!inner(year,month,classes(code,name),class_id)').eq('class_months.class_id', classId).order('scheduled_start_at', { ascending: false }))
   if (!sessions.length) return []
   const sessionIds = sessions.map((row) => row.id)
   const [sessionStudents, attendances] = await Promise.all([
-    unwrap<Array<{ session_id: string }>>(supabase.from('session_students').select('session_id').eq('student_id', studentId).in('session_id', sessionIds)),
-    unwrap<Array<{ id: string; session_id: string; status: string; late_minutes: number | null; absence_reason: string | null; homework_score: number | null; comment: string | null; updated_at: string }>>(supabase.from('student_attendances').select('id,session_id,status,late_minutes,absence_reason,homework_score,comment,updated_at').eq('student_id', studentId).in('session_id', sessionIds)),
+    unwrap<Array<{ session_id: string; assessment_snapshot: Record<string, unknown> | null }>>(supabase.from('session_students').select('session_id,assessment_snapshot').eq('student_id', studentId).in('session_id', sessionIds)),
+    unwrap<Array<{ id: string; session_id: string; status: string; late_minutes: number | null; absence_reason: string | null; homework_score: number | null; homework_note: string | null; understanding_score: number | null; attitude_score: number | null; positive_feedback_count: number | null; positive_feedback_raw: string | null; comment: string | null; updated_at: string }>>(supabase.from('student_attendances').select('id,session_id,status,late_minutes,absence_reason,homework_score,homework_note,understanding_score,attitude_score,positive_feedback_count,positive_feedback_raw,comment,updated_at').eq('student_id', studentId).in('session_id', sessionIds)),
   ])
   const enrolledSessionIds = new Set(sessionStudents.map((row) => row.session_id))
+  const snapshotBySession = new Map(sessionStudents.map((row) => [row.session_id, row.assessment_snapshot]))
   const attendanceBySession = new Map(attendances.map((row) => [row.session_id, row]))
   return sessions.filter((row) => enrolledSessionIds.has(row.id)).map((row) => {
     const classMonth = oneRelation(row.class_months)
@@ -87,8 +88,10 @@ export async function getClassStudentHistory(classId: string, studentId: string)
       scheduled_end_at: row.scheduled_end_at,
       status: row.status,
       revenue_snapshot: Number(row.revenue_snapshot || 0),
+      session_note: row.session_note || null,
       class_months: classMonth ? { ...classMonth, classes: oneRelation(classMonth.classes) } : null,
       attendance: attendanceBySession.has(row.id) ? attendanceBySession.get(row.id)! as ClassStudentHistoryRow['attendance'] : null,
+      assessment_snapshot: snapshotBySession.get(row.id) || null,
     }
   })
 }
@@ -133,7 +136,7 @@ export async function getMyStaff() {
 }
 
 export function getSessionStudents(sessionId: string) {
-  return unwrap(supabase.from('session_students').select('id,student_id,students(student_code,full_name),student_attendances(id,status,late_minutes,absence_reason,homework_score,comment)').eq('session_id', sessionId).order('created_at'))
+  return unwrap(supabase.from('session_students').select('id,student_id,assessment_snapshot,students(student_code,full_name),student_attendances(id,status,late_minutes,absence_reason,homework_score,homework_note,understanding_score,attitude_score,positive_feedback_count,positive_feedback_raw,comment)').eq('session_id', sessionId).order('created_at'))
 }
 
 export function getSessionStaff(sessionId: string) {
@@ -176,7 +179,7 @@ export function getNotifications() {
 }
 
 export function getMyAttendance() {
-  return unwrap(supabase.from('student_attendances').select('id,status,late_minutes,absence_reason,homework_score,comment,updated_at,sessions(id,scheduled_start_at,status,class_months(classes(name,code))),students(student_code,full_name)').order('updated_at', { ascending: false }))
+  return unwrap(supabase.from('student_attendances').select('id,status,late_minutes,absence_reason,homework_score,homework_note,understanding_score,attitude_score,positive_feedback_count,positive_feedback_raw,comment,updated_at,sessions(id,scheduled_start_at,status,class_months(classes(name,code))),students(student_code,full_name)').order('updated_at', { ascending: false }))
 }
 
 export function getTimesheets() {

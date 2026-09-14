@@ -19,6 +19,8 @@
     "test:class-schedules": "deno test --allow-env scripts/import-class-schedules.test.ts",
     "import:staff-schedule": "deno run --allow-net --allow-env --allow-read --allow-write scripts/import-staff-schedule.ts",
     "test:staff-schedule": "deno test --allow-env scripts/import-staff-schedule.test.ts",
+    "generate:t9-attendance": "python3 scripts/import_t9_attendance.py --generate",
+    "test:t9-attendance": "python3 -m unittest scripts/import_t9_attendance_test.py",
     "preview": "npm run preview --workspace frontend"
   },
   "engines": {
