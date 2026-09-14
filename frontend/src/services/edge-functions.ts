@@ -12,7 +12,7 @@ export interface FunctionResponse<T> {
   trace_id?: string
 }
 
-export async function invokeFunction<TInput extends Record<string, unknown>, TOutput>(
+export async function invokeFunction<TInput extends object, TOutput>(
   name: string,
   body: TInput,
 ): Promise<TOutput> {

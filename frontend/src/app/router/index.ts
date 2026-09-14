@@ -7,6 +7,8 @@ import DashboardPage from '@/modules/dashboard/pages/DashboardPage.vue'
 import StudentsPage from '@/modules/admin/pages/StudentsPage.vue'
 import StaffPage from '@/modules/admin/pages/StaffPage.vue'
 import ClassesPage from '@/modules/admin/pages/ClassesPage.vue'
+import ClassDetailPage from '@/modules/admin/pages/ClassDetailPage.vue'
+import ClassStudentDetailPage from '@/modules/admin/pages/ClassStudentDetailPage.vue'
 import ClassMonthsPage from '@/modules/admin/pages/ClassMonthsPage.vue'
 import SessionsPage from '@/modules/staff/pages/SessionsPage.vue'
 import FinancePage from '@/modules/admin/pages/FinancePage.vue'
@@ -32,6 +34,8 @@ const router = createRouter({
     { path: '/admin/students', component: AppLayout, children: [{ path: '', component: StudentsPage, meta: { requiresAuth: true, adminOnly: true, permission: 'STUDENTS_VIEW' } }] },
     { path: '/admin/staff', component: AppLayout, children: [{ path: '', component: StaffPage, meta: { requiresAuth: true, adminOnly: true, permission: 'STAFF_VIEW' } }] },
     { path: '/admin/classes', component: AppLayout, children: [{ path: '', component: ClassesPage, meta: { requiresAuth: true, adminOnly: true, permission: 'CLASS_VIEW' } }] },
+    { path: '/admin/classes/:classId/students/:studentId', component: AppLayout, children: [{ path: '', component: ClassStudentDetailPage, meta: { requiresAuth: true, adminOnly: true, permission: 'CLASS_VIEW' } }] },
+    { path: '/admin/classes/:classId', component: AppLayout, children: [{ path: '', component: ClassDetailPage, meta: { requiresAuth: true, adminOnly: true, permission: 'CLASS_VIEW' } }] },
     { path: '/admin/class-months', component: AppLayout, children: [{ path: '', component: ClassMonthsPage, meta: { requiresAuth: true, adminOnly: true, permission: 'CLASS_MONTH_MANAGE' } }] },
     { path: '/admin/sessions', component: AppLayout, children: [{ path: '', component: AdminSessionsPage, meta: { requiresAuth: true, adminOnly: true, permission: 'CLASS_MONTH_MANAGE' } }] },
     { path: '/admin/finance', component: AppLayout, children: [{ path: '', component: FinancePage, meta: { requiresAuth: true, adminOnly: true, permission: 'ACCOUNTING_VIEW' } }] },

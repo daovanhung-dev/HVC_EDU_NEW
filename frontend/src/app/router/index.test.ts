@@ -70,4 +70,9 @@ describe('authentication route guard', () => {
 
     expect(router.currentRoute.value.path).toBe('/dashboard')
   })
+
+  it('registers class and student detail routes', () => {
+    expect(router.resolve('/admin/classes/class-1').matched.some((record) => record.path === '/admin/classes/:classId')).toBe(true)
+    expect(router.resolve('/admin/classes/class-1/students/student-1').matched.some((record) => record.path === '/admin/classes/:classId/students/:studentId')).toBe(true)
+  })
 })

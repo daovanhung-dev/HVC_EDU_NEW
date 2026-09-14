@@ -1,10 +1,15 @@
 import { supabase } from './supabase'
-import type { ReportFilters, ReportType } from '@/shared/types/domain'
+import type { ClassDetailRow, ClassMembershipDetailRow, ClassMonthDetailRow, ClassMonthScheduleDetailRow, ClassMonthScheduleStaffDetailRow, ClassMonthStaffDetailRow, ClassMonthStudentDetailRow, ClassProfitSummary, ClassStudentHistoryRow, ReportFilters, ReportType } from '@/shared/types/domain'
 
 async function unwrap<T>(request: PromiseLike<{ data: T | null; error: Error | null }>): Promise<T> {
   const { data, error } = await request
   if (error) throw error
   return data as T
+}
+
+function oneRelation<T>(value: T | T[] | null | undefined): T | null {
+  if (Array.isArray(value)) return value[0] || null
+  return value || null
 }
 
 export function getStudents(search = '') {
@@ -21,6 +26,80 @@ export function getStaff(search = '') {
 
 export function getClasses() {
   return unwrap(supabase.from('classes').select('*,subjects(name),grades(name)').order('name'))
+}
+
+export async function getClassDetail(classId: string): Promise<ClassDetailRow | null> {
+  const row = await unwrap<any>(supabase.from('classes').select('id,code,name,subject_id,grade_id,default_monthly_fee,default_session_fee,max_students,capacity_policy,status,subjects(name),grades(name)').eq('id', classId).maybeSingle())
+  return row ? { ...row, subjects: oneRelation(row.subjects), grades: oneRelation(row.grades) } as ClassDetailRow : null
+}
+
+export async function getClassMonthsForClass(classId: string): Promise<ClassMonthDetailRow[]> {
+  const rows = await unwrap<any[]>(supabase.from('class_months').select('id,class_id,year,month,status,classes(code,name)').eq('class_id', classId).order('year', { ascending: false }).order('month', { ascending: false }))
+  return rows.map((row) => ({ ...row, classes: oneRelation(row.classes) }) as ClassMonthDetailRow)
+}
+
+export async function getClassActiveMemberships(classId: string): Promise<ClassMembershipDetailRow[]> {
+  const rows = await unwrap<any[]>(supabase.from('class_memberships').select('id,class_id,student_id,start_date,end_date,status,students(id,student_code,full_name,phone,email,address,parent_name,parent_phone,status)').eq('class_id', classId).eq('status', 'ACTIVE').order('created_at'))
+  return rows.map((row) => ({ ...row, students: oneRelation(row.students) }) as ClassMembershipDetailRow)
+}
+
+export async function getClassStudentMembership(classId: string, studentId: string): Promise<ClassMembershipDetailRow | null> {
+  const row = await unwrap<any>(supabase.from('class_memberships').select('id,class_id,student_id,start_date,end_date,status,students(id,student_code,full_name,phone,email,address,parent_name,parent_phone,status)').eq('class_id', classId).eq('student_id', studentId).maybeSingle())
+  return row ? { ...row, students: oneRelation(row.students) } as ClassMembershipDetailRow : null
+}
+
+export async function getClassMonthStudents(classMonthId: string): Promise<ClassMonthStudentDetailRow[]> {
+  const rows = await unwrap<any[]>(supabase.from('class_month_students').select('id,class_month_id,student_id,membership_start_date,membership_end_date,monthly_fee_snapshot,session_fee_snapshot,students(id,student_code,full_name,phone,email,address,parent_name,parent_phone,status)').eq('class_month_id', classMonthId).order('created_at'))
+  return rows.map((row) => ({ ...row, students: oneRelation(row.students) }) as ClassMonthStudentDetailRow)
+}
+
+export async function getClassMonthStaff(classMonthId: string): Promise<ClassMonthStaffDetailRow[]> {
+  const rows = await unwrap<any[]>(supabase.from('class_month_staff').select('id,class_month_id,staff_id,assignment_role,staff(id,staff_code,full_name,staff_type,status)').eq('class_month_id', classMonthId).order('assignment_role').order('created_at'))
+  return rows.map((row) => ({ ...row, staff: oneRelation(row.staff) }) as ClassMonthStaffDetailRow)
+}
+
+export async function getClassMonthScheduleDetails(classMonthId: string): Promise<ClassMonthScheduleDetailRow[]> {
+  return unwrap<ClassMonthScheduleDetailRow[]>(supabase.from('class_month_schedules').select('id,class_month_id,day_of_week,start_time,end_time,room,status').eq('class_month_id', classMonthId).order('day_of_week').order('start_time'))
+}
+
+export async function getClassMonthScheduleStaffDetails(classMonthId: string): Promise<ClassMonthScheduleStaffDetailRow[]> {
+  const rows = await unwrap<any[]>(supabase.from('class_month_schedule_staff').select('schedule_id,staff_id,assignment_role,staff(id,staff_code,full_name),class_month_schedules!inner(class_month_id)').eq('class_month_schedules.class_month_id', classMonthId))
+  return rows.map((row) => ({ ...row, staff: oneRelation(row.staff) }) as ClassMonthScheduleStaffDetailRow)
+}
+
+export async function getClassStudentHistory(classId: string, studentId: string): Promise<ClassStudentHistoryRow[]> {
+  const sessions = await unwrap<any[]>(supabase.from('sessions').select('id,class_month_id,schedule_id,scheduled_start_at,scheduled_end_at,status,revenue_snapshot,class_months!inner(year,month,classes(code,name),class_id)').eq('class_months.class_id', classId).order('scheduled_start_at', { ascending: false }))
+  if (!sessions.length) return []
+  const sessionIds = sessions.map((row) => row.id)
+  const [sessionStudents, attendances] = await Promise.all([
+    unwrap<Array<{ session_id: string }>>(supabase.from('session_students').select('session_id').eq('student_id', studentId).in('session_id', sessionIds)),
+    unwrap<Array<{ id: string; session_id: string; status: string; late_minutes: number | null; absence_reason: string | null; homework_score: number | null; comment: string | null; updated_at: string }>>(supabase.from('student_attendances').select('id,session_id,status,late_minutes,absence_reason,homework_score,comment,updated_at').eq('student_id', studentId).in('session_id', sessionIds)),
+  ])
+  const enrolledSessionIds = new Set(sessionStudents.map((row) => row.session_id))
+  const attendanceBySession = new Map(attendances.map((row) => [row.session_id, row]))
+  return sessions.filter((row) => enrolledSessionIds.has(row.id)).map((row) => {
+    const classMonth = oneRelation(row.class_months)
+    return {
+      id: row.id,
+      class_month_id: row.class_month_id,
+      schedule_id: row.schedule_id,
+      scheduled_start_at: row.scheduled_start_at,
+      scheduled_end_at: row.scheduled_end_at,
+      status: row.status,
+      revenue_snapshot: Number(row.revenue_snapshot || 0),
+      class_months: classMonth ? { ...classMonth, classes: oneRelation(classMonth.classes) } : null,
+      attendance: attendanceBySession.has(row.id) ? attendanceBySession.get(row.id)! as ClassStudentHistoryRow['attendance'] : null,
+    }
+  })
+}
+
+export async function getClassProfitSummary(classId: string): Promise<ClassProfitSummary> {
+  const sessions = await unwrap<Array<{ id: string; revenue_snapshot: number }>>(supabase.from('sessions').select('id,revenue_snapshot,class_months!inner(class_id)').eq('class_months.class_id', classId).eq('status', 'COMPLETED'))
+  const revenueTotal = sessions.reduce((sum, row) => sum + Number(row.revenue_snapshot || 0), 0)
+  if (!sessions.length) return { completed_session_count: 0, revenue_total: revenueTotal, payroll_item_count: 0, payroll_total: 0, profit_total: revenueTotal }
+  const payrollItems = await unwrap<Array<{ id: string; base_salary: number }>>(supabase.from('payroll_items').select('id,base_salary,sessions!inner(id,class_months!inner(class_id))').in('session_id', sessions.map((row) => row.id)))
+  const payrollTotal = payrollItems.reduce((sum, row) => sum + Number(row.base_salary || 0), 0)
+  return { completed_session_count: sessions.length, revenue_total: revenueTotal, payroll_item_count: payrollItems.length, payroll_total: payrollTotal, profit_total: revenueTotal - payrollTotal }
 }
 
 export function getSubjects() {

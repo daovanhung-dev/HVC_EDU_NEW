@@ -27,3 +27,10 @@ export function payrollBaseSalary(method: 'PERCENTAGE' | 'FIXED', revenue: numbe
   if (fixedAmount === undefined || fixedAmount < 0) throw new Error('INVALID_FIXED_SALARY')
   return Math.trunc(fixedAmount)
 }
+
+export function classProfit(revenue: number, payrollBaseSalaryTotal: number): number {
+  if (!Number.isFinite(revenue) || !Number.isFinite(payrollBaseSalaryTotal) || revenue < 0 || payrollBaseSalaryTotal < 0) {
+    throw new Error('INVALID_CLASS_PROFIT_INPUT')
+  }
+  return Math.trunc(revenue) - Math.trunc(payrollBaseSalaryTotal)
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { payrollBaseSalary, prorateFee, sessionRevenue, sessionUnitValue, sessionUnitValueFromSnapshot } from './business-calculations'
+import { classProfit, payrollBaseSalary, prorateFee, sessionRevenue, sessionUnitValue, sessionUnitValueFromSnapshot } from './business-calculations'
 
 describe('business calculations', () => {
   it('prorates tuition by eligible sessions', () => expect(prorateFee(400000, 8, 4)).toBe(200000))
@@ -18,4 +18,5 @@ describe('business calculations', () => {
     expect(payrollBaseSalary('PERCENTAGE', 1000000, 25)).toBe(250000)
     expect(payrollBaseSalary('FIXED', 1000000, undefined, 300000)).toBe(300000)
   })
+  it('calculates class profit after per-session payroll', () => expect(classProfit(1200000, 450000)).toBe(750000))
 })
