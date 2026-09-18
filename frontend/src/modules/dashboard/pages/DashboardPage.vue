@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth.store'
-import { formatVnd } from '@/shared/utils/format'
 import { getDashboardSummary } from '@/services/data-queries'
 import { useAppErrorStore } from '@/stores/app-error.store'
 
@@ -10,18 +9,19 @@ const appErrors = useAppErrorStore()
 const summary = ref<Awaited<ReturnType<typeof getDashboardSummary>> | null>(null)
 const loadError = ref('')
 const monthLabel = new Intl.DateTimeFormat('vi-VN', { month: 'long', year: 'numeric' }).format(new Date())
-const metrics = computed(() => auth.isStudent ? [
+const metrics = computed(() => auth.isLearner ? [
   { label: 'Lớp đang học', value: summary.value ? String(summary.value.classes) : '—', hint: 'ClassMonth hiện tại', tone: 'primary' },
   { label: 'Buổi học sắp tới', value: summary.value ? String(summary.value.upcomingSessions) : '—', hint: 'Lịch học của bạn', tone: 'info' },
-  { label: 'Học phí tháng', value: summary.value ? formatVnd(summary.value.tuitionDue) : '—', hint: 'Trạng thái thanh toán', tone: 'warning' },
+  { label: 'Buổi đã hoàn thành', value: summary.value ? String(summary.value.completedSessions) : '—', hint: 'Lịch sử học tập', tone: 'success' },
 ] : auth.isStaff ? [
   { label: 'Buổi dạy tháng này', value: summary.value ? String(summary.value.upcomingSessions + summary.value.completedSessions) : '—', hint: 'Theo phân công', tone: 'primary' },
   { label: 'Chấm công chờ duyệt', value: summary.value ? String(summary.value.pendingTimesheets) : '—', hint: 'Timesheet', tone: 'warning' },
-  { label: 'Lương dự kiến', value: formatVnd(null), hint: 'Theo payroll', tone: 'success' },
+  { label: 'Tỷ lệ điểm danh', value: summary.value ? `${summary.value.attendanceRate}%` : '—', hint: 'Theo dữ liệu đã nhập', tone: 'success' },
 ] : [
   { label: 'Tổng học sinh', value: summary.value ? String(summary.value.students) : '—', hint: 'Đang hoạt động', tone: 'primary' },
   { label: 'Tổng lớp', value: summary.value ? String(summary.value.classes) : '—', hint: 'ClassMonth hiện tại', tone: 'info' },
-  { label: 'Học phí đã thu', value: summary.value ? formatVnd(summary.value.tuitionPaid) : formatVnd(null), hint: monthLabel, tone: 'success' },
+  { label: 'Nhận xét đã nhập', value: summary.value ? `${summary.value.commentCoverage}%` : '—', hint: 'Độ đầy đủ dữ liệu học tập', tone: 'success' },
+  { label: 'Tỷ lệ điểm danh', value: summary.value ? `${summary.value.attendanceRate}%` : '—', hint: monthLabel, tone: 'info' },
   { label: 'Chấm công chờ duyệt', value: summary.value ? String(summary.value.pendingTimesheets) : '—', hint: 'Cần xử lý', tone: 'warning' },
 ])
 

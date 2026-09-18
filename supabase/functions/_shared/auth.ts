@@ -53,7 +53,7 @@ export async function requireCaller(req: Request): Promise<Caller> {
 export function canManageRole(caller: Caller, role: string): boolean {
   if (caller.profile.role === 'ROOT_ADMIN') return true
   if (role === 'ADMIN') return false
-  if (role === 'STUDENT') return caller.profile.role === 'ADMIN'
+  if (role === 'STUDENT' || role === 'PARENT') return caller.profile.role === 'ADMIN'
   return caller.profile.role === 'ADMIN'
 }
 

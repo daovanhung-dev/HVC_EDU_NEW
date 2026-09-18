@@ -82,7 +82,7 @@ describe('authentication route guard', () => {
     expect(router.currentRoute.value.path).toBe('/dashboard')
   })
 
-  it.each(['TEACHER', 'ASSISTANT'])('allows %s to open all staff functions without admin permissions', async (role) => {
+  it.each(['TEACHER', 'ASSISTANT'])('allows %s to open staff functions without admin permissions', async (role) => {
     mocks.profileRows.push(profile(false, role))
 
     await router.push(`/staff/sessions?role=${role}`)
@@ -91,8 +91,20 @@ describe('authentication route guard', () => {
     await router.push(`/staff/timesheets?role=${role}`)
     expect(router.currentRoute.value.path).toBe('/staff/timesheets')
 
-    await router.push(`/staff/payroll?role=${role}`)
-    expect(router.currentRoute.value.path).toBe('/staff/payroll')
+    await router.push(`/admin/payroll?role=${role}`)
+    expect(router.currentRoute.value.path).toBe('/dashboard')
+  })
+
+  it('allows a parent to use the learning portal but blocks retired financial routes', async () => {
+    mocks.profileRows.push(profile(false, 'PARENT'))
+    await router.push('/student/schedule?role=PARENT')
+    expect(router.currentRoute.value.path).toBe('/student/schedule')
+
+    await router.push('/student/tuition?role=PARENT')
+    expect(router.currentRoute.value.path).toBe('/dashboard')
+
+    await router.push('/admin/finance?role=PARENT')
+    expect(router.currentRoute.value.path).toBe('/dashboard')
   })
 
   it('keeps admin permission checks for admin routes', async () => {

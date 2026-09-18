@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { ClassDetailRow, ClassMembershipDetailRow, ClassMonthDetailRow, ClassMonthScheduleDetailRow, ClassMonthScheduleStaffDetailRow, ClassMonthStaffDetailRow, ClassMonthStudentDetailRow, ClassProfitSummary, ClassStudentHistoryRow, ReportFilters, ReportType } from '@/shared/types/domain'
+import type { ClassDetailRow, ClassMembershipDetailRow, ClassMonthDetailRow, ClassMonthScheduleDetailRow, ClassMonthScheduleStaffDetailRow, ClassMonthStaffDetailRow, ClassMonthStudentDetailRow, ClassStudentHistoryRow, ReportFilters, ReportType } from '@/shared/types/domain'
 
 async function unwrap<T>(request: PromiseLike<{ data: T | null; error: Error | null }>): Promise<T> {
   const { data, error } = await request
@@ -29,7 +29,7 @@ export function getClasses() {
 }
 
 export async function getClassDetail(classId: string): Promise<ClassDetailRow | null> {
-  const row = await unwrap<any>(supabase.from('classes').select('id,code,name,subject_id,grade_id,default_monthly_fee,default_session_fee,max_students,capacity_policy,status,subjects(name),grades(name)').eq('id', classId).maybeSingle())
+  const row = await unwrap<any>(supabase.from('classes').select('id,code,name,subject_id,grade_id,max_students,capacity_policy,status,subjects(name),grades(name)').eq('id', classId).maybeSingle())
   return row ? { ...row, subjects: oneRelation(row.subjects), grades: oneRelation(row.grades) } as ClassDetailRow : null
 }
 
@@ -49,7 +49,7 @@ export async function getClassStudentMembership(classId: string, studentId: stri
 }
 
 export async function getClassMonthStudents(classMonthId: string): Promise<ClassMonthStudentDetailRow[]> {
-  const rows = await unwrap<any[]>(supabase.from('class_month_students').select('id,class_month_id,student_id,membership_start_date,membership_end_date,monthly_fee_snapshot,session_fee_snapshot,students(id,student_code,full_name,phone,email,address,parent_name,parent_phone,status)').eq('class_month_id', classMonthId).order('created_at'))
+  const rows = await unwrap<any[]>(supabase.from('class_month_students').select('id,class_month_id,student_id,membership_start_date,membership_end_date,students(id,student_code,full_name,phone,email,address,parent_name,parent_phone,status)').eq('class_month_id', classMonthId).order('created_at'))
   return rows.map((row) => ({ ...row, students: oneRelation(row.students) }) as ClassMonthStudentDetailRow)
 }
 
@@ -68,7 +68,7 @@ export async function getClassMonthScheduleStaffDetails(classMonthId: string): P
 }
 
 export async function getClassStudentHistory(classId: string, studentId: string): Promise<ClassStudentHistoryRow[]> {
-  const sessions = await unwrap<any[]>(supabase.from('sessions').select('id,class_month_id,schedule_id,scheduled_start_at,scheduled_end_at,status,revenue_snapshot,session_note,class_months!inner(year,month,classes(code,name),class_id)').eq('class_months.class_id', classId).order('scheduled_start_at', { ascending: false }))
+  const sessions = await unwrap<any[]>(supabase.from('sessions').select('id,class_month_id,schedule_id,scheduled_start_at,scheduled_end_at,status,session_note,class_months!inner(year,month,classes(code,name),class_id)').eq('class_months.class_id', classId).order('scheduled_start_at', { ascending: false }))
   if (!sessions.length) return []
   const sessionIds = sessions.map((row) => row.id)
   const [sessionStudents, attendances] = await Promise.all([
@@ -87,22 +87,12 @@ export async function getClassStudentHistory(classId: string, studentId: string)
       scheduled_start_at: row.scheduled_start_at,
       scheduled_end_at: row.scheduled_end_at,
       status: row.status,
-      revenue_snapshot: Number(row.revenue_snapshot || 0),
       session_note: row.session_note || null,
       class_months: classMonth ? { ...classMonth, classes: oneRelation(classMonth.classes) } : null,
       attendance: attendanceBySession.has(row.id) ? attendanceBySession.get(row.id)! as ClassStudentHistoryRow['attendance'] : null,
       assessment_snapshot: snapshotBySession.get(row.id) || null,
     }
   })
-}
-
-export async function getClassProfitSummary(classId: string): Promise<ClassProfitSummary> {
-  const sessions = await unwrap<Array<{ id: string; revenue_snapshot: number }>>(supabase.from('sessions').select('id,revenue_snapshot,class_months!inner(class_id)').eq('class_months.class_id', classId).eq('status', 'COMPLETED'))
-  const revenueTotal = sessions.reduce((sum, row) => sum + Number(row.revenue_snapshot || 0), 0)
-  if (!sessions.length) return { completed_session_count: 0, revenue_total: revenueTotal, payroll_item_count: 0, payroll_total: 0, profit_total: revenueTotal }
-  const payrollItems = await unwrap<Array<{ id: string; base_salary: number }>>(supabase.from('payroll_items').select('id,base_salary,sessions!inner(id,class_months!inner(class_id))').in('session_id', sessions.map((row) => row.id)))
-  const payrollTotal = payrollItems.reduce((sum, row) => sum + Number(row.base_salary || 0), 0)
-  return { completed_session_count: sessions.length, revenue_total: revenueTotal, payroll_item_count: payrollItems.length, payroll_total: payrollTotal, profit_total: revenueTotal - payrollTotal }
 }
 
 export function getSubjects() {
@@ -126,7 +116,7 @@ export function getClassMonthScheduleStaff(classMonthId: string) {
 }
 
 export function getMySessions() {
-  return unwrap(supabase.from('sessions').select('*,class_months(classes(name,code)),class_month_schedules(room)').order('scheduled_start_at', { ascending: false }))
+  return unwrap(supabase.from('sessions').select('*,class_months(classes(name,code)),class_month_schedules(room),session_students(student_id,students(id,student_code,full_name))').order('scheduled_start_at', { ascending: false }))
 }
 
 export async function getMyStaff() {
@@ -137,40 +127,33 @@ export async function getMyStaff() {
 }
 
 export function getSessionStudents(sessionId: string) {
-  return unwrap(supabase.from('session_students').select('id,student_id,assessment_snapshot,students(student_code,full_name),student_attendances(id,status,late_minutes,absence_reason,homework_score,homework_note,understanding_score,attitude_score,positive_feedback_count,positive_feedback_raw,comment)').eq('session_id', sessionId).order('created_at'))
+  return unwrap(supabase.from('session_students').select('id,student_id,assessment_snapshot,students(student_code,full_name),student_attendances(id,status,late_minutes,absence_reason,homework_score,homework_note,understanding_score,attitude_score,positive_feedback_count,positive_feedback_raw,comment,updated_at)').eq('session_id', sessionId).order('created_at'))
 }
 
 export function getSessionStaff(sessionId: string) {
   return unwrap(supabase.from('session_staff').select('id,staff_id,assignment_role,is_replacement,original_staff_id,staff(id,staff_code,full_name)').eq('session_id', sessionId))
 }
 
-export function getMyTuition() {
-  return unwrap(supabase.from('tuition_records').select('*,class_months(classes(name,code),year,month)').order('created_at', { ascending: false }))
-}
-
-export function getTuitionRecords() {
-  return unwrap(supabase.from('tuition_records').select('*,students(student_code,full_name),class_months(classes(name,code),year,month)').order('created_at', { ascending: false }))
-}
-
 export async function getDashboardSummary() {
-  const [students, classes, sessions, tuition, pendingTimesheets] = await Promise.all([
+  const [students, classes, sessions, attendance, pendingTimesheets] = await Promise.all([
     supabase.from('students').select('id', { count: 'exact', head: true }),
     supabase.from('classes').select('id', { count: 'exact', head: true }),
     supabase.from('sessions').select('id,status', { count: 'exact' }),
-    supabase.from('tuition_records').select('amount_due,amount_paid,status'),
+    supabase.from('student_attendances').select('status,comment'),
     supabase.from('timesheets').select('id', { count: 'exact', head: true }).eq('status', 'PENDING'),
   ])
-  const errors = [students.error, classes.error, sessions.error, tuition.error, pendingTimesheets.error].filter(Boolean)
+  const errors = [students.error, classes.error, sessions.error, attendance.error, pendingTimesheets.error].filter(Boolean)
   if (errors.length) throw errors[0]
   const sessionRows = sessions.data || []
-  const tuitionRows = tuition.data || []
+  const attendanceRows = attendance.data || []
+  const markedRows = attendanceRows.filter((row: any) => row.status)
   return {
     students: students.count || 0,
     classes: classes.count || 0,
     completedSessions: sessionRows.filter((row: any) => row.status === 'COMPLETED').length,
     upcomingSessions: sessionRows.filter((row: any) => row.status === 'SCHEDULED').length,
-    tuitionDue: tuitionRows.reduce((sum: number, row: any) => sum + Number(row.amount_due || 0), 0),
-    tuitionPaid: tuitionRows.filter((row: any) => row.status === 'PAID').reduce((sum: number, row: any) => sum + Number(row.amount_paid || 0), 0),
+    attendanceRate: markedRows.length ? Math.round((markedRows.filter((row: any) => row.status === 'PRESENT' || row.status === 'LATE').length / markedRows.length) * 100) : 0,
+    commentCoverage: markedRows.length ? Math.round((markedRows.filter((row: any) => String(row.comment || '').trim()).length / markedRows.length) * 100) : 0,
     pendingTimesheets: pendingTimesheets.count || 0,
   }
 }
@@ -180,27 +163,15 @@ export function getNotifications() {
 }
 
 export function getMyAttendance() {
-  return unwrap(supabase.from('student_attendances').select('id,status,late_minutes,absence_reason,homework_score,homework_note,understanding_score,attitude_score,positive_feedback_count,positive_feedback_raw,comment,updated_at,sessions(id,scheduled_start_at,status,class_months(classes(name,code))),students(student_code,full_name)').order('updated_at', { ascending: false }))
+  return unwrap(supabase.from('student_attendances').select('id,status,late_minutes,absence_reason,homework_score,homework_note,understanding_score,attitude_score,positive_feedback_count,positive_feedback_raw,comment,updated_at,sessions(id,scheduled_start_at,status,session_note,class_months(classes(name,code))),students(id,student_code,full_name)').order('updated_at', { ascending: false }))
 }
 
 export function getTimesheets() {
-  return unwrap(supabase.from('timesheets').select('*,staff(id,staff_code,full_name),sessions(id,scheduled_start_at,status,revenue_snapshot,class_months(year,month,classes(name,code)))').order('submitted_at', { ascending: false }))
-}
-
-export function getPayroll() {
-  return unwrap(supabase.from('payroll_periods').select('*,payroll_items(id,staff_id,session_id,timesheet_id,salary_method,revenue_snapshot,salary_percentage,fixed_amount,base_salary,staff(staff_code,full_name),sessions(scheduled_start_at,class_months(classes(name,code)))),salary_adjustments(id,staff_id,adjustment_type,amount,reason,staff(full_name))').order('year', { ascending: false }).order('month', { ascending: false }))
+  return unwrap(supabase.from('timesheets').select('*,staff(id,staff_code,full_name),sessions(id,scheduled_start_at,status,class_months(year,month,classes(name,code)))').order('submitted_at', { ascending: false }))
 }
 
 export function getAuditLogs(limit = 200) {
   return unwrap(supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(limit))
-}
-
-export function getAccountingTransactions() {
-  return unwrap(supabase.from('accounting_transactions').select('*,accounting_categories(code,name,direction)').order('transaction_date', { ascending: false }).order('created_at', { ascending: false }))
-}
-
-export function getAccountingCategories() {
-  return unwrap(supabase.from('accounting_categories').select('id,code,name,direction').eq('status', 'ACTIVE').order('direction').order('name'))
 }
 
 export function getAdminProfiles() {
@@ -215,6 +186,11 @@ export function getAdminPermissionGroupIds(userId: string) {
   return unwrap(supabase.from('admin_permission_groups').select('permission_group_id').eq('user_id', userId))
 }
 
+export async function getParentStudents() {
+  const rows = await unwrap<any[]>(supabase.from('parent_students').select('student_id,students(id,student_code,full_name)').eq('status', 'ACTIVE').order('created_at'))
+  return rows.map((row) => ({ ...row, students: oneRelation(row.students) }))
+}
+
 export async function getReports(type: ReportType, filters: ReportFilters) {
   const start = `${filters.year}-${String(filters.month).padStart(2, '0')}-01`
   const endDate = new Date(filters.year, filters.month, 0).getDate()
@@ -225,23 +201,12 @@ export async function getReports(type: ReportType, filters: ReportFilters) {
     if (filters.student_id) query = query.eq('student_id', filters.student_id)
     return unwrap(query)
   }
-  if (type === 'TUITION') {
-    let query = supabase.from('tuition_records').select('*,students(student_code,full_name),class_months(classes(name,code),year,month)').eq('class_months.year', filters.year).eq('class_months.month', filters.month).order('created_at', { ascending: false })
-    if (filters.student_id) query = query.eq('student_id', filters.student_id)
-    if (filters.class_id) query = query.eq('class_months.class_id', filters.class_id)
-    return unwrap(query)
-  }
-  if (type === 'PAYROLL') return getPayroll()
-  if (type === 'ACCOUNTING') {
-    return unwrap(supabase.from('accounting_transactions').select('*,accounting_categories(code,name,direction)').gte('transaction_date', start).lte('transaction_date', end).order('transaction_date', { ascending: false }))
-  }
-  const [sessions, tuition, accounting, payroll] = await Promise.all([
-    supabase.from('sessions').select('id,status,revenue_snapshot,scheduled_start_at,class_months(year,month,classes(name,code))').gte('scheduled_start_at', `${start}T00:00:00+07:00`).lte('scheduled_start_at', `${end}T23:59:59+07:00`),
-    supabase.from('tuition_records').select('amount_due,amount_paid,status,class_months(year,month)').eq('class_months.year', filters.year).eq('class_months.month', filters.month),
-    supabase.from('accounting_transactions').select('amount,direction,transaction_type,transaction_date').gte('transaction_date', start).lte('transaction_date', end),
-    supabase.from('payroll_periods').select('id,status,year,month,payroll_items(base_salary)').eq('year', filters.year).eq('month', filters.month).maybeSingle(),
+  const [sessions, attendance, timesheets] = await Promise.all([
+    supabase.from('sessions').select('id,status,scheduled_start_at,session_note,class_months(year,month,classes(name,code))').gte('scheduled_start_at', `${start}T00:00:00+07:00`).lte('scheduled_start_at', `${end}T23:59:59+07:00`),
+    supabase.from('student_attendances').select('status,homework_score,comment,student_id,students(student_code,full_name),sessions(scheduled_start_at,class_months(classes(name,code)))').gte('updated_at', `${start}T00:00:00+07:00`).lte('updated_at', `${end}T23:59:59+07:00`),
+    supabase.from('timesheets').select('status,submitted_at,staff(staff_code,full_name),sessions(scheduled_start_at,class_months(classes(name,code)))').gte('submitted_at', `${start}T00:00:00+07:00`).lte('submitted_at', `${end}T23:59:59+07:00`),
   ])
-  const errors = [sessions.error, tuition.error, accounting.error, payroll.error].filter(Boolean)
+  const errors = [sessions.error, attendance.error, timesheets.error].filter(Boolean)
   if (errors.length) throw errors[0]
-  return { sessions: sessions.data || [], tuition: tuition.data || [], accounting: accounting.data || [], payroll: payroll.data || null }
+  return { sessions: sessions.data || [], attendance: attendance.data || [], timesheets: timesheets.data || [] }
 }

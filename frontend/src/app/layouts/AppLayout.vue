@@ -19,25 +19,24 @@ const roleLabel = computed(() => {
     TEACHER: 'GIÁO VIÊN',
     ASSISTANT: 'TRỢ GIẢNG',
     STUDENT: 'HỌC SINH',
+    PARENT: 'PHỤ HUYNH',
   }
   return labels[auth.role || ''] || 'USER'
 })
 
 const links = computed(() => {
   const base = [{ to: '/dashboard', label: 'Tổng quan', icon: '⌂' }]
-  if (auth.isStudent) return [...base, { to: '/student/schedule', label: 'Lịch học', icon: '▦' }, { to: '/student/tuition', label: 'Học phí', icon: '₫' }]
-  if (auth.isTeacher || auth.isAssistant) return [...base, { to: '/staff/sessions', label: 'Buổi học', icon: '▣' }, { to: '/staff/timesheets', label: 'Chấm công', icon: '✓' }, { to: '/staff/payroll', label: 'Lương của tôi', icon: '₫' }]
+  if (auth.isLearner) return [...base, { to: '/student/schedule', label: 'Lịch học', icon: '▦' }, { to: '/student/attendance', label: 'Kết quả học tập', icon: '◎' }]
+  if (auth.isTeacher || auth.isAssistant) return [...base, { to: '/staff/sessions', label: 'Buổi học', icon: '▣' }, { to: '/staff/timesheets', label: 'Chấm công', icon: '✓' }]
   const adminLinks = [
     ...(auth.role === 'ROOT_ADMIN' ? [{ to: '/admin/permissions', label: 'Phân quyền ADMIN', icon: '⚿', permission: 'ROOT_ONLY' }] : []),
     { to: '/admin/students', label: 'Học sinh', icon: '◎', permission: 'STUDENTS_VIEW' },
     { to: '/admin/staff', label: 'Nhân sự', icon: '◌', permission: 'STAFF_VIEW' },
     { to: '/admin/classes', label: 'Lớp học', icon: '▤', permission: 'CLASS_VIEW' },
     { to: '/admin/class-months', label: 'Tháng vận hành', icon: '◫', permission: 'CLASS_MONTH_MANAGE' },
-    { to: '/admin/sessions', label: 'Tất cả buổi học', icon: '▣', permission: 'CLASS_MONTH_MANAGE' },
-    { to: '/admin/finance', label: 'Tài chính', icon: '₫', permission: 'ACCOUNTING_VIEW' },
+    { to: '/admin/sessions', label: 'Tất cả buổi học', icon: '▣', permission: 'ACADEMIC_VIEW' },
     { to: '/admin/reports', label: 'Báo cáo', icon: '▥', permission: 'REPORTS_VIEW' },
     { to: '/admin/timesheets', label: 'Duyệt chấm công', icon: '✓', permission: 'TIMESHEET_VIEW' },
-    { to: '/admin/payroll', label: 'Bảng lương', icon: '₫', permission: 'PAYROLL_VIEW' },
     { to: '/admin/audit', label: 'Audit Log', icon: '◌', permission: 'REPORTS_VIEW' },
   ]
   return [...base, ...adminLinks.filter((link) => link.permission === 'ROOT_ONLY' ? auth.role === 'ROOT_ADMIN' : permissions.can(link.permission))]

@@ -29,6 +29,8 @@ export const useAuthStore = defineStore('auth', () => {
   const isTeacher = computed(() => role.value === 'TEACHER')
   const isAssistant = computed(() => role.value === 'ASSISTANT')
   const isStudent = computed(() => role.value === 'STUDENT')
+  const isParent = computed(() => role.value === 'PARENT')
+  const isLearner = computed(() => isStudent.value || isParent.value)
 
   async function hydrate(currentSession: Session | null) {
     const version = ++hydrateVersion
@@ -93,7 +95,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   return {
     session, user, profile, initialized, loading, isAuthenticated, role, username, displayName,
-    forcePasswordChange, isAdmin, isStaff, isTeacher, isAssistant, isStudent,
+    forcePasswordChange, isAdmin, isStaff, isTeacher, isAssistant, isStudent, isParent, isLearner,
     initialize, login, updatePassword, signOut,
   }
 })

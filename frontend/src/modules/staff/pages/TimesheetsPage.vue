@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { approveTimesheet, submitTimesheet } from '@/services/commands'
 import { getMyStaff, getTimesheets } from '@/services/data-queries'
-import { formatDateTime, formatVnd } from '@/shared/utils/format'
+import { formatDateTime } from '@/shared/utils/format'
 import { useAuthStore } from '@/stores/auth.store'
 import { useAppErrorStore } from '@/stores/app-error.store'
 
@@ -44,8 +44,8 @@ onMounted(load)
     <div class="d-flex gap-2"><label class="form-check form-switch pt-2"><input v-model="pendingOnly" class="form-check-input" type="checkbox" /><span class="form-check-label small">Chờ duyệt</span></label><button class="btn btn-outline-primary" @click="load">Làm mới</button></div>
   </div>
   <div v-if="successMessage" class="alert alert-success">{{ successMessage }}</div><div v-if="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
-  <div class="card border-0 shadow-sm"><div class="card-body"><div class="table-responsive"><table class="table align-middle"><thead><tr><th>Buổi học</th><th>{{ isAdmin ? 'Nhân sự' : 'Doanh thu snapshot' }}</th><th>Gửi lúc</th><th>Trạng thái</th><th>Lý do</th><th>Thao tác</th></tr></thead><tbody>
-    <tr v-for="row in visibleRows" :key="row.id"><td><div class="fw-semibold">{{ row.sessions?.class_months?.classes?.name || 'Buổi học' }}</div><small class="text-secondary">{{ formatDateTime(row.sessions?.scheduled_start_at) }}</small></td><td>{{ isAdmin ? `${row.staff?.staff_code || ''} — ${row.staff?.full_name || ''}` : formatVnd(row.sessions?.revenue_snapshot) }}</td><td>{{ formatDateTime(row.submitted_at) }}</td><td><span class="badge" :class="row.status === 'APPROVED' ? 'text-bg-success' : row.status === 'REJECTED' ? 'text-bg-danger' : 'text-bg-warning'">{{ row.status }}</span></td><td class="small text-danger">{{ row.rejection_reason || '—' }}</td><td><div v-if="isAdmin && row.status === 'PENDING'" class="d-flex gap-1"><button class="btn btn-sm btn-success" @click="review(row, true)">Duyệt</button><button class="btn btn-sm btn-outline-danger" @click="review(row, false)">Từ chối</button></div><button v-else-if="!isAdmin && row.status === 'REJECTED'" class="btn btn-sm btn-outline-primary" @click="resubmit(row)">Gửi lại</button><span v-else class="small text-secondary">—</span></td></tr>
+  <div class="card border-0 shadow-sm"><div class="card-body"><div class="table-responsive"><table class="table align-middle"><thead><tr><th>Buổi học</th><th>Nhân sự</th><th>Gửi lúc</th><th>Trạng thái</th><th>Lý do</th><th>Thao tác</th></tr></thead><tbody>
+    <tr v-for="row in visibleRows" :key="row.id"><td><div class="fw-semibold">{{ row.sessions?.class_months?.classes?.name || 'Buổi học' }}</div><small class="text-secondary">{{ formatDateTime(row.sessions?.scheduled_start_at) }}</small></td><td>{{ isAdmin ? `${row.staff?.staff_code || ''} — ${row.staff?.full_name || ''}` : (row.staff?.full_name || 'Chấm công của tôi') }}</td><td>{{ formatDateTime(row.submitted_at) }}</td><td><span class="badge" :class="row.status === 'APPROVED' ? 'text-bg-success' : row.status === 'REJECTED' ? 'text-bg-danger' : 'text-bg-warning'">{{ row.status }}</span></td><td class="small text-danger">{{ row.rejection_reason || '—' }}</td><td><div v-if="isAdmin && row.status === 'PENDING'" class="d-flex gap-1"><button class="btn btn-sm btn-success" @click="review(row, true)">Duyệt</button><button class="btn btn-sm btn-outline-danger" @click="review(row, false)">Từ chối</button></div><button v-else-if="!isAdmin && row.status === 'REJECTED'" class="btn btn-sm btn-outline-primary" @click="resubmit(row)">Gửi lại</button><span v-else class="small text-secondary">—</span></td></tr>
     <tr v-if="!loading && !visibleRows.length"><td colspan="6" class="text-center text-secondary py-5">Chưa có bản ghi chấm công</td></tr>
   </tbody></table></div></div></div>
 </template>

@@ -3,13 +3,14 @@ import { supabase } from './supabase'
 import type { FileExport, ReportFilters, ReportFormat, ReportType } from '@/shared/types/domain'
 
 export interface CreateUserInput {
-  role: 'ADMIN' | 'TEACHER' | 'ASSISTANT' | 'STUDENT'
+  role: 'ADMIN' | 'TEACHER' | 'ASSISTANT' | 'STUDENT' | 'PARENT'
   username?: string
   email?: string
   phone?: string
   display_name?: string
   student?: { student_code?: string; full_name?: string; parent_name?: string; parent_phone?: string }
   staff?: { staff_code?: string; full_name?: string }
+  parent?: { student_ids: string[] }
 }
 
 export function adminCreateUser(input: CreateUserInput) {
@@ -22,6 +23,10 @@ export function adminResetPassword(user_id: string) {
 
 export function activateClassMonth(class_month_id: string, override_conflicts = false) {
   return invokeFunction<{ class_month_id: string; override_conflicts: boolean }, unknown>('class-month-activate', { class_month_id, override_conflicts })
+}
+
+export function copyClassMonth(source_class_month_id: string, year: number, month: number) {
+  return invokeFunction<{ source_class_month_id: string; year: number; month: number }, { class_month_id: string; status: string }>('class-month-copy', { source_class_month_id, year, month })
 }
 
 export function completeSession(session_id: string) {
@@ -48,28 +53,24 @@ export function approveTimesheet(timesheet_id: string, approve: boolean, reason?
   return invokeFunction<{ timesheet_id: string; approve: boolean; reason?: string }, unknown>('timesheet-approve', { timesheet_id, approve, reason })
 }
 
-export function calculatePayroll(payroll_period_id: string, salary_method: 'PERCENTAGE' | 'FIXED', percentage?: number, fixed_amount?: number) {
-  return invokeFunction<{ payroll_period_id: string; salary_method: string; percentage?: number; fixed_amount?: number }, unknown>('payroll-calculate', { payroll_period_id, salary_method, percentage, fixed_amount })
-}
-
-export function confirmPayroll(payroll_period_id: string) {
-  return invokeFunction<{ payroll_period_id: string }, unknown>('payroll-confirm', { payroll_period_id })
-}
-
-export function confirmTuitionPaid(tuition_id: string, payment_method: 'CASH' | 'BANK_TRANSFER' | 'OTHER') {
-  return invokeFunction<{ tuition_id: string; payment_method: string }, unknown>('tuition-confirm-paid', { tuition_id, payment_method })
-}
-
-export function payPayroll(payroll_period_id: string) {
-  return invokeFunction<{ payroll_period_id: string }, unknown>('payroll-pay', { payroll_period_id })
-}
-
-export function createPayrollPeriod(year: number, month: number) {
-  return invokeFunction<{ year: number; month: number }, unknown>('payroll-period-create', { year, month })
-}
-
-export function addSalaryAdjustment(payroll_period_id: string, staff_id: string, adjustment_type: 'BONUS' | 'PENALTY', amount: number, reason: string) {
-  return invokeFunction<{ payroll_period_id: string; staff_id: string; adjustment_type: string; amount: number; reason: string }, unknown>('payroll-adjustment', { payroll_period_id, staff_id, adjustment_type, amount, reason })
+export function updateSessionLearning(input: {
+  session_id: string
+  session_note?: string | null
+  students: Array<{
+    student_id: string
+    status: 'PRESENT' | 'LATE' | 'ABSENT' | 'EXCUSED'
+    late_minutes?: number | null
+    absence_reason?: string | null
+    homework_score?: number | null
+    homework_note?: string | null
+    understanding_score?: number | null
+    attitude_score?: number | null
+    positive_feedback_count?: number | null
+    positive_feedback_raw?: string | null
+    comment?: string | null
+  }>
+}) {
+  return invokeFunction<typeof input, { session_id: string; students_updated: number }>('session-learning-update', input)
 }
 
 export function setAccountStatus(user_id: string, status: 'ACTIVE' | 'INACTIVE' | 'LOCKED') {
@@ -80,16 +81,48 @@ export function setAdminPermissionGroups(user_id: string, permission_group_ids: 
   return invokeFunction<{ user_id: string; permission_group_ids: string[] }, unknown>('admin-permissions', { user_id, permission_group_ids })
 }
 
-export function createManualAccounting(input: { direction: 'INCOME' | 'EXPENSE'; category_id: string; amount: number; transaction_date: string; payment_method?: 'CASH' | 'BANK_TRANSFER' | 'OTHER'; description: string }) {
-  return invokeFunction<typeof input, unknown>('accounting-manual', input)
-}
-
 export function exportReport(type: ReportType, format: ReportFormat, filters: ReportFilters) {
   return invokeFunction<{ type: ReportType; format: ReportFormat; filters: ReportFilters }, FileExport>('report-export', { type, format, filters })
 }
 
-export async function createClass(input: { code: string; name: string; subject_id: string; grade_id: string; default_monthly_fee: number; default_session_fee?: number; max_students?: number | null; capacity_policy?: 'WARNING' | 'BLOCK' | 'UNLIMITED' }) {
-  const { data, error } = await supabase.from('classes').insert(input).select('*').single()
+export async function createClass(input: { code: string; name: string; subject_id: string; grade_id: string; max_students?: number | null; capacity_policy?: 'WARNING' | 'BLOCK' | 'UNLIMITED' }) {
+  const { data, error } = await supabase.from('classes').insert({ ...input, default_monthly_fee: 0, default_session_fee: 0 }).select('*').single()
+  if (error) throw error
+  return data
+}
+
+export async function updateClass(id: string, input: { code: string; name: string; subject_id: string; grade_id: string; max_students?: number | null; capacity_policy?: 'WARNING' | 'BLOCK' | 'UNLIMITED' }) {
+  const { data, error } = await supabase.from('classes').update(input).eq('id', id).select('*').single()
+  if (error) throw error
+  return data
+}
+
+export async function archiveClass(id: string) {
+  const { data, error } = await supabase.from('classes').update({ status: 'ARCHIVED' }).eq('id', id).select('*').single()
+  if (error) throw error
+  return data
+}
+
+export async function updateStaff(id: string, input: { staff_code?: string | null; full_name: string; phone?: string | null }) {
+  const { data, error } = await supabase.from('staff').update(input).eq('id', id).select('*').single()
+  if (error) throw error
+  return data
+}
+
+export async function archiveStaff(id: string) {
+  const { data, error } = await supabase.from('staff').update({ status: 'ARCHIVED' }).eq('id', id).select('*').single()
+  if (error) throw error
+  return data
+}
+
+export async function updateStudent(id: string, input: { student_code: string; full_name: string; phone?: string | null; parent_name?: string | null; parent_phone?: string | null }) {
+  const { data, error } = await supabase.from('students').update(input).eq('id', id).select('*').single()
+  if (error) throw error
+  return data
+}
+
+export async function archiveStudent(id: string) {
+  const { data, error } = await supabase.from('students').update({ status: 'ARCHIVED' }).eq('id', id).select('*').single()
   if (error) throw error
   return data
 }
@@ -100,8 +133,8 @@ export async function createClassMonth(input: { class_id: string; year: number; 
   return data
 }
 
-export async function addClassMonthStudent(input: { class_month_id: string; student_id: string; membership_start_date: string; membership_end_date?: string | null; monthly_fee_snapshot: number; session_fee_snapshot?: number }) {
-  const { data, error } = await supabase.from('class_month_students').insert(input).select('*').single()
+export async function addClassMonthStudent(input: { class_month_id: string; student_id: string; membership_start_date: string; membership_end_date?: string | null }) {
+  const { data, error } = await supabase.from('class_month_students').insert({ ...input, monthly_fee_snapshot: 0, session_fee_snapshot: 0 }).select('*').single()
   if (error) throw error
   return data
 }

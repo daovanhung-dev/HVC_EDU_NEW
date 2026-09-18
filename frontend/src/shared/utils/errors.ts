@@ -26,8 +26,13 @@ const publicMessages: Record<string, string> = {
   TIMESHEET_NOT_FOUND: 'Không tìm thấy bản ghi chấm công.',
   TIMESHEET_ALREADY_SUBMITTED: 'Buổi học này đã được gửi chấm công.',
   SESSION_NOT_COMPLETED: 'Chỉ có thể gửi chấm công sau khi buổi học hoàn thành.',
-  PAYROLL_NOT_FOUND: 'Không tìm thấy kỳ lương hoặc dữ liệu lương của bạn.',
-  PAYROLL_LOCKED: 'Kỳ lương đã khóa và không thể chỉnh sửa.',
+  FEATURE_DISABLED: 'Chức năng này đã được ngừng sử dụng.',
+  SESSION_LOCKED: 'Buổi học đã khóa và không thể chỉnh sửa ở vai trò này.',
+  ATTENDANCE_STATUS_REQUIRED: 'Mỗi học sinh cần có trạng thái điểm danh.',
+  STUDENT_NOT_IN_SESSION: 'Học sinh không thuộc buổi học này.',
+  INVALID_HOMEWORK_SCORE: 'Điểm BTVN phải nằm trong khoảng 0–10.',
+  INVALID_UNDERSTANDING_SCORE: 'Điểm hiểu bài phải nằm trong khoảng 1–5.',
+  INVALID_ATTITUDE_SCORE: 'Điểm thái độ phải nằm trong khoảng 1–5.',
   INTERNAL_ERROR: 'Hệ thống gặp lỗi khi xử lý yêu cầu. Vui lòng thử lại sau.',
 }
 

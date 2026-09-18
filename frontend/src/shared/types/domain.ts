@@ -22,8 +22,7 @@ export interface DashboardMetric {
 export type SessionStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
 export type AttendanceStatus = 'PRESENT' | 'LATE' | 'ABSENT' | 'EXCUSED'
 export type TimesheetStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
-export type PayrollStatus = 'DRAFT' | 'CONFIRMED' | 'PAID'
-export type ReportType = 'STUDENTS' | 'ATTENDANCE' | 'HOMEWORK' | 'TUITION' | 'PAYROLL' | 'ACCOUNTING' | 'MONTHLY'
+export type ReportType = 'STUDENTS' | 'ATTENDANCE' | 'HOMEWORK' | 'MONTHLY'
 export type ReportFormat = 'XLSX' | 'PDF'
 
 export interface ReportFilters {
@@ -55,8 +54,6 @@ export interface ClassDetailRow {
   name: string
   subject_id: string
   grade_id: string
-  default_monthly_fee: number
-  default_session_fee: number
   max_students: number | null
   capacity_policy: 'WARNING' | 'BLOCK' | 'UNLIMITED'
   status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED'
@@ -101,8 +98,6 @@ export interface ClassMonthStudentDetailRow {
   student_id: string
   membership_start_date: string
   membership_end_date: string | null
-  monthly_fee_snapshot: number
-  session_fee_snapshot: number
   students?: ClassStudentProfile | null
 }
 
@@ -138,7 +133,6 @@ export interface ClassStudentHistoryRow {
   scheduled_start_at: string
   scheduled_end_at: string
   status: SessionStatus
-  revenue_snapshot: number
   session_note?: string | null
   class_months?: { year: number; month: number; classes?: { code: string; name: string } | null } | null
   attendance: {
@@ -156,12 +150,4 @@ export interface ClassStudentHistoryRow {
     updated_at: string
   } | null
   assessment_snapshot: Record<string, unknown> | null
-}
-
-export interface ClassProfitSummary {
-  completed_session_count: number
-  revenue_total: number
-  payroll_item_count: number
-  payroll_total: number
-  profit_total: number
 }
