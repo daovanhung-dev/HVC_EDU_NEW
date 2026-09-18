@@ -21,6 +21,7 @@ import AdminSessionsPage from '@/modules/admin/pages/AdminSessionsPage.vue'
 import PermissionsPage from '@/modules/admin/pages/PermissionsPage.vue'
 import { useAuthStore } from '@/stores/auth.store'
 import { usePermissionStore } from '@/stores/permission.store'
+import { useAppErrorStore } from '@/stores/app-error.store'
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -44,9 +45,9 @@ const router = createRouter({
     { path: '/admin/permissions', component: AppLayout, children: [{ path: '', component: PermissionsPage, meta: { requiresAuth: true, adminOnly: true, rootOnly: true } }] },
     { path: '/admin/timesheets', component: AppLayout, children: [{ path: '', component: TimesheetsPage, meta: { requiresAuth: true, adminOnly: true, permission: 'TIMESHEET_VIEW' } }] },
     { path: '/admin/payroll', component: AppLayout, children: [{ path: '', component: PayrollPage, meta: { requiresAuth: true, adminOnly: true, permission: 'PAYROLL_VIEW' } }] },
-    { path: '/staff/sessions', component: AppLayout, children: [{ path: '', component: SessionsPage, meta: { requiresAuth: true, staffOnly: true, permission: 'ACADEMIC_VIEW' } }] },
-    { path: '/staff/timesheets', component: AppLayout, children: [{ path: '', component: TimesheetsPage, meta: { requiresAuth: true, staffOnly: true, permission: 'TIMESHEET_VIEW' } }] },
-    { path: '/staff/payroll', component: AppLayout, children: [{ path: '', component: PayrollPage, meta: { requiresAuth: true, staffOnly: true, permission: 'PAYROLL_VIEW' } }] },
+    { path: '/staff/sessions', component: AppLayout, children: [{ path: '', component: SessionsPage, meta: { requiresAuth: true, staffOnly: true } }] },
+    { path: '/staff/timesheets', component: AppLayout, children: [{ path: '', component: TimesheetsPage, meta: { requiresAuth: true, staffOnly: true } }] },
+    { path: '/staff/payroll', component: AppLayout, children: [{ path: '', component: PayrollPage, meta: { requiresAuth: true, staffOnly: true } }] },
     { path: '/student/:module(schedule|tuition|attendance)', component: AppLayout, children: [{ path: '', component: StudentPage, meta: { requiresAuth: true, studentOnly: true } }] },
     { path: '/:pathMatch(.*)*', redirect: '/dashboard' },
   ],
@@ -55,16 +56,35 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
   const permissions = usePermissionStore()
-  if (!auth.initialized) await auth.initialize()
+  const appErrors = useAppErrorStore()
+  if (!auth.initialized) {
+    try {
+      await auth.initialize()
+    } catch (error) {
+      appErrors.report(error, 'Không thể khởi tạo phiên đăng nhập. Vui lòng thử lại sau.')
+      return '/login'
+    }
+  }
   if (to.meta.requiresAuth && !auth.isAuthenticated) return '/login'
   if (to.name === 'login' && auth.isAuthenticated) return '/dashboard'
-  if (auth.isAuthenticated) await permissions.load()
+  if (auth.isAuthenticated && auth.isAdmin && auth.role !== 'ROOT_ADMIN') {
+    try {
+      await permissions.load()
+    } catch (error) {
+      appErrors.report(error, 'Không thể kiểm tra quyền truy cập. Vui lòng thử lại sau.')
+      if (to.meta.permission) return '/dashboard'
+    }
+  }
   if (to.meta.adminOnly && !auth.isAdmin) return '/dashboard'
   if (to.meta.rootOnly && auth.role !== 'ROOT_ADMIN') return '/dashboard'
   if (to.meta.staffOnly && !auth.isStaff) return '/dashboard'
   if (to.meta.studentOnly && !auth.isStudent) return '/dashboard'
   if (to.meta.permission && !permissions.can(String(to.meta.permission))) return '/dashboard'
   return true
+})
+
+router.onError((error) => {
+  useAppErrorStore().report(error, 'Không thể mở chức năng. Vui lòng thử lại sau.')
 })
 
 export default router

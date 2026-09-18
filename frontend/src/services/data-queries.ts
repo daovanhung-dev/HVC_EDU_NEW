@@ -130,7 +130,8 @@ export function getMySessions() {
 }
 
 export async function getMyStaff() {
-  const { data: sessionData } = await supabase.auth.getSession()
+  const { data: sessionData, error } = await supabase.auth.getSession()
+  if (error) throw error
   if (!sessionData.session?.user) return null
   return unwrap(supabase.from('staff').select('id,staff_type,full_name').eq('user_id', sessionData.session.user.id).maybeSingle())
 }
@@ -159,7 +160,7 @@ export async function getDashboardSummary() {
     supabase.from('tuition_records').select('amount_due,amount_paid,status'),
     supabase.from('timesheets').select('id', { count: 'exact', head: true }).eq('status', 'PENDING'),
   ])
-  const errors = [students.error, classes.error, sessions.error, tuition.error].filter(Boolean)
+  const errors = [students.error, classes.error, sessions.error, tuition.error, pendingTimesheets.error].filter(Boolean)
   if (errors.length) throw errors[0]
   const sessionRows = sessions.data || []
   const tuitionRows = tuition.data || []

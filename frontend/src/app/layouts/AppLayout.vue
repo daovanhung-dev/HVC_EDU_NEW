@@ -92,7 +92,7 @@ onUnmounted(() => notifications.unsubscribe())
           <div class="small text-secondary">Hệ thống quản lý</div>
           <h2 class="h5 mb-0">{{ roleLabel }}</h2>
         </div>
-        <button class="btn btn-light position-relative" title="Thông báo" @click="showNotifications = !showNotifications; notifications.refresh()">
+        <button class="btn btn-light position-relative" title="Thông báo" @click="showNotifications = !showNotifications; void notifications.refresh()">
           🔔
           <span v-if="notifications.unreadCount" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">{{ notifications.unreadCount }}</span>
         </button>

@@ -49,6 +49,16 @@ body {
   position: relative;
 }
 
+.global-error-banner {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  left: 1rem;
+  z-index: 1080;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
 .notification-item {
   background: #fff;
 }

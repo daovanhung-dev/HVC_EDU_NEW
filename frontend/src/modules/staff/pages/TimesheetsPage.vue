@@ -4,8 +4,10 @@ import { approveTimesheet, submitTimesheet } from '@/services/commands'
 import { getMyStaff, getTimesheets } from '@/services/data-queries'
 import { formatDateTime, formatVnd } from '@/shared/utils/format'
 import { useAuthStore } from '@/stores/auth.store'
+import { useAppErrorStore } from '@/stores/app-error.store'
 
 const auth = useAuthStore()
+const appErrors = useAppErrorStore()
 const rows = ref<any[]>([])
 const staff = ref<any | null>(null)
 const loading = ref(false)
@@ -14,22 +16,23 @@ const successMessage = ref('')
 const pendingOnly = ref(false)
 const isAdmin = computed(() => auth.isAdmin)
 const visibleRows = computed(() => pendingOnly.value ? rows.value.filter((row) => row.status === 'PENDING') : rows.value)
+function showError(error: unknown, fallback: string) { const normalized = appErrors.report(error, fallback); errorMessage.value = normalized.message }
 
 async function load() {
   loading.value = true
   errorMessage.value = ''
-  try { rows.value = await getTimesheets() as any[]; if (!isAdmin.value) staff.value = await getMyStaff() } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể tải chấm công' } finally { loading.value = false }
+  try { rows.value = await getTimesheets() as any[]; if (!isAdmin.value) { staff.value = await getMyStaff(); if (!staff.value) throw new Error('STAFF_NOT_FOUND') } } catch (error) { showError(error, 'Không thể tải dữ liệu chấm công.') } finally { loading.value = false }
 }
 
 async function review(row: any, approve: boolean) {
   const reason = approve ? undefined : window.prompt('Nhập lý do từ chối chấm công:') || undefined
   if (!approve && !reason) return
-  try { await approveTimesheet(row.id, approve, reason); successMessage.value = approve ? 'Đã duyệt chấm công.' : 'Đã từ chối chấm công.'; await load() } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể xử lý chấm công' }
+  try { await approveTimesheet(row.id, approve, reason); successMessage.value = approve ? 'Đã duyệt chấm công.' : 'Đã từ chối chấm công.'; await load() } catch (error) { showError(error, 'Không thể xử lý chấm công.') }
 }
 
 async function resubmit(row: any) {
   if (!staff.value) return
-  try { await submitTimesheet(row.sessions.id, staff.value.id, row.notes || undefined); successMessage.value = 'Đã gửi lại chấm công.'; await load() } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể gửi lại chấm công' }
+  try { await submitTimesheet(row.sessions.id, staff.value.id, row.notes || undefined); successMessage.value = 'Đã gửi lại chấm công.'; await load() } catch (error) { showError(error, 'Không thể gửi lại chấm công.') }
 }
 
 onMounted(load)

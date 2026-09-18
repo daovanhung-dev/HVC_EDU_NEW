@@ -13,7 +13,11 @@ export const usePermissionStore = defineStore('permission', () => {
 
   async function load() {
     if (loaded.value || !auth.user) return
-    const { data } = await supabase.from('admin_permission_groups').select('permission_groups(permission_group_permissions(permissions(code)))').eq('user_id', auth.user.id)
+    const { data, error } = await supabase.from('admin_permission_groups').select('permission_groups(permission_group_permissions(permissions(code)))').eq('user_id', auth.user.id)
+    if (error) {
+      loaded.value = false
+      throw error
+    }
     codes.value = (data || []).flatMap((row: any) => (row.permission_groups?.permission_group_permissions || []).map((item: any) => item.permissions?.code).filter(Boolean))
     loaded.value = true
   }

@@ -3,8 +3,10 @@ import { computed, onMounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth.store'
 import { formatVnd } from '@/shared/utils/format'
 import { getDashboardSummary } from '@/services/data-queries'
+import { useAppErrorStore } from '@/stores/app-error.store'
 
 const auth = useAuthStore()
+const appErrors = useAppErrorStore()
 const summary = ref<Awaited<ReturnType<typeof getDashboardSummary>> | null>(null)
 const loadError = ref('')
 const monthLabel = new Intl.DateTimeFormat('vi-VN', { month: 'long', year: 'numeric' }).format(new Date())
@@ -24,7 +26,7 @@ const metrics = computed(() => auth.isStudent ? [
 ])
 
 onMounted(async () => {
-  try { summary.value = await getDashboardSummary() } catch (error) { loadError.value = error instanceof Error ? error.message : 'Không thể tải tổng quan' }
+  try { summary.value = await getDashboardSummary() } catch (error) { const normalized = appErrors.report(error, 'Không thể tải tổng quan.'); loadError.value = normalized.message }
 })
 </script>
 

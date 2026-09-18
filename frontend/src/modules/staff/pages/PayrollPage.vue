@@ -4,8 +4,10 @@ import { addSalaryAdjustment, calculatePayroll, confirmPayroll, createPayrollPer
 import { getPayroll } from '@/services/data-queries'
 import { formatDateTime, formatVnd } from '@/shared/utils/format'
 import { useAuthStore } from '@/stores/auth.store'
+import { useAppErrorStore } from '@/stores/app-error.store'
 
 const auth = useAuthStore()
+const appErrors = useAppErrorStore()
 const periods = ref<any[]>([])
 const loading = ref(false)
 const errorMessage = ref('')
@@ -18,11 +20,12 @@ const fixedAmount = ref(0)
 const adjustment = ref({ period_id: '', staff_id: '', type: 'BONUS' as 'BONUS' | 'PENALTY', amount: 0, reason: '' })
 const isAdmin = computed(() => auth.isAdmin)
 const myItems = computed(() => periods.value.flatMap((period) => (period.payroll_items || []).map((item: any) => ({ ...item, period }))))
+function showError(error: unknown, fallback: string) { const normalized = appErrors.report(error, fallback); errorMessage.value = normalized.message }
 
 async function load() {
   loading.value = true
   errorMessage.value = ''
-  try { periods.value = await getPayroll() as any[] } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể tải bảng lương' } finally { loading.value = false }
+  try { periods.value = await getPayroll() as any[] } catch (error) { showError(error, 'Không thể tải dữ liệu bảng lương.') } finally { loading.value = false }
 }
 
 async function ensurePeriod() {
@@ -34,15 +37,15 @@ async function ensurePeriod() {
 }
 
 async function calculate() {
-  try { const period = await ensurePeriod(); if (!period) throw new Error('Không tạo được kỳ lương'); await calculatePayroll(period.id, method.value, method.value === 'PERCENTAGE' ? percentage.value : undefined, method.value === 'FIXED' ? fixedAmount.value : undefined); successMessage.value = 'Đã tính lại bảng lương từ timesheet APPROVED.'; await load() } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể tính lương' }
+  try { const period = await ensurePeriod(); if (!period) throw new Error('Không tạo được kỳ lương'); await calculatePayroll(period.id, method.value, method.value === 'PERCENTAGE' ? percentage.value : undefined, method.value === 'FIXED' ? fixedAmount.value : undefined); successMessage.value = 'Đã tính lại bảng lương từ timesheet APPROVED.'; await load() } catch (error) { showError(error, 'Không thể tính lương.') }
 }
 
 async function changeStatus(period: any, action: 'confirm' | 'pay') {
-  try { if (action === 'confirm') await confirmPayroll(period.id); else await payPayroll(period.id); successMessage.value = action === 'confirm' ? 'Đã chốt bảng lương.' : 'Đã thanh toán bảng lương và tạo chi phí tự động.'; await load() } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể cập nhật bảng lương' }
+  try { if (action === 'confirm') await confirmPayroll(period.id); else await payPayroll(period.id); successMessage.value = action === 'confirm' ? 'Đã chốt bảng lương.' : 'Đã thanh toán bảng lương và tạo chi phí tự động.'; await load() } catch (error) { showError(error, 'Không thể cập nhật bảng lương.') }
 }
 
 function total(period: any) { return (period.payroll_items || []).reduce((sum: number, item: any) => sum + Number(item.base_salary || 0), 0) + (period.salary_adjustments || []).reduce((sum: number, item: any) => sum + (item.adjustment_type === 'BONUS' ? 1 : -1) * Number(item.amount || 0), 0) }
-async function saveAdjustment() { try { await addSalaryAdjustment(adjustment.value.period_id, adjustment.value.staff_id, adjustment.value.type, Math.trunc(adjustment.value.amount), adjustment.value.reason); successMessage.value = 'Đã ghi nhận thưởng/phạt và audit.'; adjustment.value = { period_id: '', staff_id: '', type: 'BONUS', amount: 0, reason: '' }; await load() } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể lưu thưởng/phạt' } }
+async function saveAdjustment() { try { await addSalaryAdjustment(adjustment.value.period_id, adjustment.value.staff_id, adjustment.value.type, Math.trunc(adjustment.value.amount), adjustment.value.reason); successMessage.value = 'Đã ghi nhận thưởng/phạt và audit.'; adjustment.value = { period_id: '', staff_id: '', type: 'BONUS', amount: 0, reason: '' }; await load() } catch (error) { showError(error, 'Không thể lưu thưởng/phạt.') } }
 onMounted(load)
 </script>
 

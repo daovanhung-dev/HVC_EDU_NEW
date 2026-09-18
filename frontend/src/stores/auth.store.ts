@@ -35,7 +35,8 @@ export const useAuthStore = defineStore('auth', () => {
     const nextUser = currentSession?.user || null
     let nextProfile: Profile | null = null
     if (nextUser) {
-      const { data } = await supabase.from('profiles').select('*').eq('user_id', nextUser.id).maybeSingle()
+      const { data, error } = await supabase.from('profiles').select('*').eq('user_id', nextUser.id).maybeSingle()
+      if (error) throw error
       nextProfile = data as Profile | null
     }
     if (version !== hydrateVersion) return
@@ -49,7 +50,8 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true
     try {
       if (!isSupabaseConfigured) return
-      const { data } = await supabase.auth.getSession()
+      const { data, error } = await supabase.auth.getSession()
+      if (error) throw error
       await hydrate(data.session)
       supabase.auth.onAuthStateChange((_event, nextSession) => {
         void hydrate(nextSession)

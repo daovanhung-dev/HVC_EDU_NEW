@@ -2,8 +2,10 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.store'
+import { useAppErrorStore } from '@/stores/app-error.store'
 
 const auth = useAuthStore()
+const appErrors = useAppErrorStore()
 const router = useRouter()
 const password = ref('')
 const confirmPassword = ref('')
@@ -20,7 +22,8 @@ async function submit() {
     message.value = 'Đổi mật khẩu thành công.'
     await router.push('/dashboard')
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Không thể đổi mật khẩu'
+    const normalized = appErrors.report(error, 'Không thể đổi mật khẩu. Vui lòng thử lại sau.')
+    errorMessage.value = normalized.message
   }
 }
 </script>
