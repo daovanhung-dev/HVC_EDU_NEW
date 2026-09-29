@@ -2,141 +2,81 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import type { Session } from '@supabase/supabase-js'
 import router from './index'
-import { usePermissionStore } from '@/stores/permission.store'
-import { useAppErrorStore } from '@/stores/app-error.store'
+import { useAuthStore } from '@/stores/auth.store'
 
 const mocks = vi.hoisted(() => {
   const profileRows: unknown[] = []
-  let permissionQueryError: Error | null = null
-  const supabase = {
-    auth: {
-      getSession: vi.fn(),
-      onAuthStateChange: vi.fn(() => ({ data: { subscription: { unsubscribe: vi.fn() } } })),
-    },
-    from: vi.fn((table: string) => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => table === 'admin_permission_groups'
-          ? {
-              then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => Promise.resolve({ data: [], error: permissionQueryError }).then(resolve, reject),
-            }
-          : {
-              maybeSingle: vi.fn(async () => ({ data: profileRows.shift() ?? null })),
-            }),
-      })),
-    })),
-  }
   return {
-    supabase,
     profileRows,
-    setPermissionQueryError(error: Error | null) { permissionQueryError = error },
+    supabase: {
+      auth: {
+        getSession: vi.fn(),
+        onAuthStateChange: vi.fn(() => ({ data: { subscription: { unsubscribe: vi.fn() } } })),
+      },
+      from: vi.fn(() => ({ select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle: vi.fn(async () => ({ data: profileRows.shift() ?? null, error: null })) })) })) })),
+    },
   }
 })
 
-vi.mock('@/services/supabase', () => ({
-  isSupabaseConfigured: true,
-  supabase: mocks.supabase,
-}))
+vi.mock('@/services/supabase', () => ({ isSupabaseConfigured: true, supabase: mocks.supabase }))
 
 const session = {
   access_token: 'access-token',
   refresh_token: 'refresh-token',
-  user: { id: 'user-1', email: 'admin@local.vn' },
+  user: { id: 'user-1', email: 'test@local.vn' },
 } as unknown as Session
 
-function profile(forcePasswordChange: boolean, role = 'ADMIN') {
-  return {
-    id: 'profile-1',
-    user_id: 'user-1',
-    role,
-    username: 'admin_local',
-    display_name: 'Administrator',
-    phone: null,
-    email: 'admin@local.vn',
-    status: 'ACTIVE',
-    force_password_change: forcePasswordChange,
-  }
+function profile(role: string) {
+  return { id: 'profile-1', user_id: 'user-1', role, username: 'user', display_name: 'Test', status: 'ACTIVE', force_password_change: false }
 }
 
 describe('authentication route guard', () => {
-  beforeEach(async () => {
+  beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
     mocks.profileRows.length = 0
-    mocks.setPermissionQueryError(null)
-    mocks.supabase.auth.getSession.mockResolvedValue({ data: { session } })
-    const permissions = usePermissionStore()
-    permissions.loaded = true
+    mocks.supabase.auth.getSession.mockResolvedValue({ data: { session }, error: null })
   })
 
-  it('allows an account with a legacy force flag to enter Dashboard', async () => {
-    mocks.profileRows.push(profile(true))
-    await router.push('/dashboard?case=forced')
-
-    expect(router.currentRoute.value.path).toBe('/dashboard')
+  it.each(['ADMIN', 'ROOT_ADMIN'])('routes %s into the admin workspace', async (role) => {
+    mocks.profileRows.push(profile(role))
+    await router.push(`/?role=${role}`)
+    expect(router.currentRoute.value.path).toBe('/admin/students')
   })
 
-  it('allows an account with the cleared flag to enter Dashboard', async () => {
-    mocks.profileRows.push(profile(false))
-    await router.push('/dashboard?case=cleared')
-
-    expect(router.currentRoute.value.path).toBe('/dashboard')
-  })
-
-  it.each(['TEACHER', 'ASSISTANT'])('allows %s to open staff functions without admin permissions', async (role) => {
-    mocks.profileRows.push(profile(false, role))
-
-    await router.push(`/staff/sessions?role=${role}`)
+  it('routes teachers to assigned sessions and personal profile', async () => {
+    mocks.profileRows.push(profile('TEACHER'))
+    await router.push('/staff/profile?case=teacher')
+    expect(router.currentRoute.value.path).toBe('/staff/profile')
+    await router.push('/admin/classes?case=teacher')
     expect(router.currentRoute.value.path).toBe('/staff/sessions')
-
-    await router.push(`/staff/timesheets?role=${role}`)
-    expect(router.currentRoute.value.path).toBe('/staff/timesheets')
-
-    await router.push(`/admin/payroll?role=${role}`)
-    expect(router.currentRoute.value.path).toBe('/dashboard')
   })
 
-  it('allows a parent to use the learning portal but blocks retired financial routes', async () => {
-    mocks.profileRows.push(profile(false, 'PARENT'))
-    await router.push('/student/schedule?role=PARENT')
+  it('allows students to use their own learning portal and blocks admin routes', async () => {
+    mocks.profileRows.push(profile('STUDENT'))
+    await router.push('/student/schedule?case=student')
     expect(router.currentRoute.value.path).toBe('/student/schedule')
-
-    await router.push('/student/tuition?role=PARENT')
-    expect(router.currentRoute.value.path).toBe('/dashboard')
-
-    await router.push('/admin/finance?role=PARENT')
-    expect(router.currentRoute.value.path).toBe('/dashboard')
+    await router.push('/admin/classes?case=student')
+    expect(router.currentRoute.value.path).toBe('/student/schedule')
   })
 
-  it('keeps admin permission checks for admin routes', async () => {
-    mocks.profileRows.push(profile(false, 'ADMIN'))
-    await router.push('/admin/students?case=permission')
-
-    expect(router.currentRoute.value.path).toBe('/dashboard')
+  it.each(['PARENT', 'ASSISTANT'])('blocks retired %s accounts', async (role) => {
+    mocks.profileRows.push(profile(role))
+    await router.push(`/student/schedule?role=${role}`)
+    expect(router.currentRoute.value.path).toBe('/login')
+    expect(useAuthStore().isAuthenticated).toBe(false)
   })
 
-  it('shows a global error when permission loading fails', async () => {
-    const permissions = usePermissionStore()
-    permissions.clear()
-    mocks.setPermissionQueryError(new Error('raw permission database detail'))
-    mocks.profileRows.push(profile(false, 'ADMIN'))
-
-    await router.push('/admin/students?case=permission-error')
-
-    expect(router.currentRoute.value.path).toBe('/dashboard')
-    const appErrors = useAppErrorStore()
-    expect(appErrors.current?.message).toBe('Không thể kiểm tra quyền truy cập. Vui lòng thử lại sau.')
-    expect(appErrors.current?.message).not.toContain('raw permission database detail')
-  })
-
-  it('redirects an unauthenticated account to login', async () => {
-    mocks.supabase.auth.getSession.mockResolvedValue({ data: { session: null } })
+  it('redirects unauthenticated users to login', async () => {
+    mocks.supabase.auth.getSession.mockResolvedValue({ data: { session: null }, error: null })
     await router.push('/staff/sessions?case=unauthenticated')
-
     expect(router.currentRoute.value.path).toBe('/login')
   })
 
-  it('registers class and student detail routes', () => {
+  it('registers continuous class and student profile routes, not retired modules', () => {
     expect(router.resolve('/admin/classes/class-1').matched.some((record) => record.path === '/admin/classes/:classId')).toBe(true)
-    expect(router.resolve('/admin/classes/class-1/students/student-1').matched.some((record) => record.path === '/admin/classes/:classId/students/:studentId')).toBe(true)
+    expect(router.resolve('/admin/students/student-1').matched.some((record) => record.path === '/admin/students/:studentId')).toBe(true)
+    expect(router.resolve('/admin/class-months').matched.some((record) => record.path === '/admin/class-months')).toBe(false)
+    expect(router.resolve('/staff/timesheets').matched.some((record) => record.path === '/staff/timesheets')).toBe(false)
   })
 })

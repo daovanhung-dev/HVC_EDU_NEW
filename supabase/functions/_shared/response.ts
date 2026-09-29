@@ -69,6 +69,7 @@ const knownCodes = [
   "STAFF_NOT_FOUND",
   "ACCOUNT_NOT_FOUND",
   "ACCOUNT_INACTIVE",
+  "PARENT_LOGIN_DISABLED",
   "CANNOT_LOCK_SELF",
   "ACCOUNTING_CATEGORY_MISMATCH",
   "INVALID_TRANSACTION",
@@ -89,7 +90,6 @@ const knownCodes = [
   "AUDIT_WRITE_FAILED",
   "ACCOUNT_ROLLBACK_FAILED",
   "STUDENT_NOT_FOUND",
-  "PARENT_STUDENT_LINK_FAILED",
   "FEATURE_DISABLED",
   "SESSION_LOCKED",
   "ATTENDANCE_STATUS_REQUIRED",
@@ -117,6 +117,7 @@ const publicMessages: Record<string, string> = {
   ACCOUNT_ROLLBACK_FAILED:
     "Tạo tài khoản thất bại và cần được kiểm tra để hoàn tất khôi phục dữ liệu.",
   ACCOUNT_INACTIVE: "Tài khoản không ở trạng thái ACTIVE.",
+  PARENT_LOGIN_DISABLED: "Đăng nhập phụ huynh đã ngừng hỗ trợ. Vui lòng dùng tài khoản học sinh của con.",
 };
 
 function asErrorLike(error: unknown): ErrorLike {
@@ -250,7 +251,8 @@ export function fromError(
     status: classified.status || undefined,
     message: classified.message,
   }));
-  const status = classified.code === "FORBIDDEN"
+  const status = classified.code === "FORBIDDEN" ||
+      classified.code === "PARENT_LOGIN_DISABLED"
     ? 403
     : classified.code === "INTERNAL_ERROR" ||
         classified.code === "ACCOUNT_ROLLBACK_FAILED"

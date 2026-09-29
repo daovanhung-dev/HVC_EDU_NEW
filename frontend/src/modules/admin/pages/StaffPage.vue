@@ -14,7 +14,7 @@ const loading = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
 const temporaryPassword = ref('')
-const form = ref({ full_name: '', staff_code: '', username: '', phone: '', role: 'TEACHER' as 'TEACHER' | 'ASSISTANT' })
+const form = ref({ full_name: '', staff_code: '', username: '', phone: '' })
 const editForm = ref<StaffForm>({ staff_code: '', full_name: '', phone: '' })
 
 async function load() {
@@ -25,11 +25,11 @@ async function load() {
 async function create() {
   errorMessage.value = ''; successMessage.value = ''; temporaryPassword.value = ''
   try {
-    const result = await adminCreateUser({ role: form.value.role, username: form.value.username, phone: form.value.phone || undefined, display_name: form.value.full_name, staff: { staff_code: form.value.staff_code || undefined, full_name: form.value.full_name } })
+    const result = await adminCreateUser({ role: 'TEACHER', username: form.value.username, phone: form.value.phone || undefined, display_name: form.value.full_name, staff: { staff_code: form.value.staff_code || undefined, full_name: form.value.full_name } })
     temporaryPassword.value = result.temporary_password
     successMessage.value = 'Đã tạo tài khoản nhân sự. Mật khẩu tạm thời chỉ hiển thị một lần.'
     showForm.value = false
-    form.value = { full_name: '', staff_code: '', username: '', phone: '', role: 'TEACHER' }
+    form.value = { full_name: '', staff_code: '', username: '', phone: '' }
     await load()
   } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể tạo nhân sự' }
 }
@@ -64,10 +64,10 @@ onMounted(load)
 <template>
   <div class="d-flex flex-wrap gap-3 justify-content-between align-items-center mb-4"><div><div class="small text-secondary">Core</div><h1 class="h3 mb-0">Nhân sự</h1></div><button class="btn btn-primary" @click="showForm = !showForm">{{ showForm ? 'Đóng form' : 'Thêm nhân sự' }}</button></div>
   <div v-if="successMessage" class="alert alert-success">{{ successMessage }} <code>{{ temporaryPassword }}</code></div><div v-if="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
-  <div v-if="showForm" class="card border-0 shadow-sm mb-4"><div class="card-body"><div class="row g-3"><div class="col-md-5"><label class="form-label">Họ tên</label><input v-model="form.full_name" class="form-control" /></div><div class="col-md-3"><label class="form-label">Mã nhân sự</label><input v-model="form.staff_code" class="form-control" /></div><div class="col-md-4"><label class="form-label">Username</label><input v-model="form.username" class="form-control" placeholder="Tự sinh nếu bỏ trống" /></div><div class="col-md-4"><label class="form-label">Số điện thoại</label><input v-model="form.phone" class="form-control" /></div><div class="col-md-4"><label class="form-label">Vai trò</label><select v-model="form.role" class="form-select"><option value="TEACHER">Giáo viên</option><option value="ASSISTANT">Trợ giảng</option></select></div></div><button class="btn btn-success mt-3" :disabled="!form.full_name" @click="create">Tạo tài khoản</button></div></div>
+  <div v-if="showForm" class="card border-0 shadow-sm mb-4"><div class="card-body"><div class="row g-3"><div class="col-md-5"><label class="form-label">Họ tên</label><input v-model="form.full_name" class="form-control" /></div><div class="col-md-3"><label class="form-label">Mã nhân sự</label><input v-model="form.staff_code" class="form-control" /></div><div class="col-md-4"><label class="form-label">Username</label><input v-model="form.username" class="form-control" placeholder="Tự sinh nếu bỏ trống" /></div><div class="col-md-4"><label class="form-label">Số điện thoại</label><input v-model="form.phone" class="form-control" /></div></div><div class="small text-secondary mt-2">Tài khoản mới được tạo với vai trò Giáo viên.</div><button class="btn btn-success mt-3" :disabled="!form.full_name" @click="create">Tạo tài khoản</button></div></div>
   <div class="card border-0 shadow-sm"><div class="card-body"><div class="d-flex gap-2 mb-3"><input v-model="search" class="form-control" placeholder="Tìm theo tên hoặc mã" @keyup.enter="load" /><button class="btn btn-outline-primary" @click="load">Tìm</button></div><div class="table-responsive"><table class="table align-middle"><thead><tr><th>Mã</th><th>Họ tên</th><th>Vai trò</th><th>SĐT</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>
     <template v-for="row in rows" :key="row.id">
-      <tr v-if="editingId !== row.id"><td>{{ row.staff_code || '—' }}</td><td class="fw-semibold">{{ row.full_name }}</td><td>{{ row.staff_type === 'TEACHER' ? 'Giáo viên' : 'Trợ giảng' }}</td><td>{{ row.phone || '—' }}</td><td><span class="badge" :class="row.status === 'ACTIVE' ? 'text-bg-success' : 'text-bg-secondary'">{{ row.status }}</span></td><td><div class="d-flex flex-wrap gap-1"><button class="btn btn-sm btn-outline-secondary" @click="beginEdit(row)">Sửa</button><button v-if="row.status !== 'ARCHIVED'" class="btn btn-sm btn-outline-danger" @click="archive(row)">Lưu trữ</button><button class="btn btn-sm btn-outline-secondary" @click="toggleStatus(row)">{{ row.status === 'ACTIVE' ? 'Khóa TK' : 'Mở TK' }}</button><button class="btn btn-sm btn-outline-warning" @click="resetPassword(row)">Reset mật khẩu</button></div></td></tr>
+      <tr v-if="editingId !== row.id"><td>{{ row.staff_code || '—' }}</td><td class="fw-semibold">{{ row.full_name }}</td><td>Giáo viên</td><td>{{ row.phone || '—' }}</td><td><span class="badge" :class="row.status === 'ACTIVE' ? 'text-bg-success' : 'text-bg-secondary'">{{ row.status }}</span></td><td><div class="d-flex flex-wrap gap-1"><button class="btn btn-sm btn-outline-secondary" @click="beginEdit(row)">Sửa</button><button v-if="row.status !== 'ARCHIVED'" class="btn btn-sm btn-outline-danger" @click="archive(row)">Lưu trữ</button><button class="btn btn-sm btn-outline-secondary" @click="toggleStatus(row)">{{ row.status === 'ACTIVE' ? 'Khóa TK' : 'Mở TK' }}</button><button class="btn btn-sm btn-outline-warning" @click="resetPassword(row)">Reset mật khẩu</button></div></td></tr>
       <tr v-else><td colspan="6"><div class="row g-2 align-items-end"><div class="col-md-3"><label class="form-label small">Mã nhân sự</label><input v-model="editForm.staff_code" class="form-control form-control-sm" /></div><div class="col-md-4"><label class="form-label small">Họ tên</label><input v-model="editForm.full_name" class="form-control form-control-sm" /></div><div class="col-md-3"><label class="form-label small">Số điện thoại</label><input v-model="editForm.phone" class="form-control form-control-sm" /></div><div class="col-md-2 d-flex gap-2"><button class="btn btn-sm btn-success" @click="saveEdit(row)">Lưu</button><button class="btn btn-sm btn-outline-secondary" @click="editingId = null">Hủy</button></div></div></td></tr>
     </template><tr v-if="!loading && !rows.length"><td colspan="6" class="text-center text-secondary py-4">Chưa có dữ liệu</td></tr>
   </tbody></table></div></div></div>

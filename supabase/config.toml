@@ -23,6 +23,3 @@ enable_signup = false
 
 [realtime]
 enabled = true
-
-[functions.admin-permissions]
-verify_jwt = true

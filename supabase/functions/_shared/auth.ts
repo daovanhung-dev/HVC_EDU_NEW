@@ -47,13 +47,14 @@ export async function requireCaller(req: Request): Promise<Caller> {
   if (userError || !userData.user) throw new Error('UNAUTHENTICATED')
   const { data: profile, error: profileError } = await adminClient().from('profiles').select('id,user_id,role,status,username').eq('user_id', userData.user.id).single()
   if (profileError || !profile || profile.status !== 'ACTIVE') throw new Error('ACCOUNT_INACTIVE')
+  if (profile.role === 'PARENT') throw new Error('PARENT_LOGIN_DISABLED')
   return { user: userData.user, profile }
 }
 
 export function canManageRole(caller: Caller, role: string): boolean {
   if (caller.profile.role === 'ROOT_ADMIN') return true
   if (role === 'ADMIN') return false
-  if (role === 'STUDENT' || role === 'PARENT') return caller.profile.role === 'ADMIN'
+  if (role === 'STUDENT') return caller.profile.role === 'ADMIN'
   return caller.profile.role === 'ADMIN'
 }
 

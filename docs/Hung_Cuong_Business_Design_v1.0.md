@@ -5,6 +5,8 @@
 **Phạm vi:** Business Design  
 **Đối tượng:** Trung tâm luyện thi Hùng Cường
 
+> **Tài liệu lưu lịch sử:** phạm vi v1.0 đã được thay bằng mô hình lớp học và hồ sơ học tập liên tục. Xem `IMPLEMENTATION.md` để biết nghiệp vụ hiện hành.
+
 ---
 
 # 1. Tổng quan hệ thống

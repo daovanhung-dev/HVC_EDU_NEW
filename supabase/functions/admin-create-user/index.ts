@@ -18,7 +18,6 @@ interface CreateUserBody {
   force_password_change?: boolean;
   student?: Record<string, unknown>;
   staff?: Record<string, unknown>;
-  parent?: { student_ids?: unknown };
 }
 
 type AdminClient = ReturnType<typeof adminClient>;
@@ -53,7 +52,6 @@ async function ensureAvailable(
 async function rollbackCreatedAccount(admin: AdminClient, userId: string) {
   const failures: string[] = [];
   const removals = [
-    ["parent_students", () => admin.from("parent_students").delete().eq("parent_user_id", userId)],
     ["staff", () => admin.from("staff").delete().eq("user_id", userId)],
     ["students", () => admin.from("students").delete().eq("user_id", userId)],
     ["profiles", () => admin.from("profiles").delete().eq("user_id", userId)],
@@ -88,14 +86,14 @@ Deno.serve(async (req) => {
     const body = rawBody as CreateUserBody;
     role = text(body.role);
     if (
-      !["ADMIN", "TEACHER", "ASSISTANT", "STUDENT", "PARENT"].includes(role) ||
+      !["ADMIN", "TEACHER", "STUDENT"].includes(role) ||
       !canManageRole(caller, role)
     ) return fail("FORBIDDEN", "Bạn không có quyền tạo tài khoản này.", 403);
     const forcePasswordChange = body.force_password_change === true &&
       caller.profile.role === "ROOT_ADMIN";
     admin = adminClient();
     if (caller.profile.role !== "ROOT_ADMIN") {
-      const permission = role === "STUDENT" || role === "PARENT"
+      const permission = role === "STUDENT"
         ? "STUDENTS_MANAGE"
         : "STAFF_MANAGE";
       const allowed = await admin.rpc("actor_has_permission", {
@@ -125,14 +123,8 @@ Deno.serve(async (req) => {
     const staffCode = valueFrom(body.staff, "staff_code");
     const studentName = valueFrom(body.student, "full_name") || displayName;
     const studentCodeInput = valueFrom(body.student, "student_code");
-    if (role !== "ADMIN" && role !== "STUDENT" && role !== "PARENT" && !staffName) {
+    if (role !== "ADMIN" && role !== "STUDENT" && !staffName) {
       throw appError("INVALID_INPUT");
-    }
-    const parentStudentIds = role === "PARENT"
-      ? Array.from(new Set(Array.isArray(body.parent?.student_ids) ? body.parent?.student_ids.filter((value): value is string => typeof value === "string" && value.trim().length > 0) : []))
-      : [];
-    if (role === "PARENT" && parentStudentIds.length === 0) {
-      throw appError("INVALID_INPUT", "Phụ huynh phải được liên kết với ít nhất một học sinh.");
     }
 
     let username = text(body.username);
@@ -178,7 +170,7 @@ Deno.serve(async (req) => {
       phone,
       "PHONE_ALREADY_EXISTS",
     );
-    if (role !== "ADMIN" && role !== "STUDENT" && role !== "PARENT") {
+    if (role !== "ADMIN" && role !== "STUDENT") {
       await ensureAvailable(
         admin,
         "staff",
@@ -258,21 +250,6 @@ Deno.serve(async (req) => {
       if (student.error || !student.data) {
         throw student.error || new Error("STUDENT_CREATE_FAILED");
       }
-    } else if (role === "PARENT") {
-      stage = "parent_students.insert";
-      const students = await admin.from("students").select("id").in("id", parentStudentIds);
-      if (students.error) throw students.error;
-      if ((students.data || []).length !== parentStudentIds.length) {
-        throw appError("STUDENT_NOT_FOUND");
-      }
-      const links = await admin.from("parent_students").insert(
-        parentStudentIds.map((studentId) => ({
-          parent_user_id: createdUserId,
-          student_id: studentId,
-          created_by: caller.user.id,
-        })),
-      );
-      if (links.error) throw links.error;
     } else if (role !== "ADMIN") {
       stage = "staff.insert";
       const staff = await admin.from("staff").insert({

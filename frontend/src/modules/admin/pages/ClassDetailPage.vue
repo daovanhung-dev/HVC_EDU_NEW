@@ -1,93 +1,137 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
-import { getClassActiveMemberships, getClassDetail, getClassMonthScheduleDetails, getClassMonthScheduleStaffDetails, getClassMonthStaff, getClassMonthStudents, getClassMonthsForClass } from '@/services/data-queries'
-import type { ClassDetailRow, ClassMembershipDetailRow, ClassMonthDetailRow, ClassMonthScheduleDetailRow, ClassMonthScheduleStaffDetailRow, ClassMonthStaffDetailRow, ClassMonthStudentDetailRow } from '@/shared/types/domain'
-import { usePermissionStore } from '@/stores/permission.store'
+import { addClassMembership, addTeacherToClassSchedule, createClassSchedule, generateUpcomingSessions, removeTeacherFromClassSchedule, setClassScheduleStatus, updateClassMembership, updateClassSchedule } from '@/services/commands'
+import { getClassActiveMemberships, getClassDetail, getClassSchedules, getStaff, getStudents } from '@/services/data-queries'
+import type { ClassDetailRow, ClassMembershipDetailRow, ClassScheduleRow } from '@/shared/types/domain'
+import { formatDateTime } from '@/shared/utils/format'
 
 const route = useRoute()
-const permissions = usePermissionStore()
 const classId = computed(() => String(route.params.classId || ''))
 const classRow = ref<ClassDetailRow | null>(null)
-const months = ref<ClassMonthDetailRow[]>([])
-const selectedMonthId = ref('')
 const memberships = ref<ClassMembershipDetailRow[]>([])
-const snapshotStudents = ref<ClassMonthStudentDetailRow[]>([])
-const staffRows = ref<ClassMonthStaffDetailRow[]>([])
-const schedules = ref<ClassMonthScheduleDetailRow[]>([])
-const scheduleStaff = ref<ClassMonthScheduleStaffDetailRow[]>([])
+const schedules = ref<ClassScheduleRow[]>([])
+const students = ref<any[]>([])
+const teachers = ref<any[]>([])
 const loading = ref(false)
-const monthLoading = ref(false)
 const errorMessage = ref('')
-
-const canViewStudents = computed(() => permissions.can('STUDENTS_VIEW'))
-const canViewStaff = computed(() => permissions.can('STAFF_VIEW'))
-const selectedMonth = computed(() => months.value.find((month) => month.id === selectedMonthId.value) || null)
-const selectedMonthLabel = computed(() => selectedMonth.value ? `${String(selectedMonth.value.month).padStart(2, '0')}/${selectedMonth.value.year}` : 'Chưa có ClassMonth')
-const rosterRows = computed(() => memberships.value.map((membership) => ({ ...membership, student: membership.students, snapshot: snapshotStudents.value.find((snapshot) => snapshot.student_id === membership.student_id) })))
-const teachers = computed(() => staffRows.value.filter((row) => row.assignment_role === 'TEACHER'))
-const assistants = computed(() => staffRows.value.filter((row) => row.assignment_role === 'ASSISTANT'))
+const successMessage = ref('')
+const localDate = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date())
+const membershipForm = ref({ student_id: '', start_date: localDate() })
+const scheduleForm = ref({ day_of_week: 1, start_time: '17:30', end_time: '19:30', room: '', staff_id: '' })
+const teacherSelections = ref<Record<string, string>>({})
+const editingScheduleId = ref('')
+const editSchedule = ref({ day_of_week: 1, start_time: '', end_time: '', room: '' })
+const availableStudents = computed(() => students.value.filter((student) => !memberships.value.some((row) => row.student_id === student.id)))
+const activeRosterReady = computed(() => memberships.value.some((row) => !row.end_date || row.end_date >= localDate()))
 
 function dayLabel(day: number) { return day === 7 ? 'Chủ nhật' : `Thứ ${day + 1}` }
-function statusLabel(status: string) { return status === 'ACTIVE' ? 'Đang hoạt động' : status === 'DRAFT' ? 'Bản nháp' : status === 'ARCHIVED' ? 'Đã lưu trữ' : status === 'COMPLETED' ? 'Đã hoàn thành' : status === 'SCHEDULED' ? 'Đã lên lịch' : status }
-function scheduleStaffLabel(scheduleId: string) {
-  const rows = scheduleStaff.value.filter((row) => row.schedule_id === scheduleId)
-  if (!rows.length) return 'Chưa phân công theo slot'
-  return rows.map((row) => `${row.staff?.full_name || '—'} (${row.assignment_role === 'TEACHER' ? 'GV' : 'TG'})`).join(', ')
-}
-
-async function loadSelectedMonth() {
-  staffRows.value = []
-  schedules.value = []
-  scheduleStaff.value = []
-  snapshotStudents.value = []
-  if (!selectedMonthId.value) return
-  monthLoading.value = true
-  try {
-    const requests: Array<Promise<unknown>> = []
-    if (canViewStaff.value) {
-      requests.push(getClassMonthStaff(selectedMonthId.value), getClassMonthScheduleDetails(selectedMonthId.value), getClassMonthScheduleStaffDetails(selectedMonthId.value))
-    }
-    if (canViewStudents.value) requests.push(getClassMonthStudents(selectedMonthId.value))
-    const results = await Promise.all(requests)
-    let index = 0
-    if (canViewStaff.value) {
-      staffRows.value = results[index++] as ClassMonthStaffDetailRow[]
-      schedules.value = results[index++] as ClassMonthScheduleDetailRow[]
-      scheduleStaff.value = results[index++] as ClassMonthScheduleStaffDetailRow[]
-    }
-    if (canViewStudents.value) snapshotStudents.value = results[index] as ClassMonthStudentDetailRow[]
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Không thể tải dữ liệu ClassMonth'
-  } finally {
-    monthLoading.value = false
-  }
-}
+function normalizeRelation(value: any) { return Array.isArray(value) ? value[0] : value }
 
 async function load() {
+  if (!classId.value) return
   loading.value = true
   errorMessage.value = ''
-  classRow.value = null
-  memberships.value = []
-  selectedMonthId.value = ''
-  months.value = []
   try {
-    const [detail, classMonths] = await Promise.all([getClassDetail(classId.value), getClassMonthsForClass(classId.value)])
+    const [detail, currentMemberships, classSchedules, allStudents, staffRows] = await Promise.all([
+      getClassDetail(classId.value), getClassActiveMemberships(classId.value), getClassSchedules(classId.value), getStudents(), getStaff(),
+    ])
     if (!detail) throw new Error('Không tìm thấy lớp học')
     classRow.value = detail
-    months.value = classMonths
-    if (!months.value.some((month) => month.id === selectedMonthId.value)) selectedMonthId.value = months.value[0]?.id || ''
-    const requests: Array<Promise<unknown>> = []
-    if (canViewStudents.value) requests.push(getClassActiveMemberships(classId.value))
-    const results = await Promise.all(requests)
-    let index = 0
-    if (canViewStudents.value) memberships.value = results[index++] as ClassMembershipDetailRow[]
-    await loadSelectedMonth()
+    memberships.value = currentMemberships
+    schedules.value = classSchedules
+    students.value = allStudents as any[]
+    teachers.value = (staffRows as any[]).filter((row) => row.status === 'ACTIVE')
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Không thể tải chi tiết lớp'
+    errorMessage.value = error instanceof Error ? error.message : 'Không thể tải thông tin lớp'
   } finally {
     loading.value = false
   }
+}
+
+async function addStudent() {
+  if (!membershipForm.value.student_id) return
+  errorMessage.value = ''; successMessage.value = ''
+  try {
+    await addClassMembership({ class_id: classId.value, student_id: membershipForm.value.student_id, start_date: membershipForm.value.start_date })
+    membershipForm.value.student_id = ''
+    successMessage.value = 'Đã thêm học sinh vào lớp.'
+    await load()
+  } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể thêm học sinh vào lớp' }
+}
+
+async function endMembership(row: ClassMembershipDetailRow) {
+  const today = localDate()
+  if (!window.confirm(`Kết thúc việc học lớp này của ${row.students?.full_name || 'học sinh'} từ hôm nay? Lịch sử buổi học vẫn được giữ.`)) return
+  try {
+    await updateClassMembership(row.id, { start_date: row.start_date, end_date: row.start_date > today ? null : today, status: 'INACTIVE' })
+    successMessage.value = 'Đã kết thúc xếp lớp.'
+    await load()
+  } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể cập nhật xếp lớp' }
+}
+
+async function createSchedule() {
+  errorMessage.value = ''; successMessage.value = ''
+  try {
+    const created = await createClassSchedule({ class_id: classId.value, day_of_week: scheduleForm.value.day_of_week, start_time: scheduleForm.value.start_time, end_time: scheduleForm.value.end_time, room: scheduleForm.value.room.trim() || null })
+    if (scheduleForm.value.staff_id) await addTeacherToClassSchedule(created.id, scheduleForm.value.staff_id)
+    scheduleForm.value = { day_of_week: 1, start_time: '17:30', end_time: '19:30', room: '', staff_id: '' }
+    successMessage.value = 'Đã lưu lịch nháp. Kiểm tra sĩ số và giáo viên, sau đó bật lịch để bắt đầu tự sinh buổi học.'
+    await load()
+  } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể lưu lịch' }
+}
+
+async function toggleSchedule(row: ClassScheduleRow) {
+  errorMessage.value = ''; successMessage.value = ''
+  if (row.status !== 'ACTIVE' && (!activeRosterReady.value || !row.class_schedule_staff?.some((mapping) => teachers.value.some((teacher) => teacher.id === mapping.staff_id)))) {
+    errorMessage.value = 'Hãy xác nhận danh sách học sinh và phân công ít nhất một giáo viên trước khi bật lịch.'
+    return
+  }
+  try {
+    await setClassScheduleStatus(row.id, row.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE')
+    successMessage.value = row.status === 'ACTIVE' ? 'Đã tạm dừng lịch và sinh lại các buổi sắp tới.' : 'Đã xác nhận lịch và sinh buổi học trong 30 ngày tới.'
+    await load()
+  } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể cập nhật lịch' }
+}
+
+function beginEdit(row: ClassScheduleRow) {
+  editingScheduleId.value = row.id
+  editSchedule.value = { day_of_week: row.day_of_week, start_time: String(row.start_time).slice(0, 5), end_time: String(row.end_time).slice(0, 5), room: row.room || '' }
+}
+
+async function saveSchedule(row: ClassScheduleRow) {
+  try {
+    await updateClassSchedule(row.id, { ...editSchedule.value, room: editSchedule.value.room.trim() || null })
+    successMessage.value = 'Đã cập nhật lịch và các buổi sắp tới.'
+    editingScheduleId.value = ''
+    await load()
+  } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể cập nhật lịch' }
+}
+
+async function addTeacher(row: ClassScheduleRow) {
+  const staffId = teacherSelections.value[row.id]
+  if (!staffId) return
+  try {
+    await addTeacherToClassSchedule(row.id, staffId)
+    teacherSelections.value[row.id] = ''
+    successMessage.value = 'Đã phân công giáo viên.'
+    await load()
+  } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể phân công giáo viên' }
+}
+
+async function removeTeacher(row: ClassScheduleRow, staffId: string) {
+  try {
+    await removeTeacherFromClassSchedule(row.id, staffId)
+    successMessage.value = 'Đã gỡ phân công giáo viên.'
+    await load()
+  } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể gỡ phân công giáo viên' }
+}
+
+async function generateNow() {
+  try {
+    const result = await generateUpcomingSessions() as { created?: number; cancelled?: number }
+    successMessage.value = `Đã cập nhật lịch sắp tới. Tạo ${result.created || 0} buổi; hủy ${result.cancelled || 0} buổi không còn khớp lịch.`
+  } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể sinh buổi học' }
 }
 
 watch(classId, () => { void load() })
@@ -96,29 +140,25 @@ onMounted(load)
 
 <template>
   <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
-    <div>
-      <RouterLink to="/admin/classes" class="small text-decoration-none">← Danh sách lớp</RouterLink>
-      <div class="small text-secondary mt-2">Class detail</div>
-      <h1 class="h3 mb-1">{{ classRow?.name || 'Chi tiết lớp' }}</h1>
-      <div v-if="classRow" class="text-secondary"><code>{{ classRow.code }}</code> · {{ classRow.subjects?.name || '—' }} · {{ classRow.grades?.name || '—' }}</div>
-    </div>
-    <span v-if="classRow" class="badge text-bg-success">{{ statusLabel(classRow.status) }}</span>
+    <div><RouterLink to="/admin/classes" class="small text-decoration-none">← Danh sách lớp</RouterLink><div class="small text-secondary mt-2">Lớp học</div><h1 class="h3 mb-1">{{ classRow?.name || 'Chi tiết lớp' }}</h1><div v-if="classRow" class="text-secondary"><code>{{ classRow.code }}</code> · {{ classRow.subjects?.name || '—' }} · {{ classRow.grades?.name || '—' }}</div></div>
+    <button class="btn btn-outline-primary" @click="generateNow">Cập nhật buổi 30 ngày tới</button>
   </div>
+  <div v-if="successMessage" class="alert alert-success">{{ successMessage }}</div><div v-if="errorMessage" class="alert alert-danger">{{ errorMessage }}</div><div v-if="loading" class="alert alert-info">Đang tải lớp…</div>
 
-  <div v-if="loading" class="alert alert-info">Đang tải thông tin lớp…</div>
-  <div v-if="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
+  <div class="card border-0 shadow-sm mb-4"><div class="card-body">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><div><h2 class="h6 mb-1">Học sinh trong lớp</h2><small class="text-secondary">Danh sách áp dụng liên tục theo ngày bắt đầu và kết thúc.</small></div><span class="badge text-bg-light">{{ memberships.length }} học sinh</span></div>
+    <form class="row g-2 align-items-end mb-3" @submit.prevent="addStudent"><div class="col-md-6"><label class="form-label">Thêm học sinh</label><select v-model="membershipForm.student_id" class="form-select"><option value="">Chọn học sinh</option><option v-for="student in availableStudents" :key="student.id" :value="student.id">{{ student.student_code }} — {{ student.full_name }}</option></select></div><div class="col-md-3"><label class="form-label">Ngày bắt đầu</label><input v-model="membershipForm.start_date" type="date" class="form-control" required /></div><div class="col-md-3"><button class="btn btn-primary w-100" :disabled="!membershipForm.student_id">Thêm vào lớp</button></div></form>
+    <div class="table-responsive"><table class="table align-middle"><thead><tr><th>Mã</th><th>Học sinh</th><th>Điện thoại</th><th>Bắt đầu</th><th>Thao tác</th></tr></thead><tbody><tr v-for="membership in memberships" :key="membership.id"><td><code>{{ membership.students?.student_code }}</code></td><td><RouterLink :to="`/admin/students/${membership.student_id}`">{{ membership.students?.full_name }}</RouterLink></td><td>{{ membership.students?.phone || '—' }}</td><td>{{ membership.start_date }}</td><td><button class="btn btn-sm btn-outline-danger" @click="endMembership(membership)">Kết thúc</button></td></tr><tr v-if="!memberships.length"><td colspan="5" class="text-center text-secondary py-4">Chưa có học sinh trong lớp.</td></tr></tbody></table></div>
+  </div></div>
 
-  <template v-if="classRow">
-    <div class="row g-3 mb-4">
-      <div class="col-6 col-xl-3"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="small text-secondary">Tên lớp</div><div class="fw-semibold mt-2">{{ classRow.name }}</div><small class="text-secondary">{{ classRow.code }}</small></div></div></div>
-      <div class="col-6 col-xl-3"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="small text-secondary">Số học sinh đang học</div><div class="h4 mt-2 mb-0">{{ canViewStudents ? memberships.length : '—' }}</div><small class="text-secondary">Membership ACTIVE</small></div></div></div>
-      <div class="col-6 col-xl-3"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="small text-secondary">ClassMonth đang xem</div><div class="fw-semibold mt-2">{{ selectedMonthLabel }}</div><small v-if="selectedMonth">{{ statusLabel(selectedMonth.status) }}</small><small v-else class="text-secondary">Chưa tạo tháng</small></div></div></div>
-      <div class="col-6 col-xl-3"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="small text-secondary">Chính sách sĩ số</div><div class="fw-semibold mt-2">{{ classRow.capacity_policy === 'UNLIMITED' ? 'Không giới hạn' : classRow.max_students }}</div><small class="text-secondary">Theo cấu hình lớp</small></div></div></div>
+  <div class="card border-0 shadow-sm"><div class="card-body">
+    <div class="mb-3"><h2 class="h6 mb-1">Lịch lặp và giáo viên</h2><small class="text-secondary">Lịch chuyển từ cấu hình cũ cần được Admin rà soát và bật một lần.</small></div>
+    <form class="row g-2 align-items-end border rounded p-3 mb-4" @submit.prevent="createSchedule"><div class="col-sm-2"><label class="form-label">Ngày</label><select v-model.number="scheduleForm.day_of_week" class="form-select"><option v-for="day in 7" :key="day" :value="day">{{ dayLabel(day) }}</option></select></div><div class="col-sm-2"><label class="form-label">Bắt đầu</label><input v-model="scheduleForm.start_time" type="time" class="form-control" required /></div><div class="col-sm-2"><label class="form-label">Kết thúc</label><input v-model="scheduleForm.end_time" type="time" class="form-control" required /></div><div class="col-sm-2"><label class="form-label">Phòng</label><input v-model="scheduleForm.room" class="form-control" /></div><div class="col-sm-3"><label class="form-label">Giáo viên</label><select v-model="scheduleForm.staff_id" class="form-select"><option value="">Chọn giáo viên</option><option v-for="teacher in teachers" :key="teacher.id" :value="teacher.id">{{ teacher.full_name }}</option></select></div><div class="col-sm-1"><button class="btn btn-primary w-100">Lưu</button></div></form>
+    <div v-for="schedule in schedules" :key="schedule.id" class="border rounded p-3 mb-3">
+      <div v-if="editingScheduleId !== schedule.id" class="d-flex flex-wrap justify-content-between gap-2"><div><div class="fw-semibold">{{ dayLabel(schedule.day_of_week) }} · {{ String(schedule.start_time).slice(0, 5) }}–{{ String(schedule.end_time).slice(0, 5) }} · {{ schedule.room ? `Phòng ${schedule.room}` : 'Chưa có phòng' }}</div><span class="badge mt-1" :class="schedule.status === 'ACTIVE' ? 'text-bg-success' : 'text-bg-warning'">{{ schedule.status === 'ACTIVE' ? 'Đang sinh buổi' : 'Chờ Admin rà soát' }}</span><span v-if="schedule.reviewed_at" class="small text-secondary ms-2">Duyệt {{ formatDateTime(schedule.reviewed_at) }}</span><div class="d-flex flex-wrap gap-2 mt-2"> <span v-for="mapping in schedule.class_schedule_staff || []" :key="mapping.staff_id" class="badge text-bg-light">{{ normalizeRelation(mapping.staff)?.full_name || 'Giáo viên' }} <button class="btn-close ms-1" aria-label="Gỡ giáo viên" @click="removeTeacher(schedule, mapping.staff_id)"></button></span><span v-if="!schedule.class_schedule_staff?.length" class="small text-danger">Chưa phân công giáo viên.</span></div></div><div class="d-flex align-items-start gap-2"><button class="btn btn-sm btn-outline-secondary" @click="beginEdit(schedule)">Sửa</button><button class="btn btn-sm" :class="schedule.status === 'ACTIVE' ? 'btn-outline-warning' : 'btn-success'" @click="toggleSchedule(schedule)">{{ schedule.status === 'ACTIVE' ? 'Tạm dừng' : 'Rà soát và bật lịch' }}</button></div></div>
+      <form v-else class="row g-2 align-items-end" @submit.prevent="saveSchedule(schedule)"><div class="col-sm-2"><label class="form-label">Ngày</label><select v-model.number="editSchedule.day_of_week" class="form-select"><option v-for="day in 7" :key="day" :value="day">{{ dayLabel(day) }}</option></select></div><div class="col-sm-2"><label class="form-label">Bắt đầu</label><input v-model="editSchedule.start_time" type="time" class="form-control" /></div><div class="col-sm-2"><label class="form-label">Kết thúc</label><input v-model="editSchedule.end_time" type="time" class="form-control" /></div><div class="col-sm-3"><label class="form-label">Phòng</label><input v-model="editSchedule.room" class="form-control" /></div><div class="col-sm-3 d-flex gap-2"><button class="btn btn-success">Lưu</button><button type="button" class="btn btn-outline-secondary" @click="editingScheduleId = ''">Hủy</button></div></form>
+      <form class="row g-2 mt-2" @submit.prevent="addTeacher(schedule)"><div class="col-sm-8"><select v-model="teacherSelections[schedule.id]" class="form-select form-select-sm"><option value="">Thêm giáo viên vào slot</option><option v-for="teacher in teachers.filter((t) => !(schedule.class_schedule_staff || []).some((mapping) => mapping.staff_id === t.id))" :key="teacher.id" :value="teacher.id">{{ teacher.full_name }}</option></select></div><div class="col-sm-4"><button class="btn btn-sm btn-outline-primary" :disabled="!teacherSelections[schedule.id]">Phân công</button></div></form>
     </div>
-
-    <div class="card border-0 shadow-sm mb-4"><div class="card-body"><div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-3"><div><h2 class="h6 mb-1">Phân công giáo viên và trợ giảng</h2><small class="text-secondary">Theo ClassMonth và từng slot lịch</small></div><div v-if="months.length" class="col-12 col-md-4"><label class="form-label small">ClassMonth</label><select v-model="selectedMonthId" class="form-select" @change="loadSelectedMonth"><option v-for="month in months" :key="month.id" :value="month.id">{{ String(month.month).padStart(2, '0') }}/{{ month.year }} — {{ statusLabel(month.status) }}</option></select></div></div><div v-if="!canViewStaff" class="alert alert-warning mb-0">Bạn chưa có quyền <code>STAFF_VIEW</code> để xem phân công nhân sự.</div><div v-else-if="monthLoading" class="text-secondary small">Đang tải phân công…</div><div v-else-if="!selectedMonth" class="text-secondary small">Lớp chưa có ClassMonth.</div><div v-else><div class="row g-3 mb-3"><div class="col-md-6"><div class="border rounded p-3 h-100"><div class="small text-secondary mb-2">Giáo viên</div><div v-if="teachers.length" v-for="row in teachers" :key="row.id" class="d-flex justify-content-between border-bottom py-2 small"><span>{{ row.staff?.full_name || '—' }}</span><code>{{ row.staff?.staff_code || '—' }}</code></div><div v-else class="small text-secondary">Chưa phân công giáo viên.</div></div></div><div class="col-md-6"><div class="border rounded p-3 h-100"><div class="small text-secondary mb-2">Trợ giảng</div><div v-if="assistants.length" v-for="row in assistants" :key="row.id" class="d-flex justify-content-between border-bottom py-2 small"><span>{{ row.staff?.full_name || '—' }}</span><code>{{ row.staff?.staff_code || '—' }}</code></div><div v-else class="small text-secondary">Không có trợ giảng.</div></div></div></div><div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th>Slot</th><th>Phòng</th><th>Phân công</th></tr></thead><tbody><tr v-for="schedule in schedules" :key="schedule.id"><td>{{ dayLabel(schedule.day_of_week) }} · {{ String(schedule.start_time).slice(0, 5) }}–{{ String(schedule.end_time).slice(0, 5) }}</td><td>{{ schedule.room ? `Phòng ${schedule.room}` : '—' }}</td><td class="small">{{ scheduleStaffLabel(schedule.id) }}</td></tr><tr v-if="!schedules.length"><td colspan="3" class="text-secondary">Chưa có lịch học.</td></tr></tbody></table></div></div></div></div>
-
-    <div class="card border-0 shadow-sm mb-4"><div class="card-body"><div class="d-flex justify-content-between align-items-center gap-2 mb-3"><div><h2 class="h6 mb-1">Học sinh</h2><small class="text-secondary">{{ canViewStudents ? `${rosterRows.length} học sinh đang có membership ACTIVE` : 'Danh sách học sinh' }}</small></div><span v-if="canViewStudents && selectedMonth" class="badge text-bg-light">Snapshot {{ snapshotStudents.length }}</span></div><div v-if="!canViewStudents" class="alert alert-warning mb-0">Bạn chưa có quyền <code>STUDENTS_VIEW</code> để xem hồ sơ học sinh.</div><template v-else><div v-if="selectedMonth && snapshotStudents.length !== rosterRows.length" class="alert alert-info small">Sĩ số membership hiện tại và snapshot tháng đang khác nhau: {{ rosterRows.length }} / {{ snapshotStudents.length }}.</div><div class="table-responsive"><table class="table align-middle"><thead><tr><th>Mã</th><th>Họ tên</th><th>Liên hệ</th><th>Phụ huynh</th><th>Membership</th><th></th></tr></thead><tbody><tr v-for="row in rosterRows" :key="row.id"><td><code>{{ row.student?.student_code }}</code></td><td class="fw-semibold">{{ row.student?.full_name }}</td><td>{{ row.student?.phone || row.student?.email || '—' }}</td><td>{{ row.student?.parent_name || '—' }}</td><td class="small">{{ row.start_date }}<span v-if="row.end_date"> → {{ row.end_date }}</span></td><td><RouterLink class="btn btn-sm btn-outline-primary" :to="`/admin/classes/${classId}/students/${row.student_id}`">Chi tiết</RouterLink></td></tr><tr v-if="!rosterRows.length"><td colspan="6" class="text-center text-secondary py-4">Lớp chưa có membership ACTIVE.</td></tr></tbody></table></div></template></div></div>
-
-  </template>
+    <div v-if="!schedules.length" class="text-center text-secondary py-4">Chưa có lịch lặp.</div>
+  </div></div>
 </template>

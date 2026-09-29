@@ -2,6 +2,12 @@
 
 Ứng dụng quản lý trung tâm luyện thi Hùng Cường, triển khai theo kiến trúc Vue SPA trên GitHub Pages và Supabase.
 
+## Phạm vi ứng dụng
+
+Ứng dụng hiện tập trung vào lớp học và hồ sơ học tập liên tục. Admin quản lý giáo viên, học sinh, lớp, lịch và buổi học; giáo viên phụ trách buổi học, điểm danh, điểm, nhận xét và hồ sơ cá nhân; học sinh/phụ huynh dùng chung tài khoản của từng học sinh để xem lịch sử, giáo viên, điểm và chuyên cần. Không tạo kỳ tháng/kế toán. Các nghiệp vụ tài chính và kỳ ClassMonth cũ chỉ còn lưu trữ, không dùng qua app.
+
+Thiết kế nghiệp vụ và kiến trúc v1.0 là tài liệu lưu lịch sử. Phạm vi hiện hành được ghi trong [Implementation Notes](docs/IMPLEMENTATION.md).
+
 ## Chạy frontend
 
 Yêu cầu Node.js 22 và npm 10+.

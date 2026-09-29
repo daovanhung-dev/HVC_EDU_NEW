@@ -19,18 +19,16 @@ export const useAuthStore = defineStore('auth', () => {
   const loading = ref(false)
   let hydrateVersion = 0
 
-  const isAuthenticated = computed(() => Boolean(session.value && user.value && profile.value))
-  const role = computed<Role | null>(() => profile.value?.role || null)
+  const isAuthenticated = computed(() => Boolean(session.value && user.value && profile.value && !['PARENT', 'ASSISTANT'].includes(profile.value.role)))
+  const role = computed<Profile['role'] | null>(() => profile.value?.role || null)
   const username = computed(() => profile.value?.username || null)
   const displayName = computed(() => profile.value?.display_name || null)
   const forcePasswordChange = computed(() => profile.value?.force_password_change ?? false)
   const isAdmin = computed(() => role.value === 'ROOT_ADMIN' || role.value === 'ADMIN')
-  const isStaff = computed(() => role.value === 'TEACHER' || role.value === 'ASSISTANT')
+  const isStaff = computed(() => role.value === 'TEACHER')
   const isTeacher = computed(() => role.value === 'TEACHER')
-  const isAssistant = computed(() => role.value === 'ASSISTANT')
   const isStudent = computed(() => role.value === 'STUDENT')
-  const isParent = computed(() => role.value === 'PARENT')
-  const isLearner = computed(() => isStudent.value || isParent.value)
+  const isLearner = computed(() => isStudent.value)
 
   async function hydrate(currentSession: Session | null) {
     const version = ++hydrateVersion
@@ -86,6 +84,10 @@ export const useAuthStore = defineStore('auth', () => {
     await hydrate(session.value)
   }
 
+  async function refreshProfile() {
+    await hydrate(session.value)
+  }
+
   async function signOut() {
     await supabase.auth.signOut()
     session.value = null
@@ -95,7 +97,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   return {
     session, user, profile, initialized, loading, isAuthenticated, role, username, displayName,
-    forcePasswordChange, isAdmin, isStaff, isTeacher, isAssistant, isStudent, isParent, isLearner,
-    initialize, login, updatePassword, signOut,
+    forcePasswordChange, isAdmin, isStaff, isTeacher, isStudent, isLearner,
+    initialize, login, updatePassword, refreshProfile, signOut,
   }
 })

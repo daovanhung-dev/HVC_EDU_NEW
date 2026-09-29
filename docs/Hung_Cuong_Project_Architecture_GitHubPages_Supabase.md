@@ -9,6 +9,8 @@
 **Timezone:** `Asia/Ho_Chi_Minh`
 **Currency:** `VND`
 
+> **Tài liệu lưu lịch sử:** kiến trúc này mô tả phạm vi quản lý rộng v2.0. Nghiệp vụ hiện hành đã bỏ kỳ tháng, tài chính và các module ngoài học tập; xem `IMPLEMENTATION.md` để biết luồng được giữ lại.
+
 ---
 
 # 1. Quyết định kiến trúc

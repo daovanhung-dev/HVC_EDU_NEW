@@ -20,6 +20,7 @@ Deno.serve(async (req) => {
       if (student) profile = (await admin.from('profiles').select('*').eq('user_id', student.user_id).maybeSingle()).data
     }
     if (!profile || profile.status !== 'ACTIVE') return fail('INVALID_CREDENTIALS', 'Tài khoản hoặc mật khẩu không đúng.', 401)
+    if (profile.role === 'PARENT') return fail('PARENT_LOGIN_DISABLED', 'Đăng nhập phụ huynh đã ngừng hỗ trợ. Vui lòng dùng tài khoản học sinh của con.', 403)
     const authUser = (await admin.auth.admin.getUserById(profile.user_id)).data.user
     if (!authUser?.email) return fail('AUTH_IDENTITY_MISSING', 'Tài khoản chưa có định danh đăng nhập.', 500)
     const signedIn = await admin.auth.signInWithPassword({ email: authUser.email, password: body.password })
