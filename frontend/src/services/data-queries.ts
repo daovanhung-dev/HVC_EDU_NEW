@@ -57,7 +57,7 @@ export async function getClassSchedules(classId: string): Promise<ClassScheduleR
 }
 
 export function getMySessions() {
-  return unwrap<SessionRow[]>(supabase.from('sessions').select('id,class_id,recurrence_schedule_id,recurrence_occurrence_date,scheduled_start_at,scheduled_end_at,status,session_note,schedule_override,classes(id,code,name),class_schedules(room),session_students(student_id,students(id,student_code,full_name)),session_staff(staff_id,assignment_role,staff(id,staff_code,full_name))').order('scheduled_start_at', { ascending: false }))
+  return unwrap<SessionRow[]>(supabase.from('sessions').select('id,class_id,recurrence_schedule_id,recurrence_occurrence_date,scheduled_start_at,scheduled_end_at,status,session_note,schedule_override,classes(id,code,name),class_schedules(room),session_students(student_id,students(id,student_code,full_name)),session_staff(staff_id,assignment_role,staff!session_staff_staff_id_fkey(id,staff_code,full_name))').order('scheduled_start_at', { ascending: false }))
 }
 
 export async function getMyStaff() {
@@ -79,13 +79,13 @@ export function getSessionStudents(sessionId: string) {
 }
 
 export function getMyAttendance(studentId?: string) {
-  let query = supabase.from('student_attendances').select('id,student_id,status,late_minutes,absence_reason,homework_score,homework_note,understanding_score,attitude_score,positive_feedback_count,positive_feedback_raw,comment,updated_at,students(id,student_code,full_name),sessions(id,class_id,scheduled_start_at,scheduled_end_at,status,session_note,classes(code,name),session_staff(staff_id,staff(id,full_name)))').order('updated_at', { ascending: false })
+  let query = supabase.from('student_attendances').select('id,student_id,status,late_minutes,absence_reason,homework_score,homework_note,understanding_score,attitude_score,positive_feedback_count,positive_feedback_raw,comment,updated_at,students(id,student_code,full_name),sessions(id,class_id,scheduled_start_at,scheduled_end_at,status,session_note,classes(code,name),session_staff(staff_id,staff!session_staff_staff_id_fkey(id,full_name)))').order('updated_at', { ascending: false })
   if (studentId) query = query.eq('student_id', studentId)
   return unwrap<AttendanceHistoryRow[]>(query)
 }
 
 export async function getStudentHistory(studentId: string): Promise<StudentHistoryRow[]> {
-  const sessions = await unwrap<any[]>(supabase.from('sessions').select('id,class_id,scheduled_start_at,scheduled_end_at,status,session_note,classes(code,name),session_students!inner(student_id),session_staff(staff(full_name))').eq('session_students.student_id', studentId).order('scheduled_start_at', { ascending: false }))
+  const sessions = await unwrap<any[]>(supabase.from('sessions').select('id,class_id,scheduled_start_at,scheduled_end_at,status,session_note,classes(code,name),session_students!inner(student_id),session_staff(staff!session_staff_staff_id_fkey(full_name))').eq('session_students.student_id', studentId).order('scheduled_start_at', { ascending: false }))
   if (!sessions.length) return []
   const attendances = await getMyAttendance(studentId)
   const attendanceBySession = new Map(attendances.map((row) => [row.sessions?.id, row]))

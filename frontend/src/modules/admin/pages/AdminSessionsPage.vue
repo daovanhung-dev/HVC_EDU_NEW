@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { RouterLink } from 'vue-router'
 import { updateSessionOccurrence } from '@/services/commands'
 import { getMySessions, getSessionStudents } from '@/services/data-queries'
 import { formatDateTime } from '@/shared/utils/format'
@@ -68,7 +69,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="d-flex justify-content-between align-items-center mb-4"><div><div class="small text-secondary">Học tập</div><h1 class="h3 mb-0">Buổi học</h1></div><button class="btn btn-outline-primary" :disabled="loading" @click="load">Làm mới</button></div>
+  <div class="d-flex justify-content-between align-items-center mb-4"><div><div class="small text-secondary">Học tập</div><h1 class="h3 mb-0">Buổi học</h1></div><div class="d-flex gap-2"><RouterLink class="btn btn-primary" to="/admin/classes">Xếp lịch lớp</RouterLink><button class="btn btn-outline-primary" :disabled="loading" @click="load">Làm mới</button></div></div>
   <div v-if="successMessage" class="alert alert-success">{{ successMessage }}</div><div v-if="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
   <div class="row g-4">
     <div class="col-12 col-xl-5"><div class="card border-0 shadow-sm"><div class="card-body">

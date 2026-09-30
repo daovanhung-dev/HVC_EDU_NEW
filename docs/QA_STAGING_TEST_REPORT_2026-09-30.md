@@ -21,14 +21,21 @@
 
 Bài kiểm tra PostgreSQL cô lập dùng schema-shaped fixture và assertion shim tương thích với các assertion trong tệp pgTAP. Đây không thay thế kiểm thử trên Supabase local thật.
 
-## Kiểm tra đích và phạm vi staging
+## Xác minh đích và triển khai production
 
-- Supabase CLI link và `supabase/config.toml` trỏ cùng project ref; CLI ghi nhận `0001–0039` đã áp dụng và migration local `0040` còn pending từ xa tại thời điểm kiểm tra.
-- Bundle GitHub Pages đang mở cũng tham chiếu cùng Supabase project đó.
-- Dashboard ngày 2026-09-30 hiển thị project ở branch `main` với nhãn `PRODUCTION`, gói `FREE`, và thông báo gói này không có scheduled database backups.
-- Vì project đích không được xác nhận là staging và không có backup theo Dashboard, migration 0040 chưa được áp dụng từ xa. Không đăng nhập hoặc ghi dữ liệu qua website trong lượt này.
-- Do đó các luồng Chrome admin tạo/sửa nhân sự, học sinh, lớp/lịch; teacher điểm danh/chấm điểm/nhận xét/hoàn tất; student xem lịch/kết quả và kiểm tra RLS được ghi là **chưa kiểm thử lại**, không phải đạt hay lỗi mới.
+- Ngày 2026-09-30 (`Asia/Ho_Chi_Minh`), xác minh Supabase CLI, `supabase/config.toml` và bundle GitHub Pages cùng trỏ project ref `dtftytlyaqmxjgynicqs`. Trước khi ghi, remote đã có `0001–0039`; chỉ `0040` còn pending.
+- Dashboard được kiểm tra cùng ngày hiển thị branch `main` với nhãn `PRODUCTION`, gói `FREE`, không có scheduled database backups. Theo chỉ đạo hiện hành của người dùng, chấp nhận không tạo backup và rủi ro triển khai production.
+- Chạy `supabase db push --linked`; CLI xác nhận chỉ áp dụng `0040_fix_continuous_learning_rls_recursion.sql`, không reset database, không chạy seed hay migration khác. Kiểm tra sau đó cho thấy remote migration history đồng bộ `0001–0040`.
+- Truy vấn metadata sau triển khai xác nhận bảy helper mới đều có `EXECUTE` cho `authenticated`, không có cho `anon`; bảy policy SELECT tương ứng dùng helper mới.
+
+## Kiểm tra Chrome ngày 2026-09-30
+
+- Website mở đúng project đã đối chiếu. Đăng nhập ROOT thành công; ban đầu trang hiện thông báo phiên cũ hết hạn, nhưng sau đăng nhập ứng dụng tải được khu vực quản trị.
+- Trang nhân sự tải được 8 dòng, trang lớp học tải được 3 dòng; trang buổi học tải thành công nhưng hiện không có dòng nào. Không đưa thông tin hồ sơ hiển thị trên trang vào báo cáo.
+- Form tạo giáo viên chỉ được mở và chuẩn bị bằng dữ liệu tổng hợp `QA-`; chưa gửi form hoặc tạo tài khoản. Cần xác nhận tại thời điểm gửi theo quy tắc an toàn trình duyệt khi đang thao tác trên production.
+- Vì chưa gửi tạo tài khoản QA, các luồng ghi admin, tạo lịch/buổi, teacher điểm danh/chấm điểm/nhận xét/hoàn tất, student xem kết quả và kiểm tra cô lập giữa hai học sinh vẫn là **chưa kiểm thử lại**. Chưa có bằng chứng mới để phân loại các luồng đó là đạt hoặc lỗi.
+- Đăng nhập phụ huynh riêng, admin xác nhận điểm danh và chấm công giáo viên vẫn **không áp dụng** theo luồng hiện hành.
 
 ## Việc cần xác minh trước E2E
 
-Cần project Supabase staging riêng và URL website đã cấu hình trỏ tới đúng project đó. Sau khi xác minh được hai đích trùng nhau và xác nhận backup phù hợp, áp dụng riêng migration 0040, không reset database, rồi chạy lại toàn bộ ma trận vai trò bằng dữ liệu `QA-`. Không sử dụng dữ liệu định danh từ `docs/accounts/` hoặc `docs/data_seed/` trong báo cáo.
+Để hoàn tất kiểm thử ghi trên project production, cần xác nhận gửi riêng từng form tạo tài khoản QA ngay trước khi gửi. Sau khi các tài khoản tổng hợp được tạo, tiếp tục ma trận admin/teacher/student bằng dữ liệu `QA-`; không reset database, không xóa dữ liệu học tập đã ghi. Không sử dụng dữ liệu định danh từ `docs/accounts/` hoặc `docs/data_seed/` trong báo cáo.
