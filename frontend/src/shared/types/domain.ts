@@ -78,7 +78,7 @@ export interface SessionRow {
   status: SessionStatus
   session_note: string | null
   schedule_override?: boolean
-  classes?: { id?: string; code?: string; name: string } | null
+  classes?: { id?: string; name: string } | null
   class_schedules?: { room: string | null } | null
   session_students?: Array<{ student_id: string; students?: { id: string; student_code: string; full_name: string } | null }>
   session_staff?: SessionStaffRow[]

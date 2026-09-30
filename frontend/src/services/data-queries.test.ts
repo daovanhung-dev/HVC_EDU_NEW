@@ -41,6 +41,8 @@ describe('session staff PostgREST relations', () => {
 
     const selection = mockState.selections.find((item) => item.table === 'sessions')
     expect(selection?.columns).toContain(assignedStaffRelation)
+    expect(selection?.columns).toContain('classes(id,name)')
+    expect(selection?.columns).not.toContain('classes(id,code,name)')
   })
 
   it('uses the assigned staff foreign key in attendance history', async () => {
