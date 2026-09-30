@@ -45,6 +45,8 @@ describe('session staff PostgREST relations', () => {
     expect(selection?.columns).toContain(assignedStaffRelation)
     expect(selection?.columns).toContain('classes(id,name)')
     expect(selection?.columns).not.toContain('classes(id,code,name)')
+    expect(selection?.columns).not.toContain('manual_schedule')
+    expect(selection?.columns).not.toContain('staff_assignment_override')
   })
 
   it('uses the assigned staff foreign key in attendance history', async () => {

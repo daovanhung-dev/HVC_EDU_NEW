@@ -213,6 +213,19 @@ describe('AdminSessionsPage calendar', () => {
     expect(failedPage.find('.session-list').text()).not.toContain('Chưa có buổi học.')
   })
 
+  it('keeps class choices available when the sessions request fails', async () => {
+    mockState.getMySessions.mockRejectedValue(new Error('Không thể tải buổi học.'))
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Không thể tải buổi học.')
+    expect(wrapper.find('#session-class-filter option[value="qa-class-1"]').exists()).toBe(true)
+
+    await clickButtonWithText(wrapper, 'Thêm buổi')
+    expect(wrapper.find('.session-create-form select option[value="qa-class-1"]').exists()).toBe(true)
+    expect(wrapper.find('.session-create-form select option[value="qa-teacher-1"]').exists()).toBe(true)
+  })
+
   it('opens integrated schedule management from the Buổi học page', async () => {
     const wrapper = mountPage()
     await clickButtonWithText(wrapper, 'Chỉnh sửa lịch')

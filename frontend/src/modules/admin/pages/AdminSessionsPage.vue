@@ -141,17 +141,37 @@ async function load() {
   loading.value = true
   errorMessage.value = ''
   try {
-    const [sessionRows, classRows, staffRows] = await Promise.all([getMySessions(), getClasses(), getStaff()])
-    sessions.value = sessionRows
-    classes.value = (classRows as ClassDetailRow[]).filter((row) => row.status !== 'ARCHIVED')
-    teachersList.value = staffRows as any[]
-    if (selectedClassId.value && !classes.value.some((row) => row.id === selectedClassId.value)) selectedClassId.value = ''
-    if (selected.value) {
-      selected.value = sessions.value.find((session) => session.id === selected.value?.id) || null
-      if (!selected.value) { students.value = []; selectedTeacherIds.value = [] }
+    const [sessionResult, classResult, staffResult] = await Promise.allSettled([
+      getMySessions(),
+      getClasses(),
+      getStaff(),
+    ])
+    const loadErrors: string[] = []
+
+    if (sessionResult.status === 'fulfilled') {
+      sessions.value = sessionResult.value
+      if (selected.value) {
+        selected.value = sessions.value.find((session) => session.id === selected.value?.id) || null
+        if (!selected.value) { students.value = []; selectedTeacherIds.value = [] }
+      }
+    } else {
+      loadErrors.push(sessionResult.reason instanceof Error ? sessionResult.reason.message : 'Không thể tải buổi học.')
     }
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Không thể tải buổi học.'
+
+    if (classResult.status === 'fulfilled') {
+      classes.value = (classResult.value as ClassDetailRow[]).filter((row) => row.status !== 'ARCHIVED')
+    } else {
+      loadErrors.push(classResult.reason instanceof Error ? classResult.reason.message : 'Không thể tải danh sách lớp.')
+    }
+
+    if (staffResult.status === 'fulfilled') {
+      teachersList.value = staffResult.value as any[]
+    } else {
+      loadErrors.push(staffResult.reason instanceof Error ? staffResult.reason.message : 'Không thể tải danh sách giáo viên.')
+    }
+
+    if (selectedClassId.value && !classes.value.some((row) => row.id === selectedClassId.value)) selectedClassId.value = ''
+    errorMessage.value = loadErrors.join(' ')
   } finally {
     loading.value = false
   }
