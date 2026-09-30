@@ -7,7 +7,7 @@
 - subjects, grades và classes lưu danh mục học thuật và lớp.
 - class_memberships lưu quan hệ học sinh-lớp theo ngày.
 - class_schedules và class_schedule_staff lưu lịch lặp và giáo viên theo lịch.
-- sessions lưu buổi gắn trực tiếp với class_id; session_students giữ roster/snapshot của buổi; session_staff giữ giáo viên được phân công.
+- sessions lưu buổi gắn trực tiếp với class_id và snapshot phòng; session_students giữ roster/snapshot của buổi; session_staff giữ giáo viên được phân công.
 - student_attendances lưu điểm danh, điểm và nhận xét theo học sinh/buổi.
 - audit logs lưu dấu vết các thay đổi học tập và hồ sơ được cấu hình để audit.
 
@@ -25,6 +25,7 @@ Migration theo thứ tự số trong supabase/migrations. Các thay đổi lớn
 - 0041 bổ sung cờ nhận diện buổi tạo thủ công và ngoại lệ phân công giáo viên; thêm các RPC Admin để tạo buổi, áp dụng tuần mẫu vào tháng và đổi giáo viên cho một buổi. RPC kiểm tra quyền, roster theo ngày, xung đột lịch và ghi audit. Generator giữ nguyên buổi thủ công/ngoại lệ giáo viên; lưu trữ lịch lặp hủy buổi tương lai còn SCHEDULED mà không xóa lịch sử. Fixture kiểm thử tổng hợp nằm ở `supabase/tests/admin_monthly_session_planning.test.sql`.
 - 0042 mở lại riêng chấm công theo buổi đã hoàn tất: giáo viên được phân công gửi yêu cầu, Admin duyệt/từ chối kèm lý do, giáo viên chỉ đọc yêu cầu của mình và có thể gửi lại sau khi bị từ chối. RPC chỉ cho service role gọi; Edge Function xác thực vai trò trước khi gọi. Fixture tổng hợp nằm ở `supabase/tests/timesheet_workflow.test.sql`. Migration này không mở payroll, học phí hoặc kế toán.
 - 0043 giới hạn tối đa 5 giáo viên duy nhất đang được phân công cho mỗi lớp, gộp lịch chưa lưu trữ và buổi SCHEDULED/IN_PROGRESS. Giới hạn được kiểm tra tại database cho phân công lịch, phân công buổi và khôi phục lịch/buổi; lịch ARCHIVED và buổi COMPLETED/CANCELLED không tính. Không xóa dữ liệu đã vượt giới hạn trước đó; khi đó có thể gỡ phân công nhưng không thể thêm giáo viên duy nhất mới cho đến khi tổng còn tối đa 5. Fixture tổng hợp nằm ở `supabase/tests/class_teacher_limit.test.sql`.
+- 0044 thêm phòng trên từng buổi, nạp snapshot từ lịch lặp và áp dụng kiểm tra xung đột xuyên suốt tạo buổi, sao chép tuần, đổi buổi và sinh lịch. Hai lớp khác nhau có thể học cùng giờ nếu phòng khác; cùng lớp, cùng học sinh, cùng phòng hoặc thiếu phòng khi trùng giờ vẫn bị chặn. Giáo viên được phép dạy đồng thời ở các lớp khác nhau trong phòng khác nhau. Fixture tổng hợp nằm ở `supabase/tests/parallel_session_rooms.test.sql`.
 
 Các migration cũ hơn tạo schema nền, enums, auth/profile, RBAC, hồ sơ, lớp/tháng, buổi, điểm danh, tài chính, hàm, RLS, index và các lần hardening. Đọc migration cụ thể trước khi sửa để hiểu dữ liệu lịch sử và ràng buộc tương thích.
 

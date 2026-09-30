@@ -44,6 +44,7 @@ describe('session staff PostgREST relations', () => {
     const selection = mockState.selections.find((item) => item.table === 'sessions')
     expect(selection?.columns).toContain(assignedStaffRelation)
     expect(selection?.columns).toContain('classes(id,name)')
+    expect(selection?.columns).toContain('room')
     expect(selection?.columns).not.toContain('classes(id,code,name)')
     expect(selection?.columns).not.toContain('manual_schedule')
     expect(selection?.columns).not.toContain('staff_assignment_override')

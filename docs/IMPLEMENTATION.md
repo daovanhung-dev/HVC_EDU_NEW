@@ -12,13 +12,15 @@ HVC_EDU quản lý lớp học và hồ sơ học tập liên tục, không tạ
 
 ## Lớp, lịch và buổi học
 
-`class_memberships` là danh sách xếp lớp hiện hành, có ngày bắt đầu và ngày kết thúc. `class_schedules` lưu lịch lặp theo thứ trong tuần; `class_schedule_staff` lưu giáo viên phụ trách từng lịch. Mỗi lớp có tối đa 5 giáo viên duy nhất đang được phân công, tính gộp lịch chưa lưu trữ và buổi chưa hoàn tất/chưa hủy; cùng một giáo viên ở nhiều lịch hoặc buổi chỉ tính một lần. Lịch ARCHIVED và buổi COMPLETED/CANCELLED không chiếm giới hạn. `sessions.class_id` gắn buổi học trực tiếp với lớp để tra cứu xuyên suốt.
+`class_memberships` là danh sách xếp lớp hiện hành, có ngày bắt đầu và ngày kết thúc. `class_schedules` lưu lịch lặp theo thứ trong tuần; `class_schedule_staff` lưu giáo viên phụ trách từng lịch. Mỗi lớp có tối đa 5 giáo viên duy nhất đang được phân công, tính gộp lịch chưa lưu trữ và buổi chưa hoàn tất/chưa hủy; cùng một giáo viên ở nhiều lịch hoặc buổi chỉ tính một lần. Lịch ARCHIVED và buổi COMPLETED/CANCELLED không chiếm giới hạn. `sessions.class_id` gắn buổi học trực tiếp với lớp; `sessions.room` giữ phòng tại từng buổi.
 
 Migration `0039_continuous_learning.sql` sao chép lịch gần nhất từ ClassMonth sang cấu hình lịch mới ở trạng thái INACTIVE. Admin kiểm tra sĩ số và giáo viên trên trang lớp rồi bật lịch. Lịch được bật sinh các buổi chưa bắt đầu trong 30 ngày tới theo `Asia/Ho_Chi_Minh`; job Supabase Cron chạy lúc 17:00 UTC mỗi ngày. Hàm sinh lịch có khóa chống chạy đồng thời, khóa duy nhất chống trùng buổi, cập nhật roster/giáo viên cho buổi chưa bắt đầu và giữ nguyên buổi đã bắt đầu hoặc hoàn tất.
 
 Supabase Cron lưu kết quả từng lần chạy trong `cron.job_run_details`, có thể theo dõi trong Dashboard Cron hoặc truy vấn trực tiếp. Supabase mô tả Cron là bộ lập lịch Postgres dựa trên `pg_cron` và lưu chi tiết trạng thái các lần chạy trong bảng này ([tài liệu Cron](https://supabase.com/docs/guides/cron)).
 
 Admin có thể hủy hoặc đổi giờ một buổi SCHEDULED trong tương lai. Thao tác riêng của buổi được đánh dấu để job lịch không ghi đè. Các buổi, điểm danh, điểm, nhận xét và phân công lịch sử được giữ nguyên.
+
+Các lớp khác nhau có thể xếp buổi trùng giờ nếu dùng phòng khác nhau; giáo viên cũng có thể được phân công cho cả hai buổi. Cùng lớp hoặc có học sinh chung vẫn là xung đột. Nếu giờ giao nhau mà một buổi chưa có phòng, thao tác bị chặn với thông báo cần nhập phòng. So sánh tên phòng không phân biệt hoa thường và bỏ khoảng trắng đầu/cuối.
 
 ## Chấm công theo buổi
 

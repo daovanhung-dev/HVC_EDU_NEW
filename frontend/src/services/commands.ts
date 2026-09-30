@@ -134,8 +134,8 @@ export async function createClassSchedule(input: { class_id: string; day_of_week
 export async function updateClassSchedule(id: string, input: { day_of_week: number; start_time: string; end_time: string; room?: string | null }) {
   const { data, error } = await supabase.from('class_schedules').update({ ...input, room: input.room || null }).eq('id', id).select('id,class_id,day_of_week,start_time,end_time,room,status,reviewed_at').single()
   if (error) throw error
-  await generateUpcomingSessions()
-  return data
+  const generation = await generateUpcomingSessions()
+  return { ...data, generation }
 }
 
 export async function setClassScheduleStatus(id: string, status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED') {
@@ -144,34 +144,35 @@ export async function setClassScheduleStatus(id: string, status: 'ACTIVE' | 'INA
   if (error) throw error
   const generation = await supabase.rpc('generate_upcoming_sessions', { p_days: 30 })
   if (generation.error) throw generation.error
-  return data
+  return { ...data, generation: generation.data }
 }
 
 export async function addTeacherToClassSchedule(schedule_id: string, staff_id: string) {
   const { data, error } = await supabase.from('class_schedule_staff').insert({ schedule_id, staff_id }).select('*').single()
   if (error) throw error
-  await generateUpcomingSessions()
-  return data
+  const generation = await generateUpcomingSessions()
+  return { ...data, generation }
 }
 
 export async function removeTeacherFromClassSchedule(schedule_id: string, staff_id: string) {
   const { error } = await supabase.from('class_schedule_staff').delete().eq('schedule_id', schedule_id).eq('staff_id', staff_id)
   if (error) throw error
-  await generateUpcomingSessions()
+  return generateUpcomingSessions()
 }
 
-export async function generateUpcomingSessions() {
+export async function generateUpcomingSessions(): Promise<{ room_conflicts?: number; missing_room_conflicts?: number; [key: string]: unknown }> {
   const { data, error } = await supabase.rpc('generate_upcoming_sessions', { p_days: 30 })
   if (error) throw error
-  return data
+  return data as { room_conflicts?: number; missing_room_conflicts?: number; [key: string]: unknown }
 }
 
-export async function updateSessionOccurrence(input: { session_id: string; start?: string; end?: string; cancel?: boolean }) {
+export async function updateSessionOccurrence(input: { session_id: string; start?: string; end?: string; cancel?: boolean; room?: string | null }) {
   const { data, error } = await supabase.rpc('admin_update_session_occurrence', {
     p_session_id: input.session_id,
     p_scheduled_start_at: input.start || null,
     p_scheduled_end_at: input.end || null,
     p_cancel: input.cancel || false,
+    p_room: input.room || null,
   })
   if (error) throw error
   return data
@@ -182,12 +183,14 @@ export async function createManualSession(input: {
   start: string
   end: string
   staff_ids: string[]
+  room?: string | null
 }) {
   const { data, error } = await supabase.rpc('admin_create_session', {
     p_class_id: input.class_id,
     p_scheduled_start_at: input.start,
     p_scheduled_end_at: input.end,
     p_staff_ids: input.staff_ids,
+    p_room: input.room || null,
   })
   if (error) throw error
   return data

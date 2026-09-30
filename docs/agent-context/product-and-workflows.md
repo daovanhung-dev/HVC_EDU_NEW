@@ -20,10 +20,11 @@ ASSISTANT là vai trò lịch sử; migration 0039 đổi hồ sơ và phân cô
 
 ## Lịch lớp và sinh buổi
 
-- class_schedules lưu thứ trong tuần, giờ bắt đầu/kết thúc, phòng và trạng thái của từng lịch lặp. class_schedule_staff gắn giáo viên với từng lịch.
+- class_schedules lưu thứ trong tuần, giờ bắt đầu/kết thúc, phòng và trạng thái của từng lịch lặp. Mỗi session giữ snapshot phòng để buổi riêng và buổi lặp cùng được kiểm tra chỗ. class_schedule_staff gắn giáo viên với từng lịch.
 - Admin quản lý lịch ở trang **Buổi học**. Chi tiết lớp tập trung vào roster và có liên kết sang trang Buổi học đã lọc theo lớp.
 - Trang Buổi học có chế độ tháng, tuần, danh sách và bộ lọc lớp. Admin có thể tạo buổi cụ thể, đổi giờ/giáo viên, hoặc hủy buổi bằng trạng thái; cột thời gian hiển thị giờ bắt đầu–kết thúc.
 - Admin có thể chọn các buổi SCHEDULED trong tuần đang xem làm mẫu rồi áp dụng cho tháng đang chọn. Hệ thống giữ thứ, giờ, thời lượng, lớp và giáo viên; bỏ qua ngày đã qua/ngày mẫu và từ chối toàn bộ đợt nếu có xung đột. Các bản sao là buổi theo ngày cụ thể, không lặp sang tháng tiếp theo.
+- Các lớp khác nhau được học trùng giờ khi mỗi buổi có phòng khác nhau; một giáo viên có thể được phân công vào cả hai buổi. Cùng lớp hoặc roster có học sinh chung vẫn xung đột. Nếu khoảng giờ giao nhau mà một buổi chưa có phòng, yêu cầu bị chặn và báo cần nhập phòng; phòng trống vẫn hợp lệ khi không trùng giờ. So sánh tên phòng sau khi trim và không phân biệt hoa thường.
 - class_schedule_staff là phân công cố định theo khung thứ/giờ. Buổi kế thừa giáo viên của khung phù hợp; Admin có thể ghi đè phân công riêng cho một buổi mà không đổi các buổi cùng lịch.
 - Mỗi lớp được phân công tối đa 5 giáo viên duy nhất, gộp các lịch chưa lưu trữ và buổi SCHEDULED/IN_PROGRESS. Một giáo viên được dùng ở nhiều khung/buổi vẫn chỉ chiếm một vị trí. Lịch ARCHIVED và buổi COMPLETED/CANCELLED không tính; database kiểm tra để mọi đường ghi cùng tuân thủ.
 - Lịch chuyển đổi từ ClassMonth được tạo ở trạng thái INACTIVE. Admin cần kiểm tra roster và giáo viên trước khi bật lịch.

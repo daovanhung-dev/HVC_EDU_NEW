@@ -78,6 +78,7 @@ export interface SessionRow {
   scheduled_end_at: string
   status: SessionStatus
   session_note: string | null
+  room?: string | null
   schedule_override?: boolean
   manual_schedule?: boolean
   staff_assignment_override?: boolean

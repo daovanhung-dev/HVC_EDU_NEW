@@ -57,6 +57,7 @@ const errorMessage = ref('')
 const successMessage = ref('')
 const startInput = ref('')
 const endInput = ref('')
+const sessionRoomInput = ref('')
 const viewMode = ref<ViewMode>('month')
 const calendarAnchorDate = ref(getBusinessDateKey(new Date()))
 const todayDateKey = ref(getBusinessDateKey(new Date()))
@@ -64,7 +65,7 @@ const scheduleEditorOpen = ref(false)
 const sessionFormOpen = ref(false)
 const editingScheduleId = ref('')
 const teacherSelections = ref<Record<string, string>>({})
-const sessionForm = ref({ class_id: '', date: getBusinessDateKey(new Date()), start_time: '17:30', end_time: '19:30', staff_ids: [] as string[] })
+const sessionForm = ref({ class_id: '', date: getBusinessDateKey(new Date()), start_time: '17:30', end_time: '19:30', room: '', staff_ids: [] as string[] })
 const scheduleForm = ref({ day_of_week: 1, start_time: '17:30', end_time: '19:30', room: '', staff_id: '' })
 const editSchedule = ref({ day_of_week: 1, start_time: '', end_time: '', room: '' })
 const teachers = computed(() => (selected.value?.session_staff || []).map((item) => item.staff?.full_name).filter(Boolean).join(', ') || 'Chưa phân công')
@@ -255,6 +256,23 @@ function teacherLimitMessage(error: unknown, fallback: string) {
   return userErrorMessage(error, fallback)
 }
 
+function roomGenerationWarning(value: unknown) {
+  const result = value && typeof value === 'object' ? value as { room_conflicts?: number; missing_room_conflicts?: number } : {}
+  const occupied = Number(result.room_conflicts || 0)
+  const missing = Number(result.missing_room_conflicts || 0)
+  const messages: string[] = []
+  if (missing) messages.push(`${missing} buổi chưa được xếp vì lịch trùng giờ nhưng chưa nhập phòng.`)
+  if (occupied) messages.push(`${occupied} buổi chưa được xếp vì phòng đã có buổi khác trong khung giờ đó.`)
+  return messages.join(' ')
+}
+
+function setScheduleResult(result: unknown, success: string) {
+  const value = result && typeof result === 'object' ? result as { generation?: unknown } : {}
+  const warning = roomGenerationWarning(value.generation ?? result)
+  successMessage.value = success
+  errorMessage.value = warning
+}
+
 function changeClassFilter() {
   selected.value = null
   students.value = []
@@ -267,6 +285,7 @@ async function selectSession(session: SessionRow) {
   selectedTeacherIds.value = (session.session_staff || []).map((item) => item.staff_id)
   startInput.value = toLocalInput(session.scheduled_start_at)
   endInput.value = toLocalInput(session.scheduled_end_at)
+  sessionRoomInput.value = session.room ?? session.class_schedules?.room ?? ''
   errorMessage.value = ''
   const [studentsResult, schedulesResult] = await Promise.allSettled([
     getSessionStudents(session.id),
@@ -287,6 +306,7 @@ function openSessionForm(dateKey?: string) {
     date: selectedDate,
     start_time: '17:30',
     end_time: '19:30',
+    room: '',
     staff_ids: [],
   }
   sessionFormOpen.value = true
@@ -303,7 +323,10 @@ async function loadCreateDefaults() {
       && row.day_of_week === day
       && String(row.start_time).slice(0, 5) === sessionForm.value.start_time
       && String(row.end_time).slice(0, 5) === sessionForm.value.end_time)
-    if (preferred) sessionForm.value.staff_ids = (preferred.class_schedule_staff || []).map((item) => item.staff_id)
+    if (preferred) {
+      sessionForm.value.staff_ids = (preferred.class_schedule_staff || []).map((item) => item.staff_id)
+      sessionForm.value.room = preferred.room || ''
+    }
   } catch {
     scheduleLoadErrors.value = { ...scheduleLoadErrors.value, [sessionForm.value.class_id]: true }
     // A teacher can still be selected manually if no active fixed schedule is available.
@@ -327,6 +350,7 @@ async function createSession() {
       start: localDateTime(sessionForm.value.date, sessionForm.value.start_time),
       end: localDateTime(sessionForm.value.date, sessionForm.value.end_time),
       staff_ids: sessionForm.value.staff_ids,
+      room: sessionForm.value.room.trim() || null,
     })
     successMessage.value = 'Đã tạo buổi học.'
     sessionFormOpen.value = false
@@ -399,9 +423,9 @@ async function toggleSchedule(row: ClassScheduleRow) {
     return
   }
   try {
-    await setClassScheduleStatus(row.id, row.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE')
-    successMessage.value = row.status === 'ACTIVE' ? 'Đã tạm dừng lịch lặp.' : 'Đã bật lịch lặp; buổi học sẽ được sinh trong 30 ngày tới.'
+    const result = await setClassScheduleStatus(row.id, row.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE')
     await load()
+    setScheduleResult(result, row.status === 'ACTIVE' ? 'Đã tạm dừng lịch lặp.' : 'Đã bật lịch lặp; buổi học sẽ được sinh trong 30 ngày tới.')
   } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể cập nhật lịch.' }
 }
 
@@ -417,10 +441,10 @@ function beginEditSchedule(row: ClassScheduleRow) {
 
 async function saveClassSchedule(row: ClassScheduleRow) {
   try {
-    await updateClassSchedule(row.id, { ...editSchedule.value, room: editSchedule.value.room.trim() || null })
-    successMessage.value = 'Đã cập nhật lịch cố định.'
+    const result = await updateClassSchedule(row.id, { ...editSchedule.value, room: editSchedule.value.room.trim() || null })
     editingScheduleId.value = ''
     await load()
+    setScheduleResult(result, 'Đã cập nhật lịch cố định.')
   } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể cập nhật lịch.' }
 }
 
@@ -432,20 +456,20 @@ async function addScheduleTeacher(row: ClassScheduleRow) {
     return
   }
   try {
-    await addTeacherToClassSchedule(row.id, staffId)
+    const result = await addTeacherToClassSchedule(row.id, staffId)
     teacherSelections.value[row.id] = ''
-    successMessage.value = 'Đã phân công giáo viên cố định.'
     await loadSchedules()
     await load()
+    setScheduleResult(result, 'Đã phân công giáo viên cố định.')
   } catch (error) { errorMessage.value = teacherLimitMessage(error, 'Không thể phân công giáo viên.') }
 }
 
 async function removeScheduleTeacher(row: ClassScheduleRow, staffId: string) {
   try {
-    await removeTeacherFromClassSchedule(row.id, staffId)
-    successMessage.value = 'Đã gỡ giáo viên khỏi khung lịch.'
+    const generation = await removeTeacherFromClassSchedule(row.id, staffId)
     await loadSchedules()
     await load()
+    setScheduleResult(generation, 'Đã gỡ giáo viên khỏi khung lịch.')
   } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể gỡ giáo viên.' }
 }
 
@@ -462,19 +486,19 @@ async function saveSchedule() {
   if (!selected.value || !startInput.value || !endInput.value) return
   const sessionId = selected.value.id
   try {
-    await updateSessionOccurrence({ session_id: sessionId, start: fromLocalInput(startInput.value), end: fromLocalInput(endInput.value) })
+    await updateSessionOccurrence({ session_id: sessionId, start: fromLocalInput(startInput.value), end: fromLocalInput(endInput.value), room: sessionRoomInput.value.trim() || null })
     successMessage.value = 'Đã đổi lịch buổi học.'
     await load()
     const refreshed = sessions.value.find((item) => item.id === sessionId)
     if (refreshed) await selectSession(refreshed)
-  } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể đổi lịch buổi học.' }
+  } catch (error) { errorMessage.value = userErrorMessage(error, 'Không thể đổi lịch buổi học.') }
 }
 
 async function cancel() {
   if (!selected.value || !window.confirm(`Hủy buổi học ${formatDateTime(selected.value.scheduled_start_at)}?`)) return
   const sessionId = selected.value.id
   try {
-    await updateSessionOccurrence({ session_id: sessionId, cancel: true })
+    await updateSessionOccurrence({ session_id: sessionId, cancel: true, room: sessionRoomInput.value.trim() || null })
     successMessage.value = 'Đã hủy buổi học.'
     await load()
     const refreshed = sessions.value.find((item) => item.id === sessionId)
@@ -540,6 +564,10 @@ watch(() => route.query.class_id, (value) => {
       <div class="col-md-2">
         <label class="form-label">Giờ kết thúc</label>
         <input v-model="sessionForm.end_time" type="time" class="form-control" required @change="loadCreateDefaults" />
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Phòng</label>
+        <input v-model="sessionForm.room" class="form-control" placeholder="Ví dụ: A1" />
       </div>
       <div class="col-md-6">
         <label class="form-label">Giáo viên được phân công ({{ teacherCountLabel(sessionForm.class_id, sessionForm.staff_ids) }})</label>
@@ -639,16 +667,17 @@ watch(() => route.query.class_id, (value) => {
             <div v-else-if="!errorMessage && !visibleSessions.length" class="text-center text-secondary py-5">Chưa có buổi học.</div>
             <div class="table-responsive">
               <table class="table align-middle mb-0">
-                <thead><tr><th>Ngày</th><th>Lớp</th><th>Thời gian</th><th>Giáo viên</th><th>Trạng thái</th></tr></thead>
+                <thead><tr><th>Ngày</th><th>Lớp</th><th>Thời gian</th><th>Phòng</th><th>Giáo viên</th><th>Trạng thái</th></tr></thead>
                 <tbody>
                   <tr v-for="session in visibleSessions" :key="session.id" :class="selected?.id === session.id ? 'table-primary' : ''" role="button" tabindex="0" @click="selectSession(session)" @keydown.enter="selectSession(session)">
                     <td>{{ formatBusinessDate(getBusinessDateKey(session.scheduled_start_at)) }}</td>
                     <td class="fw-semibold">{{ className(session) }}</td>
                     <td>{{ formatBusinessTime(session.scheduled_start_at) }}–{{ formatBusinessTime(session.scheduled_end_at) }}</td>
+                    <td>{{ session.room || session.class_schedules?.room || 'Chưa xếp phòng' }}</td>
                     <td>{{ (session.session_staff || []).map((item) => item.staff?.full_name).filter(Boolean).join(', ') || 'Chưa phân công' }}</td>
                     <td><span class="badge" :class="sessionStatusClass(session.status)">{{ session.status }}</span></td>
                   </tr>
-                  <tr v-if="!errorMessage && !visibleSessions.length"><td colspan="5" class="text-center text-secondary py-4">Chưa có buổi học.</td></tr>
+                  <tr v-if="!errorMessage && !visibleSessions.length"><td colspan="6" class="text-center text-secondary py-4">Chưa có buổi học.</td></tr>
                 </tbody>
               </table>
             </div>
@@ -688,6 +717,7 @@ watch(() => route.query.class_id, (value) => {
                     >
                       <span class="calendar-event-time">{{ formatBusinessTime(session.scheduled_start_at) }}–{{ formatBusinessTime(session.scheduled_end_at) }}</span>
                       <span class="calendar-event-name">{{ className(session) }}</span>
+                      <span class="calendar-event-room">{{ session.room || session.class_schedules?.room || 'Chưa xếp phòng' }}</span>
                       <span class="badge align-self-start" :class="sessionStatusClass(session.status)">{{ session.status }}</span>
                     </button>
                   </div>
@@ -707,14 +737,15 @@ watch(() => route.query.class_id, (value) => {
       <div v-if="selected" class="card border-0 shadow-sm">
         <div class="card-body">
           <h2 class="h5">{{ className(selected) }}</h2>
-          <div class="text-secondary mb-3">Giáo viên: {{ teachers }} · {{ selected.status }}</div>
+          <div class="text-secondary mb-3">Giáo viên: {{ teachers }} · {{ selected.status }} · {{ sessionRoomInput || 'Chưa xếp phòng' }}</div>
           <div v-if="selected.status === 'SCHEDULED'" class="row g-2 align-items-end mb-3">
             <div class="col-md-8"><label class="form-label">Giáo viên được phân công cho buổi này ({{ teacherCountLabel(selected.class_id, selectedTeacherIds, selected.id) }})</label><select v-model="selectedTeacherIds" class="form-select" multiple size="3"><option v-for="teacher in activeTeachers" :key="teacher.id" :value="teacher.id" :disabled="!canSelectSessionTeacher(teacher.id)">{{ teacher.full_name }}</option></select></div>
             <div class="col-md-4"><button class="btn btn-outline-primary" :disabled="selectedSessionTeacherCount > MAX_CLASS_TEACHERS" @click="saveTeachers">Lưu phân công buổi này</button></div>
           </div>
           <div class="row g-2 mb-3">
-            <div class="col-md-6"><label class="form-label">Bắt đầu</label><input v-model="startInput" class="form-control" type="datetime-local" :disabled="selected.status !== 'SCHEDULED'" /></div>
-            <div class="col-md-6"><label class="form-label">Kết thúc</label><input v-model="endInput" class="form-control" type="datetime-local" :disabled="selected.status !== 'SCHEDULED'" /></div>
+            <div class="col-md-4"><label class="form-label">Bắt đầu</label><input v-model="startInput" class="form-control" type="datetime-local" :disabled="selected.status !== 'SCHEDULED'" /></div>
+            <div class="col-md-4"><label class="form-label">Kết thúc</label><input v-model="endInput" class="form-control" type="datetime-local" :disabled="selected.status !== 'SCHEDULED'" /></div>
+            <div class="col-md-4"><label class="form-label">Phòng</label><input v-model="sessionRoomInput" class="form-control" :disabled="selected.status !== 'SCHEDULED'" /></div>
           </div>
           <div v-if="selected.status === 'SCHEDULED'" class="d-flex gap-2 mb-4">
             <button class="btn btn-primary btn-sm" @click="saveSchedule">Lưu lịch mới</button>
@@ -863,5 +894,10 @@ watch(() => route.query.class_id, (value) => {
 .calendar-event-name {
   font-weight: 600;
   overflow-wrap: anywhere;
+}
+
+.calendar-event-room {
+  color: var(--bs-secondary-color);
+  font-size: 0.72rem;
 }
 </style>

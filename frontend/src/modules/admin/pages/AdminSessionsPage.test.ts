@@ -179,7 +179,7 @@ describe('AdminSessionsPage calendar', () => {
 
     vi.stubGlobal('confirm', vi.fn(() => true))
     await clickButtonWithText(wrapper, 'Hủy buổi học')
-    expect(mockState.updateSessionOccurrence).toHaveBeenLastCalledWith({ session_id: session.id, cancel: true })
+    expect(mockState.updateSessionOccurrence).toHaveBeenLastCalledWith({ session_id: session.id, cancel: true, room: null })
   })
 
   it('applies future sessions from the visible week to the month in view', async () => {
@@ -257,7 +257,7 @@ describe('AdminSessionsPage calendar', () => {
     const weekday = new Date(`${date}T12:00:00Z`).getUTCDay() || 7
     mockState.getClassSchedules.mockResolvedValue([{
       id: 'qa-fixed-slot', class_id: 'qa-class-1', day_of_week: weekday,
-      start_time: '17:30:00', end_time: '19:30:00', room: null, status: 'ACTIVE', reviewed_at: null,
+      start_time: '17:30:00', end_time: '19:30:00', room: 'QA-Room-A', status: 'ACTIVE', reviewed_at: null,
       class_schedule_staff: [{ staff_id: 'qa-teacher-1', staff: { id: 'qa-teacher-1', full_name: 'Giáo viên QA 1' } }],
     }])
     const wrapper = mountPage()
@@ -267,6 +267,7 @@ describe('AdminSessionsPage calendar', () => {
     await flushPromises()
 
     expect((wrapper.get('select[multiple]').element as HTMLSelectElement).selectedOptions[0]?.value).toBe('qa-teacher-1')
+    expect((wrapper.get('.session-create-form input[placeholder="Ví dụ: A1"]').element as HTMLInputElement).value).toBe('QA-Room-A')
     await wrapper.get('.session-create-form').trigger('submit')
     await flushPromises()
 
@@ -275,7 +276,28 @@ describe('AdminSessionsPage calendar', () => {
       start: new Date(`${date}T17:30:00+07:00`).toISOString(),
       end: new Date(`${date}T19:30:00+07:00`).toISOString(),
       staff_ids: ['qa-teacher-1'],
+      room: 'QA-Room-A',
     })
+  })
+
+  it('shows and updates the room on a selected session', async () => {
+    const session = { ...makeSession('qa-room-session'), room: 'QA-Room-A' }
+    mockState.getMySessions.mockResolvedValue([session])
+    const wrapper = mountPage()
+    await flushPromises()
+    expect(wrapper.find('.calendar-event-room').text()).toBe('QA-Room-A')
+    await wrapper.get('.calendar-event').trigger('click')
+    await flushPromises()
+
+    const roomInput = wrapper.get('.card-body input.form-control:not([type])')
+    expect((roomInput.element as HTMLInputElement).value).toBe('QA-Room-A')
+    await roomInput.setValue('QA-Room-B')
+    await clickButtonWithText(wrapper, 'Lưu lịch mới')
+
+    expect(mockState.updateSessionOccurrence).toHaveBeenCalledWith(expect.objectContaining({
+      session_id: session.id,
+      room: 'QA-Room-B',
+    }))
   })
 
   it('shows the class total and prevents choosing a sixth distinct teacher for a new session', async () => {

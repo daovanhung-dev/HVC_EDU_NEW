@@ -21,6 +21,11 @@ describe('error normalization', () => {
     expect(result.code).toBe('CLASS_TEACHER_LIMIT')
   })
 
+  it('explains missing and occupied rooms for overlapping sessions', () => {
+    expect(normalizeAppError(new Error('ROOM_REQUIRED_FOR_OVERLAP')).message).toContain('nhập phòng cho cả hai lớp')
+    expect(normalizeAppError(new Error('ROOM_ALREADY_BOOKED')).message).toContain('Phòng này đã có buổi học khác')
+  })
+
   it('uses a contextual fallback for unknown errors', () => {
     expect(normalizeAppError(new Error('secret database detail'), 'Không thể tải dữ liệu.').message).toBe('Không thể tải dữ liệu.')
   })

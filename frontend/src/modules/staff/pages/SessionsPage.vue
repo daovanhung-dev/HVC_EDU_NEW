@@ -101,7 +101,7 @@ onMounted(load)
       <div v-if="!loading && !sessions.length" class="text-secondary small py-4 text-center">Chưa có buổi học được phân công.</div>
       <button v-for="session in sessions" :key="session.id" class="btn w-100 text-start border-bottom rounded-0 py-3" :class="selected?.id === session.id ? 'bg-primary-subtle' : ''" @click="openSession(session)">
         <div class="d-flex justify-content-between"><span class="fw-semibold">{{ session.classes?.name || 'Lớp học' }}</span><span class="badge" :class="session.status === 'COMPLETED' ? 'text-bg-success' : session.status === 'IN_PROGRESS' ? 'text-bg-primary' : session.status === 'CANCELLED' ? 'text-bg-danger' : 'text-bg-secondary'">{{ session.status }}</span></div>
-        <small class="text-secondary">{{ formatDateTime(session.scheduled_start_at) }} · {{ session.class_schedules?.room || 'Chưa xếp phòng' }}</small>
+        <small class="text-secondary">{{ formatDateTime(session.scheduled_start_at) }} · {{ session.room || session.class_schedules?.room || 'Chưa xếp phòng' }}</small>
       </button>
     </div></div></div>
     <div class="col-12 col-xl-7"><div v-if="selected" class="card border-0 shadow-sm"><div class="card-body">
