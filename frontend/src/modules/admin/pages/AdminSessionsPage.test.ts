@@ -88,6 +88,10 @@ describe('AdminSessionsPage calendar', () => {
     mockState.getStaff.mockReset().mockResolvedValue([
       { id: 'qa-teacher-1', full_name: 'Giáo viên QA 1', status: 'ACTIVE' },
       { id: 'qa-teacher-2', full_name: 'Giáo viên QA 2', status: 'ACTIVE' },
+      { id: 'qa-teacher-3', full_name: 'Giáo viên QA 3', status: 'ACTIVE' },
+      { id: 'qa-teacher-4', full_name: 'Giáo viên QA 4', status: 'ACTIVE' },
+      { id: 'qa-teacher-5', full_name: 'Giáo viên QA 5', status: 'ACTIVE' },
+      { id: 'qa-teacher-6', full_name: 'Giáo viên QA 6', status: 'ACTIVE' },
     ])
     mockState.getClassSchedules.mockReset().mockResolvedValue([])
     mockState.getClassActiveRosterSize.mockReset().mockResolvedValue(0)
@@ -272,5 +276,59 @@ describe('AdminSessionsPage calendar', () => {
       end: new Date(`${date}T19:30:00+07:00`).toISOString(),
       staff_ids: ['qa-teacher-1'],
     })
+  })
+
+  it('shows the class total and prevents choosing a sixth distinct teacher for a new session', async () => {
+    const date = getBusinessDateKey(new Date())
+    const weekday = new Date(`${date}T12:00:00Z`).getUTCDay() || 7
+    mockState.getMySessions.mockResolvedValue([
+      makeSession('qa-existing-teacher-5', 'Lớp Toán QA', '08:00', '09:00', date, ['qa-teacher-5']),
+    ])
+    mockState.getClassSchedules.mockResolvedValue([{
+      id: 'qa-fixed-slot', class_id: 'qa-class-1', day_of_week: weekday,
+      start_time: '17:30:00', end_time: '19:30:00', room: null, status: 'ACTIVE', reviewed_at: null,
+      class_schedule_staff: ['qa-teacher-1', 'qa-teacher-2', 'qa-teacher-3', 'qa-teacher-4']
+        .map((staff_id) => ({ staff_id, staff: { id: staff_id, full_name: staff_id } })),
+    }])
+    mockState.route.query.class_id = 'qa-class-1'
+
+    const wrapper = mountPage()
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Chỉnh sửa lịch')
+    expect(wrapper.text()).toContain('Giáo viên của lớp: 5/5')
+    expect(wrapper.get('.schedule-editor-form option[value="qa-teacher-6"]').attributes('disabled')).toBeDefined()
+
+    await clickButtonWithText(wrapper, 'Thêm buổi')
+    await flushPromises()
+    expect(wrapper.findAll('.session-create-form label').map((label) => label.text()).find((text) => text.includes('Giáo viên'))).toContain('5/5')
+    expect(wrapper.get('.session-create-form option[value="qa-teacher-6"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('.session-create-form option[value="qa-teacher-1"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('allows replacing a selected-session teacher while keeping the class at five', async () => {
+    const date = addCalendarDays(getBusinessDateKey(new Date()), 1)
+    mockState.getMySessions.mockResolvedValue([
+      makeSession('qa-edited-session', 'Lớp Toán QA', '17:30', '19:30', date, ['qa-teacher-5']),
+    ])
+    mockState.getClassSchedules.mockResolvedValue([{
+      id: 'qa-fixed-slot', class_id: 'qa-class-1', day_of_week: 1,
+      start_time: '17:30:00', end_time: '19:30:00', room: null, status: 'ACTIVE', reviewed_at: null,
+      class_schedule_staff: ['qa-teacher-1', 'qa-teacher-2', 'qa-teacher-3', 'qa-teacher-4']
+        .map((staff_id) => ({ staff_id, staff: { id: staff_id, full_name: staff_id } })),
+    }])
+
+    const wrapper = mountPage()
+    await flushPromises()
+    await wrapper.get('.calendar-event').trigger('click')
+    await flushPromises()
+
+    const teacherSelect = wrapper.get('.col-md-8 select[multiple]')
+    expect(teacherSelect.element).toBeTruthy()
+    expect(wrapper.text()).toContain('5/5')
+    expect(wrapper.get('option[value="qa-teacher-6"]').attributes('disabled')).toBeDefined()
+    await teacherSelect.setValue([])
+    expect(wrapper.get('option[value="qa-teacher-6"]').attributes('disabled')).toBeUndefined()
+    await teacherSelect.setValue(['qa-teacher-6'])
+    expect(wrapper.text()).toContain('5/5')
   })
 })

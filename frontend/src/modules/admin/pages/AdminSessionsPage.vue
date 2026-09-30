@@ -22,6 +22,8 @@ import {
 } from '@/services/data-queries'
 import type { ClassDetailRow, ClassScheduleRow, SessionRow } from '@/shared/types/domain'
 import { formatDateTime } from '@/shared/utils/format'
+import { canSelectClassTeacher, getClassTeacherIds, MAX_CLASS_TEACHERS, selectedTeacherCount } from '@/shared/utils/class-teacher-limit'
+import { userErrorMessage } from '@/shared/utils/errors'
 import {
   addCalendarDays,
   formatBusinessDate,
@@ -42,12 +44,15 @@ const sessions = ref<SessionRow[]>([])
 const classes = ref<ClassDetailRow[]>([])
 const teachersList = ref<any[]>([])
 const schedules = ref<ClassScheduleRow[]>([])
+const schedulesByClass = ref<Record<string, ClassScheduleRow[]>>({})
 const students = ref<any[]>([])
 const selected = ref<SessionRow | null>(null)
 const selectedTeacherIds = ref<string[]>([])
 const selectedClassId = ref(typeof route.query.class_id === 'string' ? route.query.class_id : '')
 const loading = ref(false)
 const scheduleLoading = ref(false)
+const sessionsLoaded = ref(false)
+const scheduleLoadErrors = ref<Record<string, boolean>>({})
 const errorMessage = ref('')
 const successMessage = ref('')
 const startInput = ref('')
@@ -65,6 +70,13 @@ const editSchedule = ref({ day_of_week: 1, start_time: '', end_time: '', room: '
 const teachers = computed(() => (selected.value?.session_staff || []).map((item) => item.staff?.full_name).filter(Boolean).join(', ') || 'Chưa phân công')
 const activeTeachers = computed(() => teachersList.value.filter((row) => row.status === 'ACTIVE'))
 const activeRosterReady = ref(false)
+const selectedClassTeacherIds = computed(() => getClassTeacherIds(selectedClassId.value, Object.values(schedulesByClass.value).flat(), sessions.value))
+const sessionFormTeacherBaseIds = computed(() => getClassTeacherIds(sessionForm.value.class_id, Object.values(schedulesByClass.value).flat(), sessions.value))
+const sessionFormTeacherCount = computed(() => selectedTeacherCount(sessionFormTeacherBaseIds.value, sessionForm.value.staff_ids))
+const selectedSessionTeacherBaseIds = computed(() => selected.value
+  ? getClassTeacherIds(selected.value.class_id, Object.values(schedulesByClass.value).flat(), sessions.value, selected.value.id)
+  : new Set<string>())
+const selectedSessionTeacherCount = computed(() => selectedTeacherCount(selectedSessionTeacherBaseIds.value, selectedTeacherIds.value))
 
 function refreshTodayDateKey() {
   todayDateKey.value = getBusinessDateKey(new Date())
@@ -150,11 +162,13 @@ async function load() {
 
     if (sessionResult.status === 'fulfilled') {
       sessions.value = sessionResult.value
+      sessionsLoaded.value = true
       if (selected.value) {
         selected.value = sessions.value.find((session) => session.id === selected.value?.id) || null
         if (!selected.value) { students.value = []; selectedTeacherIds.value = [] }
       }
     } else {
+      sessionsLoaded.value = false
       loadErrors.push(sessionResult.reason instanceof Error ? sessionResult.reason.message : 'Không thể tải buổi học.')
     }
 
@@ -191,12 +205,54 @@ async function loadSchedules() {
       getClassActiveRosterSize(selectedClassId.value),
     ])
     schedules.value = scheduleRows
+    schedulesByClass.value = { ...schedulesByClass.value, [selectedClassId.value]: scheduleRows }
+    scheduleLoadErrors.value = { ...scheduleLoadErrors.value, [selectedClassId.value]: false }
     activeRosterReady.value = memberships > 0
   } catch (error) {
+    scheduleLoadErrors.value = { ...scheduleLoadErrors.value, [selectedClassId.value]: true }
     errorMessage.value = error instanceof Error ? error.message : 'Không thể tải lịch lớp.'
   } finally {
     scheduleLoading.value = false
   }
+}
+
+async function loadClassSchedules(classId: string) {
+  const rows = await getClassSchedules(classId)
+  schedulesByClass.value = { ...schedulesByClass.value, [classId]: rows }
+  scheduleLoadErrors.value = { ...scheduleLoadErrors.value, [classId]: false }
+  if (selectedClassId.value === classId) schedules.value = rows
+  return rows
+}
+
+function teacherCountKnown(classId: string) {
+  return Boolean(classId) && sessionsLoaded.value
+    && Object.prototype.hasOwnProperty.call(schedulesByClass.value, classId)
+    && !scheduleLoadErrors.value[classId]
+}
+
+function teacherCountLabel(classId: string, selectedIds: string[] = [], excludeSessionId?: string) {
+  if (!classId || !teacherCountKnown(classId)) return `—/${MAX_CLASS_TEACHERS}`
+  const baseIds = getClassTeacherIds(classId, Object.values(schedulesByClass.value).flat(), sessions.value, excludeSessionId)
+  return `${selectedTeacherCount(baseIds, selectedIds)}/${MAX_CLASS_TEACHERS}`
+}
+
+function canSelectCreateTeacher(teacherId: string) {
+  return !teacherCountKnown(sessionForm.value.class_id)
+    || canSelectClassTeacher(sessionFormTeacherBaseIds.value, sessionForm.value.staff_ids, teacherId)
+}
+
+function canSelectSessionTeacher(teacherId: string) {
+  if (!selected.value || !teacherCountKnown(selected.value.class_id)) return true
+  return canSelectClassTeacher(selectedSessionTeacherBaseIds.value, selectedTeacherIds.value, teacherId)
+}
+
+function canSelectScheduleTeacher(teacherId: string) {
+  return !teacherCountKnown(selectedClassId.value)
+    || canSelectClassTeacher(selectedClassTeacherIds.value, [], teacherId)
+}
+
+function teacherLimitMessage(error: unknown, fallback: string) {
+  return userErrorMessage(error, fallback)
 }
 
 function changeClassFilter() {
@@ -212,8 +268,16 @@ async function selectSession(session: SessionRow) {
   startInput.value = toLocalInput(session.scheduled_start_at)
   endInput.value = toLocalInput(session.scheduled_end_at)
   errorMessage.value = ''
-  try { students.value = await getSessionStudents(session.id) as any[] }
-  catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể tải chi tiết buổi học.' }
+  const [studentsResult, schedulesResult] = await Promise.allSettled([
+    getSessionStudents(session.id),
+    loadClassSchedules(session.class_id),
+  ])
+  if (studentsResult.status === 'fulfilled') students.value = studentsResult.value as any[]
+  else errorMessage.value = studentsResult.reason instanceof Error ? studentsResult.reason.message : 'Không thể tải chi tiết buổi học.'
+  if (schedulesResult.status === 'rejected') {
+    scheduleLoadErrors.value = { ...scheduleLoadErrors.value, [session.class_id]: true }
+    if (!errorMessage.value) errorMessage.value = schedulesResult.reason instanceof Error ? schedulesResult.reason.message : 'Không thể tải phân công giáo viên của lớp.'
+  }
 }
 
 function openSessionForm(dateKey?: string) {
@@ -233,7 +297,7 @@ async function loadCreateDefaults() {
   sessionForm.value.staff_ids = []
   if (!sessionForm.value.class_id) return
   try {
-    const rows = await getClassSchedules(sessionForm.value.class_id)
+    const rows = await loadClassSchedules(sessionForm.value.class_id)
     const day = weekdayForDate(sessionForm.value.date)
     const preferred = rows.find((row) => row.status === 'ACTIVE'
       && row.day_of_week === day
@@ -241,6 +305,7 @@ async function loadCreateDefaults() {
       && String(row.end_time).slice(0, 5) === sessionForm.value.end_time)
     if (preferred) sessionForm.value.staff_ids = (preferred.class_schedule_staff || []).map((item) => item.staff_id)
   } catch {
+    scheduleLoadErrors.value = { ...scheduleLoadErrors.value, [sessionForm.value.class_id]: true }
     // A teacher can still be selected manually if no active fixed schedule is available.
   }
 }
@@ -249,6 +314,10 @@ async function createSession() {
   if (!sessionForm.value.class_id || !sessionForm.value.date || !sessionForm.value.start_time
     || !sessionForm.value.end_time || !sessionForm.value.staff_ids.length) {
     errorMessage.value = 'Hãy chọn lớp, giờ bắt đầu/kết thúc và ít nhất một giáo viên.'
+    return
+  }
+  if (teacherCountKnown(sessionForm.value.class_id) && sessionFormTeacherCount.value > MAX_CLASS_TEACHERS) {
+    errorMessage.value = `Mỗi lớp được phân công tối đa ${MAX_CLASS_TEACHERS} giáo viên hiện hành.`
     return
   }
   errorMessage.value = ''; successMessage.value = ''
@@ -262,7 +331,7 @@ async function createSession() {
     successMessage.value = 'Đã tạo buổi học.'
     sessionFormOpen.value = false
     await load()
-  } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể tạo buổi học.' }
+  } catch (error) { errorMessage.value = teacherLimitMessage(error, 'Không thể tạo buổi học.') }
 }
 
 async function copyWeekToMonth() {
@@ -278,12 +347,16 @@ async function copyWeekToMonth() {
     const result = await applyWeekToMonth({ source_session_ids: sourceIds, month_start: monthStart }) as { created?: number }
     successMessage.value = `Đã tạo ${result.created || 0} buổi cụ thể cho tháng.`
     await load()
-  } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể áp dụng tuần mẫu.' }
+  } catch (error) { errorMessage.value = teacherLimitMessage(error, 'Không thể áp dụng tuần mẫu.') }
 }
 
 async function saveTeachers() {
   if (!selected.value || !selectedTeacherIds.value.length) {
     errorMessage.value = 'Mỗi buổi cần có ít nhất một giáo viên được phân công.'
+    return
+  }
+  if (selected.value && teacherCountKnown(selected.value.class_id) && selectedSessionTeacherCount.value > MAX_CLASS_TEACHERS) {
+    errorMessage.value = `Mỗi lớp được phân công tối đa ${MAX_CLASS_TEACHERS} giáo viên hiện hành.`
     return
   }
   errorMessage.value = ''; successMessage.value = ''
@@ -293,11 +366,16 @@ async function saveTeachers() {
     await load()
     const refreshed = sessions.value.find((row) => row.id === selected.value?.id)
     if (refreshed) await selectSession(refreshed)
-  } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể cập nhật giáo viên.' }
+  } catch (error) { errorMessage.value = teacherLimitMessage(error, 'Không thể cập nhật giáo viên.') }
 }
 
 async function createSchedule() {
   if (!selectedClassId.value) return
+  if (scheduleForm.value.staff_id && teacherCountKnown(selectedClassId.value)
+    && !canSelectClassTeacher(selectedClassTeacherIds.value, [], scheduleForm.value.staff_id)) {
+    errorMessage.value = `Mỗi lớp được phân công tối đa ${MAX_CLASS_TEACHERS} giáo viên hiện hành.`
+    return
+  }
   errorMessage.value = ''; successMessage.value = ''
   try {
     const created = await createClassSchedule({
@@ -311,7 +389,7 @@ async function createSchedule() {
     scheduleForm.value = { day_of_week: 1, start_time: '17:30', end_time: '19:30', room: '', staff_id: '' }
     successMessage.value = 'Đã lưu lịch cố định ở trạng thái chờ rà soát.'
     await loadSchedules()
-  } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể lưu lịch cố định.' }
+  } catch (error) { errorMessage.value = teacherLimitMessage(error, 'Không thể lưu lịch cố định.') }
 }
 
 async function toggleSchedule(row: ClassScheduleRow) {
@@ -349,13 +427,17 @@ async function saveClassSchedule(row: ClassScheduleRow) {
 async function addScheduleTeacher(row: ClassScheduleRow) {
   const staffId = teacherSelections.value[row.id]
   if (!staffId) return
+  if (teacherCountKnown(row.class_id) && !canSelectScheduleTeacher(staffId)) {
+    errorMessage.value = `Mỗi lớp được phân công tối đa ${MAX_CLASS_TEACHERS} giáo viên hiện hành.`
+    return
+  }
   try {
     await addTeacherToClassSchedule(row.id, staffId)
     teacherSelections.value[row.id] = ''
     successMessage.value = 'Đã phân công giáo viên cố định.'
     await loadSchedules()
     await load()
-  } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể phân công giáo viên.' }
+  } catch (error) { errorMessage.value = teacherLimitMessage(error, 'Không thể phân công giáo viên.') }
 }
 
 async function removeScheduleTeacher(row: ClassScheduleRow, staffId: string) {
@@ -460,14 +542,14 @@ watch(() => route.query.class_id, (value) => {
         <input v-model="sessionForm.end_time" type="time" class="form-control" required @change="loadCreateDefaults" />
       </div>
       <div class="col-md-6">
-        <label class="form-label">Giáo viên được phân công</label>
+        <label class="form-label">Giáo viên được phân công ({{ teacherCountLabel(sessionForm.class_id, sessionForm.staff_ids) }})</label>
         <select v-model="sessionForm.staff_ids" class="form-select" multiple required size="3" aria-describedby="teacher-assignment-help">
-          <option v-for="teacher in activeTeachers" :key="teacher.id" :value="teacher.id">{{ teacher.full_name }}</option>
+          <option v-for="teacher in activeTeachers" :key="teacher.id" :value="teacher.id" :disabled="!canSelectCreateTeacher(teacher.id)">{{ teacher.full_name }}</option>
         </select>
-        <div id="teacher-assignment-help" class="form-text">Giáo viên từ khung cố định phù hợp sẽ được chọn sẵn; có thể đổi riêng buổi này.</div>
+        <div id="teacher-assignment-help" class="form-text">Giáo viên từ khung cố định phù hợp sẽ được chọn sẵn; có thể đổi riêng buổi này. Mỗi lớp tối đa {{ MAX_CLASS_TEACHERS }} giáo viên đang được phân công.</div>
       </div>
       <div class="col-12 d-flex gap-2">
-        <button class="btn btn-primary" :disabled="loading">Tạo buổi</button>
+        <button class="btn btn-primary" :disabled="loading || (teacherCountKnown(sessionForm.class_id) && sessionFormTeacherCount > MAX_CLASS_TEACHERS)">Tạo buổi</button>
         <button type="button" class="btn btn-outline-secondary" @click="sessionFormOpen = false">Đóng</button>
       </div>
     </form>
@@ -480,6 +562,7 @@ watch(() => route.query.class_id, (value) => {
           <h2 class="h5 mb-1">Khung lịch cố định</h2>
           <div class="small text-secondary">Giáo viên trong khung thứ/giờ được kế thừa cho buổi sinh tự động. Lịch lưu trữ không xóa lịch sử đã diễn ra.</div>
         </div>
+        <span v-if="selectedClassId" class="badge text-bg-primary">Giáo viên của lớp: {{ teacherCountLabel(selectedClassId) }}</span>
         <button class="btn btn-sm btn-outline-secondary" @click="scheduleEditorOpen = false">Đóng</button>
       </div>
       <div v-if="!selectedClassId" class="alert alert-info mb-0">Chọn một lớp ở bộ lọc để quản lý lịch cố định.</div>
@@ -490,7 +573,7 @@ watch(() => route.query.class_id, (value) => {
           <div class="col-sm-2"><label class="form-label">Bắt đầu</label><input v-model="scheduleForm.start_time" type="time" class="form-control" required /></div>
           <div class="col-sm-2"><label class="form-label">Kết thúc</label><input v-model="scheduleForm.end_time" type="time" class="form-control" required /></div>
           <div class="col-sm-2"><label class="form-label">Phòng</label><input v-model="scheduleForm.room" class="form-control" /></div>
-          <div class="col-sm-3"><label class="form-label">Giáo viên cố định</label><select v-model="scheduleForm.staff_id" class="form-select"><option value="">Chọn giáo viên</option><option v-for="teacher in activeTeachers" :key="teacher.id" :value="teacher.id">{{ teacher.full_name }}</option></select></div>
+          <div class="col-sm-3"><label class="form-label">Giáo viên cố định ({{ teacherCountLabel(selectedClassId) }})</label><select v-model="scheduleForm.staff_id" class="form-select"><option value="">Chọn giáo viên</option><option v-for="teacher in activeTeachers" :key="teacher.id" :value="teacher.id" :disabled="!canSelectScheduleTeacher(teacher.id)">{{ teacher.full_name }}</option></select></div>
           <div class="col-sm-1"><button class="btn btn-primary w-100" :disabled="scheduleLoading">Lưu</button></div>
         </form>
         <div v-for="schedule in schedules" :key="schedule.id" class="border rounded p-3 mb-3">
@@ -520,7 +603,7 @@ watch(() => route.query.class_id, (value) => {
             <div class="col-sm-3 d-flex gap-2"><button class="btn btn-success">Lưu</button><button type="button" class="btn btn-outline-secondary" @click="editingScheduleId = ''">Hủy</button></div>
           </form>
           <form v-if="schedule.status !== 'ARCHIVED'" class="row g-2 mt-2" @submit.prevent="addScheduleTeacher(schedule)">
-            <div class="col-sm-8"><select v-model="teacherSelections[schedule.id]" class="form-select form-select-sm"><option value="">Thêm giáo viên cố định vào khung</option><option v-for="teacher in activeTeachers.filter((row) => !(schedule.class_schedule_staff || []).some((mapping) => mapping.staff_id === row.id))" :key="teacher.id" :value="teacher.id">{{ teacher.full_name }}</option></select></div>
+            <div class="col-sm-8"><select v-model="teacherSelections[schedule.id]" class="form-select form-select-sm"><option value="">Thêm giáo viên cố định vào khung</option><option v-for="teacher in activeTeachers.filter((row) => !(schedule.class_schedule_staff || []).some((mapping) => mapping.staff_id === row.id))" :key="teacher.id" :value="teacher.id" :disabled="!canSelectScheduleTeacher(teacher.id)">{{ teacher.full_name }}</option></select></div>
             <div class="col-sm-4"><button class="btn btn-sm btn-outline-primary" :disabled="!teacherSelections[schedule.id]">Phân công</button></div>
           </form>
         </div>
@@ -626,8 +709,8 @@ watch(() => route.query.class_id, (value) => {
           <h2 class="h5">{{ className(selected) }}</h2>
           <div class="text-secondary mb-3">Giáo viên: {{ teachers }} · {{ selected.status }}</div>
           <div v-if="selected.status === 'SCHEDULED'" class="row g-2 align-items-end mb-3">
-            <div class="col-md-8"><label class="form-label">Giáo viên được phân công cho buổi này</label><select v-model="selectedTeacherIds" class="form-select" multiple size="3"><option v-for="teacher in activeTeachers" :key="teacher.id" :value="teacher.id">{{ teacher.full_name }}</option></select></div>
-            <div class="col-md-4"><button class="btn btn-outline-primary" @click="saveTeachers">Lưu phân công buổi này</button></div>
+            <div class="col-md-8"><label class="form-label">Giáo viên được phân công cho buổi này ({{ teacherCountLabel(selected.class_id, selectedTeacherIds, selected.id) }})</label><select v-model="selectedTeacherIds" class="form-select" multiple size="3"><option v-for="teacher in activeTeachers" :key="teacher.id" :value="teacher.id" :disabled="!canSelectSessionTeacher(teacher.id)">{{ teacher.full_name }}</option></select></div>
+            <div class="col-md-4"><button class="btn btn-outline-primary" :disabled="selectedSessionTeacherCount > MAX_CLASS_TEACHERS" @click="saveTeachers">Lưu phân công buổi này</button></div>
           </div>
           <div class="row g-2 mb-3">
             <div class="col-md-6"><label class="form-label">Bắt đầu</label><input v-model="startInput" class="form-control" type="datetime-local" :disabled="selected.status !== 'SCHEDULED'" /></div>

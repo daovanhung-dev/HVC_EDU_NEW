@@ -12,7 +12,7 @@ HVC_EDU quản lý lớp học và hồ sơ học tập liên tục, không tạ
 
 ## Lớp, lịch và buổi học
 
-`class_memberships` là danh sách xếp lớp hiện hành, có ngày bắt đầu và ngày kết thúc. `class_schedules` lưu lịch lặp theo thứ trong tuần; `class_schedule_staff` lưu giáo viên phụ trách từng lịch. `sessions.class_id` gắn buổi học trực tiếp với lớp để tra cứu xuyên suốt.
+`class_memberships` là danh sách xếp lớp hiện hành, có ngày bắt đầu và ngày kết thúc. `class_schedules` lưu lịch lặp theo thứ trong tuần; `class_schedule_staff` lưu giáo viên phụ trách từng lịch. Mỗi lớp có tối đa 5 giáo viên duy nhất đang được phân công, tính gộp lịch chưa lưu trữ và buổi chưa hoàn tất/chưa hủy; cùng một giáo viên ở nhiều lịch hoặc buổi chỉ tính một lần. Lịch ARCHIVED và buổi COMPLETED/CANCELLED không chiếm giới hạn. `sessions.class_id` gắn buổi học trực tiếp với lớp để tra cứu xuyên suốt.
 
 Migration `0039_continuous_learning.sql` sao chép lịch gần nhất từ ClassMonth sang cấu hình lịch mới ở trạng thái INACTIVE. Admin kiểm tra sĩ số và giáo viên trên trang lớp rồi bật lịch. Lịch được bật sinh các buổi chưa bắt đầu trong 30 ngày tới theo `Asia/Ho_Chi_Minh`; job Supabase Cron chạy lúc 17:00 UTC mỗi ngày. Hàm sinh lịch có khóa chống chạy đồng thời, khóa duy nhất chống trùng buổi, cập nhật roster/giáo viên cho buổi chưa bắt đầu và giữ nguyên buổi đã bắt đầu hoặc hoàn tất.
 

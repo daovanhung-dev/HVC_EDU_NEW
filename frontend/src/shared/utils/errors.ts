@@ -30,6 +30,7 @@ const publicMessages: Record<string, string> = {
   SESSION_NOT_COMPLETED: 'Chỉ có thể gửi chấm công sau khi buổi học hoàn thành.',
   FEATURE_DISABLED: 'Chức năng này đã được ngừng sử dụng.',
   SESSION_LOCKED: 'Buổi học đã khóa và không thể chỉnh sửa ở vai trò này.',
+  CLASS_TEACHER_LIMIT: 'Mỗi lớp được phân công tối đa 5 giáo viên đang hoạt động. Hãy gỡ một phân công trước khi thêm giáo viên mới.',
   ATTENDANCE_STATUS_REQUIRED: 'Mỗi học sinh cần có trạng thái điểm danh.',
   STUDENT_NOT_IN_SESSION: 'Học sinh không thuộc buổi học này.',
   INVALID_HOMEWORK_SCORE: 'Điểm BTVN phải nằm trong khoảng 0–10.',
@@ -58,11 +59,13 @@ function clientTraceId(): string {
 }
 
 function detectCode(error: ErrorLike): string | undefined {
+  const message = stringValue(error.message)
+  const knownMessageCode = Object.keys(publicMessages).find((code) => message === code || message.startsWith(`${code}:`))
+  if (knownMessageCode) return knownMessageCode
+
   const explicitCode = stringValue(error.code)
   if (explicitCode) return explicitCode
-
-  const message = stringValue(error.message)
-  return Object.prototype.hasOwnProperty.call(publicMessages, message) ? message : undefined
+  return undefined
 }
 
 export function normalizeAppError(error: unknown, fallback = 'Không thể hoàn thành yêu cầu.'): NormalizedAppError {

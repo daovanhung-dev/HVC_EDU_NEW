@@ -15,6 +15,12 @@ describe('error normalization', () => {
     expect(normalizeAppError(new Error('STAFF_NOT_FOUND')).message).toContain('hồ sơ nhân sự')
   })
 
+  it('maps the database class teacher limit to a useful validation message', () => {
+    const result = normalizeAppError({ code: 'P0001', message: 'CLASS_TEACHER_LIMIT' }, 'Không thể phân công.')
+    expect(result.message).toContain('tối đa 5 giáo viên')
+    expect(result.code).toBe('CLASS_TEACHER_LIMIT')
+  })
+
   it('uses a contextual fallback for unknown errors', () => {
     expect(normalizeAppError(new Error('secret database detail'), 'Không thể tải dữ liệu.').message).toBe('Không thể tải dữ liệu.')
   })
