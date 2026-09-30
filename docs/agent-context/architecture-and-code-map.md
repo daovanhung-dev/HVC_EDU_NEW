@@ -2,40 +2,39 @@
 
 ## Kiến trúc
 
-- Frontend: Vue 3, TypeScript, Vue Router, Pinia, Bootstrap và Vite; build tĩnh lên GitHub Pages.
-- Backend: Supabase PostgreSQL, Auth, Row Level Security (RLS), Edge Functions và Supabase Cron.
-- Ứng dụng dùng hash routing để chạy trên GitHub Pages; Vite base path được cấu hình qua VITE_APP_BASE_PATH.
-- Frontend dùng publishable key. Các Edge Function được chia sẻ helper xác thực, CORS, response/error và có thể dùng admin client với secret phía server.
+- Frontend: Vue 3, TypeScript, Vue Router, Pinia, Bootstrap và Vite; build tĩnh lên GitHub Pages, dùng hash routing.
+- Backend: Supabase PostgreSQL/Auth, RLS, Edge Functions chạy Deno và Supabase Cron.
+- Cấu hình frontend công khai: VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY, VITE_APP_BASE_PATH.
+- Tài liệu này hướng tới entrypoint và luồng phụ thuộc. Danh mục đầy đủ đường dẫn/loại file ở repository-inventory.md.
 
-## Các điểm vào chính
+## Frontend
 
-| Khu vực | Vai trò |
+| Khu vực | Trách nhiệm và nơi lần theo |
 |---|---|
-| frontend/src/main.ts, App.vue | Khởi tạo Vue, Pinia, Bootstrap, router và banner lỗi toàn app. |
-| frontend/src/app/router/index.ts | Khai báo route, khởi tạo phiên và điều hướng theo vai trò; đây không phải ranh giới bảo mật dữ liệu. |
-| frontend/src/stores/auth.store.ts | Khôi phục Supabase session, tải profile, đăng nhập qua Edge Function, đổi mật khẩu và đăng xuất. |
-| frontend/src/modules/admin/pages/ | Màn hình học sinh, chi tiết học sinh, nhân sự, lớp, chi tiết lớp, buổi học và duyệt chấm công của Admin. |
-| frontend/src/modules/staff/pages/ | Danh sách buổi được giao, điểm danh/kết quả, gửi chấm công và hồ sơ cá nhân của giáo viên. |
-| frontend/src/modules/student/pages/ | Lịch học và kết quả học tập của tài khoản STUDENT hiện tại. |
-| frontend/src/services/data-queries.ts | Truy vấn Supabase cho dữ liệu danh sách, quan hệ lớp, buổi và kết quả học tập. |
-| frontend/src/services/commands.ts | Ghi dữ liệu và gọi RPC/Edge Function cho thao tác nghiệp vụ. |
-| frontend/src/services/edge-functions.ts | Chuẩn hóa response, lỗi, mã lỗi và trace id từ Edge Functions. |
-| frontend/src/shared/types/domain.ts | Kiểu dữ liệu frontend cho profile, lớp, lịch, buổi, điểm danh, yêu cầu chấm công và lịch sử học tập. |
-| frontend/src/shared/utils/errors.ts | Chuyển lỗi kỹ thuật thành thông báo UI an toàn, có mã/trace id. |
-| supabase/functions/ | Handler Deno cho đăng nhập, quản lý tài khoản và luồng buổi học; _shared/ chứa helper dùng chung. |
-| supabase/migrations/ | Schema, hàm nghiệp vụ, policy RLS, seed master và thay đổi theo thứ tự migration. |
-| .github/workflows/ | Quality check, deploy GitHub Pages và deploy Supabase. |
+| frontend/src/main.ts, App.vue | Khởi tạo app, Pinia, router, Bootstrap và banner lỗi. |
+| frontend/src/app/ | Router, layout và component dùng toàn app; route guard chỉ hỗ trợ điều hướng. |
+| frontend/src/stores/ | Auth/session và trạng thái lỗi dùng chung. |
+| frontend/src/modules/auth/pages/ | Đăng nhập và đổi mật khẩu. |
+| frontend/src/modules/admin/pages/ | Học sinh, hồ sơ học sinh, nhân sự, lớp/chi tiết lớp, buổi học và duyệt chấm công. |
+| frontend/src/modules/staff/pages/ | Buổi được giao, kết quả học tập, chấm công và hồ sơ giáo viên. |
+| frontend/src/modules/student/pages/ | Lịch và lịch sử học tập của học sinh đang đăng nhập. |
+| frontend/src/services/data-queries.ts | Truy vấn Supabase và chuẩn hóa các quan hệ đọc. |
+| frontend/src/services/commands.ts | Lệnh ghi trực tiếp được RLS cho phép, RPC và Edge Function. |
+| frontend/src/services/edge-functions.ts | Chuẩn hóa response, lỗi, mã lỗi và trace id. |
+| frontend/src/shared/ | Role, kiểu domain, định dạng lỗi, ngày giờ và tiện ích nghiệp vụ. |
 
 ## Luồng request
 
-- Truy vấn và CRUD được phép gọi Supabase trực tiếp từ frontend; database RLS phải giới hạn dữ liệu theo người dùng.
-- Thao tác nhạy cảm hoặc nhiều bước đi qua Edge Function rồi RPC trong database. Ví dụ: admin-create-user, login-by-identifier, session-start, session-complete, session-learning-update, timesheet-submit và timesheet-review.
-- Dùng services/data-queries.ts cho truy vấn, services/commands.ts cho lệnh và các adapter đã có. Tránh gọi Supabase trực tiếp rải rác trong component.
-- Edge Function trả response theo dạng success/data hoặc success/error, kèm trace_id. Dùng helper trong supabase/functions/_shared/ thay vì tự tạo định dạng khác.
-- Auth frontend loại PARENT và ASSISTANT lịch sử khỏi phiên hợp lệ; danh sách vai trò hoạt động hiện tại là ROOT_ADMIN, ADMIN, TEACHER và STUDENT.
+- Truy vấn và CRUD đơn giản có thể gọi Supabase từ frontend; RLS phải giới hạn dữ liệu.
+- Thao tác cần kiểm tra server hoặc transaction nghiệp vụ đi qua Edge Function/RPC. Các handler hiện có: admin-account-status, admin-create-user, admin-reset-password, bootstrap-root, login-by-identifier, session-start, session-complete, session-learning-update, timesheet-submit, timesheet-review.
+- Dùng services hiện hành thay vì rải lệnh Supabase trong component khi đã có adapter phù hợp.
+- Edge Function dùng helper trong supabase/functions/_shared/; response theo dạng success/data hoặc success/error và trace_id.
+- UI/route không phải ranh giới bảo mật; quyền cuối cùng phải được kiểm tra ở database/server.
 
-## Giới hạn bảo mật và tin cậy
+## Supabase và kiểm thử
 
-Frontend và route guard có thể bị bỏ qua. Chỉ policy RLS, kiểm tra quyền trong Edge Function/RPC và quyền PostgreSQL mới là căn cứ cho phép dữ liệu/thao tác.
-
-Không đưa secret key hoặc admin client vào bundle trình duyệt. Không biến một chức năng thành quyền rộng hơn bằng cách chỉ thêm nút hoặc route; cập nhật kiểm tra server-side và RLS khi phạm vi dữ liệu thay đổi.
+- supabase/functions/ chứa handler theo chức năng; _shared/ chứa auth, CORS và response/error.
+- supabase/migrations/ chứa schema, hàm, RLS, grant, seed danh mục và các lần hardening; migration hiện có mới nhất là 0044. Đọc migration cụ thể cùng migration thay thế nó trước khi sửa hành vi.
+- supabase/tests/ có fixture SQL tổng hợp cho RLS học tập, lập buổi theo tuần/tháng, giới hạn giáo viên, xung đột phòng và chấm công theo buổi.
+- frontend tests đặt cạnh source với hậu tố .test.ts. Các script root chuyển tiếp đến workspace frontend.
+- .github/workflows/ chứa Quality Check, deploy GitHub Pages và workflow_dispatch deploy Supabase. Có workflow không đồng nghĩa đã được yêu cầu vận hành.

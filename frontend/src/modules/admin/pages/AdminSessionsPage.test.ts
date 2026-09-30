@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createPinia } from 'pinia'
 import type { SessionRow } from '@/shared/types/domain'
 import { addCalendarDays, formatBusinessDate, formatBusinessMonth, getBusinessDateKey, shiftCalendarMonth } from '@/shared/utils/session-calendar'
 import AdminSessionsPage from './AdminSessionsPage.vue'
@@ -44,6 +45,15 @@ vi.mock('@/services/commands', () => ({
   updateClassSchedule: mockState.updateClassSchedule,
 }))
 
+vi.mock('bootstrap', () => ({
+  Modal: class MockModal {
+    constructor(private readonly element: HTMLElement) {}
+    show() { this.element.classList.add('show'); this.element.setAttribute('aria-hidden', 'false') }
+    hide() { const event = new Event('hide.bs.modal', { cancelable: true }); this.element.dispatchEvent(event); if (event.defaultPrevented) return; this.element.classList.remove('show'); this.element.setAttribute('aria-hidden', 'true'); this.element.dispatchEvent(new Event('hidden.bs.modal')) }
+    dispose() {}
+  },
+}))
+
 vi.mock('vue-router', () => ({ useRoute: () => mockState.route }))
 
 function makeSession(
@@ -68,7 +78,7 @@ function makeSession(
 }
 
 function mountPage() {
-  return mount(AdminSessionsPage)
+  return mount(AdminSessionsPage, { global: { plugins: [createPinia()] } })
 }
 
 async function clickButtonWithText(wrapper: ReturnType<typeof mount>, text: string) {
@@ -148,7 +158,7 @@ describe('AdminSessionsPage calendar', () => {
     await flushPromises()
 
     expect(mockState.getSessionStudents).toHaveBeenCalledWith(session.id)
-    expect(wrapper.findAll('h2').at(-1)?.text()).toBe('Lớp Toán QA')
+    expect(wrapper.findAll('.app-modal .modal-title').map((title) => title.text())).toContain('Lớp Toán QA')
     expect(wrapper.text()).not.toContain('QA-CLASS-1')
   })
 
@@ -177,8 +187,10 @@ describe('AdminSessionsPage calendar', () => {
     await clickButtonWithText(wrapper, 'Lưu lịch mới')
     expect(mockState.updateSessionOccurrence).toHaveBeenCalledWith(expect.objectContaining({ session_id: session.id, start: expect.any(String), end: expect.any(String) }))
 
-    vi.stubGlobal('confirm', vi.fn(() => true))
     await clickButtonWithText(wrapper, 'Hủy buổi học')
+    const confirmation = wrapper.findAll('.app-modal').find((modal) => modal.text().includes('Buổi học sẽ được đánh dấu đã hủy'))
+    if (!confirmation) throw new Error('Cancel confirmation dialog not found')
+    await confirmation.get('.btn-danger').trigger('click')
     expect(mockState.updateSessionOccurrence).toHaveBeenLastCalledWith({ session_id: session.id, cancel: true, room: null })
   })
 
@@ -190,8 +202,8 @@ describe('AdminSessionsPage calendar', () => {
     await flushPromises()
     await clickButtonWithText(wrapper, 'Tuần')
 
-    vi.stubGlobal('confirm', vi.fn(() => true))
     await clickButtonWithText(wrapper, 'Áp dụng tuần này cho tháng')
+    await clickButtonWithText(wrapper, 'Áp dụng tuần mẫu')
     await flushPromises()
 
     expect(mockState.applyWeekToMonth).toHaveBeenCalledWith({
@@ -242,6 +254,7 @@ describe('AdminSessionsPage calendar', () => {
     const wrapper = mountPage()
     await flushPromises()
     await clickButtonWithText(wrapper, 'Chỉnh sửa lịch')
+    await clickButtonWithText(wrapper, 'Thêm khung lịch')
     await wrapper.findAll('.schedule-editor-form select').at(-1)?.setValue('qa-teacher-1')
     await wrapper.get('.schedule-editor-form').trigger('submit')
     await flushPromises()
@@ -289,7 +302,9 @@ describe('AdminSessionsPage calendar', () => {
     await wrapper.get('.calendar-event').trigger('click')
     await flushPromises()
 
-    const roomInput = wrapper.get('.card-body input.form-control:not([type])')
+    const detailModal = wrapper.findAll('.app-modal').find((modal) => modal.find('input[type="datetime-local"]').exists())
+    if (!detailModal) throw new Error('Selected session detail sheet not found')
+    const roomInput = detailModal.get('input:not([type])')
     expect((roomInput.element as HTMLInputElement).value).toBe('QA-Room-A')
     await roomInput.setValue('QA-Room-B')
     await clickButtonWithText(wrapper, 'Lưu lịch mới')
@@ -318,6 +333,7 @@ describe('AdminSessionsPage calendar', () => {
     await flushPromises()
     await clickButtonWithText(wrapper, 'Chỉnh sửa lịch')
     expect(wrapper.text()).toContain('Giáo viên của lớp: 5/5')
+    await clickButtonWithText(wrapper, 'Thêm khung lịch')
     expect(wrapper.get('.schedule-editor-form option[value="qa-teacher-6"]').attributes('disabled')).toBeDefined()
 
     await clickButtonWithText(wrapper, 'Thêm buổi')
@@ -344,12 +360,14 @@ describe('AdminSessionsPage calendar', () => {
     await wrapper.get('.calendar-event').trigger('click')
     await flushPromises()
 
-    const teacherSelect = wrapper.get('.col-md-8 select[multiple]')
+    const detailModal = wrapper.findAll('.app-modal').find((modal) => modal.find('input[type="datetime-local"]').exists())
+    if (!detailModal) throw new Error('Selected session detail sheet not found')
+    const teacherSelect = detailModal.get('select[multiple]')
     expect(teacherSelect.element).toBeTruthy()
     expect(wrapper.text()).toContain('5/5')
-    expect(wrapper.get('option[value="qa-teacher-6"]').attributes('disabled')).toBeDefined()
+    expect(teacherSelect.get('option[value="qa-teacher-6"]').attributes('disabled')).toBeDefined()
     await teacherSelect.setValue([])
-    expect(wrapper.get('option[value="qa-teacher-6"]').attributes('disabled')).toBeUndefined()
+    expect(teacherSelect.get('option[value="qa-teacher-6"]').attributes('disabled')).toBeUndefined()
     await teacherSelect.setValue(['qa-teacher-6'])
     expect(wrapper.text()).toContain('5/5')
   })

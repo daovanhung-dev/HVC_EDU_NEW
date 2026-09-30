@@ -9,6 +9,7 @@
     "typecheck": "vue-tsc --noEmit --pretty false",
     "test": "vitest",
     "test:run": "vitest run",
+    "ui:review": "vite --config vite.review.config.ts",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -24,6 +24,12 @@ import type { ClassDetailRow, ClassScheduleRow, SessionRow } from '@/shared/type
 import { formatDateTime } from '@/shared/utils/format'
 import { canSelectClassTeacher, getClassTeacherIds, MAX_CLASS_TEACHERS, selectedTeacherCount } from '@/shared/utils/class-teacher-limit'
 import { userErrorMessage } from '@/shared/utils/errors'
+import { useToastStore } from '@/stores/toast.store'
+import FormModal from '@/app/components/FormModal.vue'
+import ConfirmModal from '@/app/components/ConfirmModal.vue'
+import AppField from '@/app/components/AppField.vue'
+import AppPageHeader from '@/app/components/AppPageHeader.vue'
+import DetailModal from '@/app/components/DetailModal.vue'
 import {
   addCalendarDays,
   formatBusinessDate,
@@ -40,6 +46,7 @@ type ViewMode = 'month' | 'week' | 'list'
 
 const weekdayLabels = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy', 'Chủ nhật']
 const route = useRoute()
+const toast = useToastStore()
 const sessions = ref<SessionRow[]>([])
 const classes = ref<ClassDetailRow[]>([])
 const teachersList = ref<any[]>([])
@@ -47,6 +54,7 @@ const schedules = ref<ClassScheduleRow[]>([])
 const schedulesByClass = ref<Record<string, ClassScheduleRow[]>>({})
 const students = ref<any[]>([])
 const selected = ref<SessionRow | null>(null)
+const selectedDetailOpen = ref(false)
 const selectedTeacherIds = ref<string[]>([])
 const selectedClassId = ref(typeof route.query.class_id === 'string' ? route.query.class_id : '')
 const loading = ref(false)
@@ -54,7 +62,6 @@ const scheduleLoading = ref(false)
 const sessionsLoaded = ref(false)
 const scheduleLoadErrors = ref<Record<string, boolean>>({})
 const errorMessage = ref('')
-const successMessage = ref('')
 const startInput = ref('')
 const endInput = ref('')
 const sessionRoomInput = ref('')
@@ -63,11 +70,25 @@ const calendarAnchorDate = ref(getBusinessDateKey(new Date()))
 const todayDateKey = ref(getBusinessDateKey(new Date()))
 const scheduleEditorOpen = ref(false)
 const sessionFormOpen = ref(false)
+const sessionFormBusy = ref(false)
+const sessionFormDirty = ref(false)
+const scheduleFormOpen = ref(false)
+const scheduleFormBusy = ref(false)
+const scheduleFormDirty = ref(false)
+const confirmOpen = ref(false)
+const confirmBusy = ref(false)
+const confirmDetails = ref({ title: '', message: '', itemName: '', warning: '', confirmLabel: 'Xác nhận', destructive: false })
+const confirmActionType = ref<'copy-week' | 'archive-schedule' | 'cancel-session' | ''>('')
+const pendingSchedule = ref<ClassScheduleRow | null>(null)
 const editingScheduleId = ref('')
 const teacherSelections = ref<Record<string, string>>({})
 const sessionForm = ref({ class_id: '', date: getBusinessDateKey(new Date()), start_time: '17:30', end_time: '19:30', room: '', staff_ids: [] as string[] })
 const scheduleForm = ref({ day_of_week: 1, start_time: '17:30', end_time: '19:30', room: '', staff_id: '' })
 const editSchedule = ref({ day_of_week: 1, start_time: '', end_time: '', room: '' })
+const scheduleFormDay = computed({ get: () => editingScheduleId.value ? editSchedule.value.day_of_week : scheduleForm.value.day_of_week, set: (value: number) => { if (editingScheduleId.value) editSchedule.value.day_of_week = value; else scheduleForm.value.day_of_week = value } })
+const scheduleFormStart = computed({ get: () => editingScheduleId.value ? editSchedule.value.start_time : scheduleForm.value.start_time, set: (value: string) => { if (editingScheduleId.value) editSchedule.value.start_time = value; else scheduleForm.value.start_time = value } })
+const scheduleFormEnd = computed({ get: () => editingScheduleId.value ? editSchedule.value.end_time : scheduleForm.value.end_time, set: (value: string) => { if (editingScheduleId.value) editSchedule.value.end_time = value; else scheduleForm.value.end_time = value } })
+const scheduleFormRoom = computed({ get: () => editingScheduleId.value ? editSchedule.value.room : scheduleForm.value.room, set: (value: string) => { if (editingScheduleId.value) editSchedule.value.room = value; else scheduleForm.value.room = value } })
 const teachers = computed(() => (selected.value?.session_staff || []).map((item) => item.staff?.full_name).filter(Boolean).join(', ') || 'Chưa phân công')
 const activeTeachers = computed(() => teachersList.value.filter((row) => row.status === 'ACTIVE'))
 const activeRosterReady = ref(false)
@@ -104,6 +125,11 @@ const visibleSessionsByDate = computed(() => groupSessionsByBusinessDate(visible
 const monthDateKeys = computed(() => getMonthGridDateKeys(calendarAnchorDate.value))
 const weekDateKeys = computed(() => getWeekDateKeys(calendarAnchorDate.value))
 const visibleDateKeys = computed(() => viewMode.value === 'week' ? weekDateKeys.value : monthDateKeys.value)
+const agendaSessions = computed(() => {
+  const dates = new Set(visibleDateKeys.value)
+  return visibleSessions.value.filter((session) => dates.has(getBusinessDateKey(session.scheduled_start_at)))
+    .sort((left, right) => left.scheduled_start_at.localeCompare(right.scheduled_start_at))
+})
 const periodTitle = computed(() => viewMode.value === 'month'
   ? formatBusinessMonth(calendarAnchorDate.value)
   : `${formatBusinessDate(weekDateKeys.value[0])} – ${formatBusinessDate(weekDateKeys.value[6])}`)
@@ -269,7 +295,7 @@ function roomGenerationWarning(value: unknown) {
 function setScheduleResult(result: unknown, success: string) {
   const value = result && typeof result === 'object' ? result as { generation?: unknown } : {}
   const warning = roomGenerationWarning(value.generation ?? result)
-  successMessage.value = success
+  toast.success(success)
   errorMessage.value = warning
 }
 
@@ -282,6 +308,7 @@ function changeClassFilter() {
 
 async function selectSession(session: SessionRow) {
   selected.value = session
+  selectedDetailOpen.value = true
   selectedTeacherIds.value = (session.session_staff || []).map((item) => item.staff_id)
   startInput.value = toLocalInput(session.scheduled_start_at)
   endInput.value = toLocalInput(session.scheduled_end_at)
@@ -309,6 +336,8 @@ function openSessionForm(dateKey?: string) {
     room: '',
     staff_ids: [],
   }
+  sessionFormDirty.value = false
+  errorMessage.value = ''
   sessionFormOpen.value = true
   void loadCreateDefaults()
 }
@@ -334,6 +363,7 @@ async function loadCreateDefaults() {
 }
 
 async function createSession() {
+  if (sessionFormBusy.value) return
   if (!sessionForm.value.class_id || !sessionForm.value.date || !sessionForm.value.start_time
     || !sessionForm.value.end_time || !sessionForm.value.staff_ids.length) {
     errorMessage.value = 'Hãy chọn lớp, giờ bắt đầu/kết thúc và ít nhất một giáo viên.'
@@ -343,7 +373,8 @@ async function createSession() {
     errorMessage.value = `Mỗi lớp được phân công tối đa ${MAX_CLASS_TEACHERS} giáo viên hiện hành.`
     return
   }
-  errorMessage.value = ''; successMessage.value = ''
+  errorMessage.value = ''
+  sessionFormBusy.value = true
   try {
     await createManualSession({
       class_id: sessionForm.value.class_id,
@@ -352,10 +383,12 @@ async function createSession() {
       staff_ids: sessionForm.value.staff_ids,
       room: sessionForm.value.room.trim() || null,
     })
-    successMessage.value = 'Đã tạo buổi học.'
+    toast.success('Đã tạo buổi học.')
     sessionFormOpen.value = false
+    sessionFormDirty.value = false
     await load()
   } catch (error) { errorMessage.value = teacherLimitMessage(error, 'Không thể tạo buổi học.') }
+  finally { sessionFormBusy.value = false }
 }
 
 async function copyWeekToMonth() {
@@ -365,13 +398,24 @@ async function copyWeekToMonth() {
     return
   }
   const monthStart = `${calendarAnchorDate.value.slice(0, 7)}-01`
-  if (!window.confirm(`Áp dụng ${sourceIds.length} buổi mẫu cho các ngày tương ứng trong tháng ${formatBusinessMonth(monthStart)}? Buổi trùng/xung đột sẽ làm cả đợt bị từ chối.`)) return
-  errorMessage.value = ''; successMessage.value = ''
+  confirmActionType.value = 'copy-week'
+  confirmDetails.value = { title: 'Áp dụng tuần mẫu cho tháng?', message: 'Các buổi trùng hoặc xung đột sẽ làm cả đợt bị từ chối; hãy kiểm tra danh sách buổi mẫu trước khi tiếp tục.', itemName: `${sourceIds.length} buổi mẫu · ${formatBusinessMonth(monthStart)}`, warning: 'Hệ thống sẽ tạo các buổi cụ thể cho các ngày tương ứng trong tháng.', confirmLabel: 'Áp dụng tuần mẫu', destructive: false }
+  confirmOpen.value = true
+}
+
+async function applyWeekNow() {
+  const sourceIds = sourceWeekSessions.value.map((session) => session.id)
+  const monthStart = `${calendarAnchorDate.value.slice(0, 7)}-01`
+  errorMessage.value = ''
   try {
     const result = await applyWeekToMonth({ source_session_ids: sourceIds, month_start: monthStart }) as { created?: number }
-    successMessage.value = `Đã tạo ${result.created || 0} buổi cụ thể cho tháng.`
+    toast.success(`Đã tạo ${result.created || 0} buổi cụ thể cho tháng.`)
+    confirmOpen.value = false
     await load()
-  } catch (error) { errorMessage.value = teacherLimitMessage(error, 'Không thể áp dụng tuần mẫu.') }
+  } catch (error) {
+    errorMessage.value = teacherLimitMessage(error, 'Không thể áp dụng tuần mẫu.')
+    toast.error(errorMessage.value)
+  }
 }
 
 async function saveTeachers() {
@@ -383,10 +427,10 @@ async function saveTeachers() {
     errorMessage.value = `Mỗi lớp được phân công tối đa ${MAX_CLASS_TEACHERS} giáo viên hiện hành.`
     return
   }
-  errorMessage.value = ''; successMessage.value = ''
+  errorMessage.value = ''
   try {
     await updateSessionTeachers({ session_id: selected.value.id, staff_ids: selectedTeacherIds.value })
-    successMessage.value = 'Đã cập nhật giáo viên cho buổi học.'
+    toast.success('Đã cập nhật giáo viên cho buổi học.')
     await load()
     const refreshed = sessions.value.find((row) => row.id === selected.value?.id)
     if (refreshed) await selectSession(refreshed)
@@ -394,13 +438,15 @@ async function saveTeachers() {
 }
 
 async function createSchedule() {
+  if (scheduleFormBusy.value) return
   if (!selectedClassId.value) return
   if (scheduleForm.value.staff_id && teacherCountKnown(selectedClassId.value)
     && !canSelectClassTeacher(selectedClassTeacherIds.value, [], scheduleForm.value.staff_id)) {
     errorMessage.value = `Mỗi lớp được phân công tối đa ${MAX_CLASS_TEACHERS} giáo viên hiện hành.`
     return
   }
-  errorMessage.value = ''; successMessage.value = ''
+  errorMessage.value = ''
+  scheduleFormBusy.value = true
   try {
     const created = await createClassSchedule({
       class_id: selectedClassId.value,
@@ -411,13 +457,16 @@ async function createSchedule() {
     })
     if (scheduleForm.value.staff_id) await addTeacherToClassSchedule(created.id, scheduleForm.value.staff_id)
     scheduleForm.value = { day_of_week: 1, start_time: '17:30', end_time: '19:30', room: '', staff_id: '' }
-    successMessage.value = 'Đã lưu lịch cố định ở trạng thái chờ rà soát.'
+    toast.success('Đã lưu lịch cố định ở trạng thái chờ rà soát.')
+    scheduleFormOpen.value = false
+    scheduleFormDirty.value = false
     await loadSchedules()
   } catch (error) { errorMessage.value = teacherLimitMessage(error, 'Không thể lưu lịch cố định.') }
+  finally { scheduleFormBusy.value = false }
 }
 
 async function toggleSchedule(row: ClassScheduleRow) {
-  errorMessage.value = ''; successMessage.value = ''
+  errorMessage.value = ''
   if (row.status !== 'ACTIVE' && (!activeRosterReady.value || !row.class_schedule_staff?.length)) {
     errorMessage.value = 'Hãy xác nhận danh sách học sinh và phân công ít nhất một giáo viên trước khi bật lịch.'
     return
@@ -437,15 +486,41 @@ function beginEditSchedule(row: ClassScheduleRow) {
     end_time: String(row.end_time).slice(0, 5),
     room: row.room || '',
   }
+  scheduleFormDirty.value = false
+  errorMessage.value = ''
+  scheduleFormOpen.value = true
+}
+
+function openScheduleForm() {
+  editingScheduleId.value = ''
+  scheduleForm.value = { day_of_week: 1, start_time: '17:30', end_time: '19:30', room: '', staff_id: '' }
+  scheduleFormDirty.value = false
+  errorMessage.value = ''
+  scheduleFormOpen.value = true
 }
 
 async function saveClassSchedule(row: ClassScheduleRow) {
+  if (scheduleFormBusy.value) return
+  scheduleFormBusy.value = true
+  errorMessage.value = ''
   try {
     const result = await updateClassSchedule(row.id, { ...editSchedule.value, room: editSchedule.value.room.trim() || null })
     editingScheduleId.value = ''
+    scheduleFormOpen.value = false
+    scheduleFormDirty.value = false
     await load()
     setScheduleResult(result, 'Đã cập nhật lịch cố định.')
   } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể cập nhật lịch.' }
+  finally { scheduleFormBusy.value = false }
+}
+
+function submitScheduleForm() {
+  if (editingScheduleId.value) {
+    const row = schedules.value.find((item) => item.id === editingScheduleId.value)
+    if (row) void saveClassSchedule(row)
+    return
+  }
+  void createSchedule()
 }
 
 async function addScheduleTeacher(row: ClassScheduleRow) {
@@ -474,12 +549,23 @@ async function removeScheduleTeacher(row: ClassScheduleRow, staffId: string) {
 }
 
 async function archiveSchedule(row: ClassScheduleRow) {
-  if (!window.confirm('Lưu trữ khung lịch này và hủy các buổi tương lai còn ở trạng thái SCHEDULED? Lịch sử đã diễn ra được giữ nguyên.')) return
+  pendingSchedule.value = row
+  confirmActionType.value = 'archive-schedule'
+  confirmDetails.value = { title: 'Lưu trữ khung lịch?', message: 'Các buổi tương lai còn ở trạng thái SCHEDULED sẽ bị hủy. Lịch sử đã diễn ra được giữ nguyên.', itemName: `${dayLabel(row.day_of_week)} · ${String(row.start_time).slice(0, 5)}–${String(row.end_time).slice(0, 5)}`, warning: 'Khung lịch đã lưu trữ không tiếp tục sinh buổi học mới.', confirmLabel: 'Lưu trữ khung lịch', destructive: true }
+  confirmOpen.value = true
+}
+
+async function archiveScheduleNow() {
+  if (!pendingSchedule.value) return
   try {
-    await setClassScheduleStatus(row.id, 'ARCHIVED')
-    successMessage.value = 'Đã lưu trữ khung lịch và giữ nguyên lịch sử.'
+    await setClassScheduleStatus(pendingSchedule.value.id, 'ARCHIVED')
+    toast.success('Đã lưu trữ khung lịch và giữ nguyên lịch sử.')
+    confirmOpen.value = false
     await load()
-  } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể lưu trữ khung lịch.' }
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : 'Không thể lưu trữ khung lịch.'
+    toast.error(errorMessage.value)
+  }
 }
 
 async function saveSchedule() {
@@ -487,7 +573,7 @@ async function saveSchedule() {
   const sessionId = selected.value.id
   try {
     await updateSessionOccurrence({ session_id: sessionId, start: fromLocalInput(startInput.value), end: fromLocalInput(endInput.value), room: sessionRoomInput.value.trim() || null })
-    successMessage.value = 'Đã đổi lịch buổi học.'
+    toast.success('Đã đổi lịch buổi học.')
     await load()
     const refreshed = sessions.value.find((item) => item.id === sessionId)
     if (refreshed) await selectSession(refreshed)
@@ -495,15 +581,37 @@ async function saveSchedule() {
 }
 
 async function cancel() {
-  if (!selected.value || !window.confirm(`Hủy buổi học ${formatDateTime(selected.value.scheduled_start_at)}?`)) return
+  if (!selected.value) return
+  confirmActionType.value = 'cancel-session'
+  confirmDetails.value = { title: 'Hủy buổi học?', message: 'Buổi học sẽ được đánh dấu đã hủy. Thông tin và kết quả đã lưu vẫn được giữ.', itemName: `${className(selected.value)} · ${formatDateTime(selected.value.scheduled_start_at)}`, warning: 'Giáo viên và học sinh sẽ thấy trạng thái buổi học đã hủy.', confirmLabel: 'Hủy buổi học', destructive: true }
+  confirmOpen.value = true
+}
+
+async function cancelSessionNow() {
+  if (!selected.value) return
   const sessionId = selected.value.id
   try {
     await updateSessionOccurrence({ session_id: sessionId, cancel: true, room: sessionRoomInput.value.trim() || null })
-    successMessage.value = 'Đã hủy buổi học.'
+    toast.success('Đã hủy buổi học.')
+    confirmOpen.value = false
     await load()
     const refreshed = sessions.value.find((item) => item.id === sessionId)
     if (refreshed) await selectSession(refreshed)
-  } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể hủy buổi học.' }
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : 'Không thể hủy buổi học.'
+    toast.error(errorMessage.value)
+  }
+}
+
+async function runConfirmation() {
+  if (confirmBusy.value) return
+  confirmBusy.value = true
+  errorMessage.value = ''
+  try {
+    if (confirmActionType.value === 'copy-week') await applyWeekNow()
+    else if (confirmActionType.value === 'archive-schedule') await archiveScheduleNow()
+    else if (confirmActionType.value === 'cancel-session') await cancelSessionNow()
+  } finally { confirmBusy.value = false }
 }
 
 onMounted(load)
@@ -514,15 +622,13 @@ watch(() => route.query.class_id, (value) => {
 </script>
 
 <template>
-  <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
-    <div><div class="small text-secondary">Học tập</div><h1 class="h3 mb-0">Buổi học</h1></div>
-    <div class="d-flex flex-wrap gap-2">
+  <AppPageHeader title="Buổi học" eyebrow="Lịch giảng dạy" description="Xem lịch tháng, tuần hoặc danh sách; quản lý buổi riêng và khung lịch lặp.">
+    <template #actions>
       <button class="btn btn-primary" @click="scheduleEditorOpen = !scheduleEditorOpen">Chỉnh sửa lịch</button>
       <button class="btn btn-outline-primary" @click="openSessionForm()">Thêm buổi</button>
       <button class="btn btn-outline-primary" :disabled="loading" @click="load">Làm mới</button>
-    </div>
-  </div>
-  <div v-if="successMessage" class="alert alert-success">{{ successMessage }}</div>
+    </template>
+  </AppPageHeader>
   <div v-if="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
 
   <div class="card border-0 shadow-sm mb-4">
@@ -543,45 +649,18 @@ watch(() => route.query.class_id, (value) => {
     </div>
   </div>
 
-  <div v-if="sessionFormOpen" class="card border-primary shadow-sm mb-4">
-    <div class="card-header bg-primary-subtle fw-semibold">Tạo buổi học riêng</div>
-    <form class="card-body row g-3 align-items-end session-create-form" @submit.prevent="createSession">
-      <div class="col-md-4">
-        <label class="form-label">Lớp</label>
-        <select v-model="sessionForm.class_id" class="form-select" required @change="loadCreateDefaults">
-          <option value="">Chọn lớp</option>
-          <option v-for="classRow in classes.filter((row) => row.status === 'ACTIVE')" :key="classRow.id" :value="classRow.id">{{ classRow.name }}</option>
-        </select>
-      </div>
-      <div class="col-md-2">
-        <label class="form-label">Ngày</label>
-        <input v-model="sessionForm.date" type="date" class="form-control" required @change="loadCreateDefaults" />
-      </div>
-      <div class="col-md-2">
-        <label class="form-label">Giờ bắt đầu</label>
-        <input v-model="sessionForm.start_time" type="time" class="form-control" required @change="loadCreateDefaults" />
-      </div>
-      <div class="col-md-2">
-        <label class="form-label">Giờ kết thúc</label>
-        <input v-model="sessionForm.end_time" type="time" class="form-control" required @change="loadCreateDefaults" />
-      </div>
-      <div class="col-md-2">
-        <label class="form-label">Phòng</label>
-        <input v-model="sessionForm.room" class="form-control" placeholder="Ví dụ: A1" />
-      </div>
-      <div class="col-md-6">
-        <label class="form-label">Giáo viên được phân công ({{ teacherCountLabel(sessionForm.class_id, sessionForm.staff_ids) }})</label>
-        <select v-model="sessionForm.staff_ids" class="form-select" multiple required size="3" aria-describedby="teacher-assignment-help">
-          <option v-for="teacher in activeTeachers" :key="teacher.id" :value="teacher.id" :disabled="!canSelectCreateTeacher(teacher.id)">{{ teacher.full_name }}</option>
-        </select>
-        <div id="teacher-assignment-help" class="form-text">Giáo viên từ khung cố định phù hợp sẽ được chọn sẵn; có thể đổi riêng buổi này. Mỗi lớp tối đa {{ MAX_CLASS_TEACHERS }} giáo viên đang được phân công.</div>
-      </div>
-      <div class="col-12 d-flex gap-2">
-        <button class="btn btn-primary" :disabled="loading || (teacherCountKnown(sessionForm.class_id) && sessionFormTeacherCount > MAX_CLASS_TEACHERS)">Tạo buổi</button>
-        <button type="button" class="btn btn-outline-secondary" @click="sessionFormOpen = false">Đóng</button>
-      </div>
+  <FormModal v-model="sessionFormOpen" title="Tạo buổi học riêng" description="Chọn thời gian và giáo viên. Quy tắc giới hạn 5 giáo viên và kiểm tra xung đột hiện hành vẫn được áp dụng." :busy="sessionFormBusy" :dirty="sessionFormDirty" :submit-disabled="!sessionForm.class_id || !sessionForm.staff_ids.length || (teacherCountKnown(sessionForm.class_id) && sessionFormTeacherCount > MAX_CLASS_TEACHERS)" submit-label="Tạo buổi học" @submit="createSession" @cancel="sessionFormOpen = false">
+    <form id="session-create-form" class="row g-3 session-create-form" @submit.prevent="createSession" @input="sessionFormDirty = true" @change="sessionFormDirty = true">
+      <AppField id="session-class" class="col-md-6" label="Lớp" required><template #default="field"><select :id="field.id" v-model="sessionForm.class_id" class="form-select" required data-modal-autofocus @change="loadCreateDefaults"><option value="">Chọn lớp</option><option v-for="classRow in classes.filter((row) => row.status === 'ACTIVE')" :key="classRow.id" :value="classRow.id">{{ classRow.name }}</option></select></template></AppField>
+      <AppField id="session-date" class="col-md-6" label="Ngày" required><template #default="field"><input :id="field.id" v-model="sessionForm.date" type="date" class="form-control" required @change="loadCreateDefaults" /></template></AppField>
+      <AppField id="session-start-time" class="col-md-6" label="Giờ bắt đầu" required><template #default="field"><input :id="field.id" v-model="sessionForm.start_time" type="time" class="form-control" required @change="loadCreateDefaults" /></template></AppField>
+      <AppField id="session-end-time" class="col-md-6" label="Giờ kết thúc" required><template #default="field"><input :id="field.id" v-model="sessionForm.end_time" type="time" class="form-control" required @change="loadCreateDefaults" /></template></AppField>
+      <AppField id="session-room" class="col-md-6" label="Phòng"><template #default="field"><input :id="field.id" v-model="sessionForm.room" class="form-control" placeholder="Ví dụ: A1" /></template></AppField>
+      <AppField id="session-teachers" class="col-md-6" :label="`Giáo viên được phân công (${teacherCountLabel(sessionForm.class_id, sessionForm.staff_ids)})`" required description="Có thể chọn nhiều giáo viên trong giới hạn tối đa 5 người."><template #default="field"><select :id="field.id" v-model="sessionForm.staff_ids" class="form-select" multiple required size="3" :aria-describedby="field.describedBy"><option v-for="teacher in activeTeachers" :key="teacher.id" :value="teacher.id" :disabled="!canSelectCreateTeacher(teacher.id)">{{ teacher.full_name }}</option></select></template></AppField>
     </form>
-  </div>
+    <div v-if="errorMessage" class="alert alert-danger mt-3 mb-0" role="alert">{{ errorMessage }}</div>
+    <template #footer><button class="btn btn-outline-secondary" type="button" :disabled="sessionFormBusy" @click="sessionFormOpen = false">Hủy</button><button class="btn btn-primary" type="button" :disabled="sessionFormBusy || !sessionForm.class_id || !sessionForm.staff_ids.length || (teacherCountKnown(sessionForm.class_id) && sessionFormTeacherCount > MAX_CLASS_TEACHERS)" @click="createSession"><span v-if="sessionFormBusy" class="app-button__spinner" aria-hidden="true"></span>{{ sessionFormBusy ? 'Đang tạo…' : 'Tạo buổi học' }}</button></template>
+  </FormModal>
 
   <div v-if="scheduleEditorOpen" class="card border-0 shadow-sm mb-4">
     <div class="card-body">
@@ -591,21 +670,14 @@ watch(() => route.query.class_id, (value) => {
           <div class="small text-secondary">Giáo viên trong khung thứ/giờ được kế thừa cho buổi sinh tự động. Lịch lưu trữ không xóa lịch sử đã diễn ra.</div>
         </div>
         <span v-if="selectedClassId" class="badge text-bg-primary">Giáo viên của lớp: {{ teacherCountLabel(selectedClassId) }}</span>
+        <button v-if="selectedClassId" class="btn btn-sm btn-primary" type="button" @click="openScheduleForm">Thêm khung lịch</button>
         <button class="btn btn-sm btn-outline-secondary" @click="scheduleEditorOpen = false">Đóng</button>
       </div>
       <div v-if="!selectedClassId" class="alert alert-info mb-0">Chọn một lớp ở bộ lọc để quản lý lịch cố định.</div>
       <template v-else>
         <div v-if="scheduleLoading" class="text-secondary py-3" role="status">Đang tải khung lịch…</div>
-        <form class="row g-2 align-items-end border rounded p-3 mb-4 schedule-editor-form" @submit.prevent="createSchedule">
-          <div class="col-sm-2"><label class="form-label">Ngày</label><select v-model.number="scheduleForm.day_of_week" class="form-select"><option v-for="day in 7" :key="day" :value="day">{{ dayLabel(day) }}</option></select></div>
-          <div class="col-sm-2"><label class="form-label">Bắt đầu</label><input v-model="scheduleForm.start_time" type="time" class="form-control" required /></div>
-          <div class="col-sm-2"><label class="form-label">Kết thúc</label><input v-model="scheduleForm.end_time" type="time" class="form-control" required /></div>
-          <div class="col-sm-2"><label class="form-label">Phòng</label><input v-model="scheduleForm.room" class="form-control" /></div>
-          <div class="col-sm-3"><label class="form-label">Giáo viên cố định ({{ teacherCountLabel(selectedClassId) }})</label><select v-model="scheduleForm.staff_id" class="form-select"><option value="">Chọn giáo viên</option><option v-for="teacher in activeTeachers" :key="teacher.id" :value="teacher.id" :disabled="!canSelectScheduleTeacher(teacher.id)">{{ teacher.full_name }}</option></select></div>
-          <div class="col-sm-1"><button class="btn btn-primary w-100" :disabled="scheduleLoading">Lưu</button></div>
-        </form>
         <div v-for="schedule in schedules" :key="schedule.id" class="border rounded p-3 mb-3">
-          <div v-if="editingScheduleId !== schedule.id" class="d-flex flex-wrap justify-content-between gap-2">
+          <div class="d-flex flex-wrap justify-content-between gap-2">
             <div>
               <div class="fw-semibold">{{ dayLabel(schedule.day_of_week) }} · {{ String(schedule.start_time).slice(0, 5) }}–{{ String(schedule.end_time).slice(0, 5) }} · {{ schedule.room ? `Phòng ${schedule.room}` : 'Chưa có phòng' }}</div>
               <span class="badge mt-1" :class="schedule.status === 'ACTIVE' ? 'text-bg-success' : schedule.status === 'ARCHIVED' ? 'text-bg-secondary' : 'text-bg-warning'">{{ schedule.status === 'ACTIVE' ? 'Đang sinh buổi' : schedule.status === 'ARCHIVED' ? 'Đã lưu trữ' : 'Chờ Admin rà soát' }}</span>
@@ -623,13 +695,6 @@ watch(() => route.query.class_id, (value) => {
               <button class="btn btn-sm btn-outline-danger" @click="archiveSchedule(schedule)">Lưu trữ</button>
             </div>
           </div>
-          <form v-else class="row g-2 align-items-end" @submit.prevent="saveClassSchedule(schedule)">
-            <div class="col-sm-2"><label class="form-label">Ngày</label><select v-model.number="editSchedule.day_of_week" class="form-select"><option v-for="day in 7" :key="day" :value="day">{{ dayLabel(day) }}</option></select></div>
-            <div class="col-sm-2"><label class="form-label">Bắt đầu</label><input v-model="editSchedule.start_time" type="time" class="form-control" required /></div>
-            <div class="col-sm-2"><label class="form-label">Kết thúc</label><input v-model="editSchedule.end_time" type="time" class="form-control" required /></div>
-            <div class="col-sm-3"><label class="form-label">Phòng</label><input v-model="editSchedule.room" class="form-control" /></div>
-            <div class="col-sm-3 d-flex gap-2"><button class="btn btn-success">Lưu</button><button type="button" class="btn btn-outline-secondary" @click="editingScheduleId = ''">Hủy</button></div>
-          </form>
           <form v-if="schedule.status !== 'ARCHIVED'" class="row g-2 mt-2" @submit.prevent="addScheduleTeacher(schedule)">
             <div class="col-sm-8"><select v-model="teacherSelections[schedule.id]" class="form-select form-select-sm"><option value="">Thêm giáo viên cố định vào khung</option><option v-for="teacher in activeTeachers.filter((row) => !(schedule.class_schedule_staff || []).some((mapping) => mapping.staff_id === row.id))" :key="teacher.id" :value="teacher.id" :disabled="!canSelectScheduleTeacher(teacher.id)">{{ teacher.full_name }}</option></select></div>
             <div class="col-sm-4"><button class="btn btn-sm btn-outline-primary" :disabled="!teacherSelections[schedule.id]">Phân công</button></div>
@@ -639,6 +704,18 @@ watch(() => route.query.class_id, (value) => {
       </template>
     </div>
   </div>
+
+  <FormModal v-model="scheduleFormOpen" :title="editingScheduleId ? 'Sửa khung lịch cố định' : 'Thêm khung lịch cố định'" :description="editingScheduleId ? 'Thay đổi sẽ áp dụng theo quy tắc lịch lớp hiện hành.' : 'Khung lịch lặp được lưu ở trạng thái chờ rà soát trước khi sinh buổi.'" :busy="scheduleFormBusy" :dirty="scheduleFormDirty" :submit-disabled="!selectedClassId" :submit-label="editingScheduleId ? 'Lưu thay đổi' : 'Lưu khung lịch'" @submit="submitScheduleForm" @cancel="scheduleFormOpen = false">
+    <form class="row g-3 schedule-editor-form" @submit.prevent="submitScheduleForm" @input="scheduleFormDirty = true" @change="scheduleFormDirty = true">
+      <AppField id="schedule-day" class="col-md-6" label="Ngày trong tuần" required><template #default="field"><select :id="field.id" v-model.number="scheduleFormDay" class="form-select" required data-modal-autofocus><option v-for="day in 7" :key="day" :value="day">{{ dayLabel(day) }}</option></select></template></AppField>
+      <AppField id="schedule-start" class="col-md-6" label="Giờ bắt đầu" required><template #default="field"><input :id="field.id" v-model="scheduleFormStart" type="time" class="form-control" required /></template></AppField>
+      <AppField id="schedule-end" class="col-md-6" label="Giờ kết thúc" required><template #default="field"><input :id="field.id" v-model="scheduleFormEnd" type="time" class="form-control" required /></template></AppField>
+      <AppField id="schedule-room" class="col-md-6" label="Phòng"><template #default="field"><input :id="field.id" v-model="scheduleFormRoom" class="form-control" /></template></AppField>
+      <AppField v-if="!editingScheduleId" id="schedule-teacher" class="col-12" :label="`Giáo viên cố định (${teacherCountLabel(selectedClassId)})`" description="Phân công có thể chỉnh lại trong thẻ khung lịch."><template #default="field"><select :id="field.id" v-model="scheduleForm.staff_id" class="form-select" :aria-describedby="field.describedBy"><option value="">Chưa phân công giáo viên</option><option v-for="teacher in activeTeachers" :key="teacher.id" :value="teacher.id" :disabled="!canSelectScheduleTeacher(teacher.id)">{{ teacher.full_name }}</option></select></template></AppField>
+    </form>
+    <div v-if="errorMessage" class="alert alert-danger mt-3 mb-0" role="alert">{{ errorMessage }}</div>
+  </FormModal>
+  <ConfirmModal v-model="confirmOpen" v-bind="confirmDetails" :busy="confirmBusy" @confirm="runConfirmation" />
 
   <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
@@ -724,8 +801,19 @@ watch(() => route.query.class_id, (value) => {
                 </section>
               </div>
             </div>
+            <div class="session-agenda" aria-label="Buổi học trong kỳ này">
+              <div v-for="session in agendaSessions" :key="session.id" class="session-agenda__item">
+                <button type="button" class="session-agenda__select" :aria-pressed="selected?.id === session.id" @click="selectSession(session)">
+                  <span class="session-agenda__time">{{ formatBusinessDate(getBusinessDateKey(session.scheduled_start_at)) }} · {{ formatBusinessTime(session.scheduled_start_at) }}–{{ formatBusinessTime(session.scheduled_end_at) }}</span>
+                  <strong>{{ className(session) }}</strong>
+                  <span>{{ session.room || session.class_schedules?.room || 'Chưa xếp phòng' }}</span>
+                </button>
+                <span class="badge" :class="sessionStatusClass(session.status)">{{ session.status }}</span>
+              </div>
+              <p v-if="!errorMessage && !agendaSessions.length && !loading" class="text-secondary text-center py-4 mb-0">{{ visibleSessions.length ? 'Không có buổi học trong khoảng thời gian này.' : 'Chưa có buổi học.' }}</p>
+            </div>
             <div v-if="loading" class="text-center text-secondary py-3" role="status">Đang tải buổi học…</div>
-            <div v-else-if="!errorMessage && !visibleCalendarSessionCount" class="text-center text-secondary py-3">
+            <div v-else-if="!errorMessage && !visibleCalendarSessionCount" class="session-calendar-empty text-center text-secondary py-3">
               {{ visibleSessions.length ? 'Không có buổi học trong khoảng thời gian này.' : 'Chưa có buổi học.' }}
             </div>
           </div>
@@ -734,8 +822,7 @@ watch(() => route.query.class_id, (value) => {
     </div>
 
     <div class="col-12">
-      <div v-if="selected" class="card border-0 shadow-sm">
-        <div class="card-body">
+      <DetailModal v-if="selected" v-model="selectedDetailOpen" :title="className(selected)" :description="`${formatDateTime(selected.scheduled_start_at)} · ${selected.status}`" size="xl">
           <h2 class="h5">{{ className(selected) }}</h2>
           <div class="text-secondary mb-3">Giáo viên: {{ teachers }} · {{ selected.status }} · {{ sessionRoomInput || 'Chưa xếp phòng' }}</div>
           <div v-if="selected.status === 'SCHEDULED'" class="row g-2 align-items-end mb-3">
@@ -768,11 +855,9 @@ watch(() => route.query.class_id, (value) => {
             <div v-if="row.student_attendances?.[0]?.comment" class="small mt-1">{{ row.student_attendances[0].comment }}</div>
           </div>
           <div v-if="!students.length" class="text-secondary small">Buổi học chưa có danh sách học sinh.</div>
-        </div>
-      </div>
-      <div v-else class="card border-0 shadow-sm">
-        <div class="card-body text-center text-secondary py-5">Chọn một buổi học để xem chi tiết.</div>
-      </div>
+          <div v-if="errorMessage" class="alert alert-danger mt-3" role="alert">{{ errorMessage }}</div>
+          <template #footer><button class="btn btn-outline-secondary" type="button" @click="selectedDetailOpen = false">Đóng</button></template>
+      </DetailModal>
     </div>
   </div>
 </template>

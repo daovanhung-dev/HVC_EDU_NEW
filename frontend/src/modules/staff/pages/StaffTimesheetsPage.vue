@@ -5,14 +5,17 @@ import { getMySessions, getMyTimesheets } from '@/services/data-queries'
 import type { SessionRow, TimesheetRow } from '@/shared/types/domain'
 import { formatDateTime } from '@/shared/utils/format'
 import { userErrorMessage } from '@/shared/utils/errors'
+import { useToastStore } from '@/stores/toast.store'
+import AppPageHeader from '@/app/components/AppPageHeader.vue'
+import AppState from '@/app/components/AppState.vue'
 
 const sessions = ref<SessionRow[]>([])
+const toast = useToastStore()
 const timesheets = ref<TimesheetRow[]>([])
 const notes = ref<Record<string, string>>({})
 const loading = ref(false)
 const submittingId = ref('')
 const errorMessage = ref('')
-const successMessage = ref('')
 
 const completedSessions = computed(() => sessions.value.filter((session) => session.status === 'COMPLETED'))
 const timesheetBySession = computed(() => new Map(timesheets.value.map((row) => [row.session_id, row])))
@@ -38,14 +41,14 @@ async function load() {
 }
 
 async function submit(session: SessionRow) {
+  if (submittingId.value === session.id) return
   const existing = timesheetBySession.value.get(session.id)
   if (existing && existing.status !== 'REJECTED') return
   submittingId.value = session.id
   errorMessage.value = ''
-  successMessage.value = ''
   try {
     await submitTimesheet({ session_id: session.id, notes: notes.value[session.id]?.trim() || null })
-    successMessage.value = 'Đã gửi chấm công, đang chờ Admin duyệt.'
+    toast.success('Đã gửi chấm công, đang chờ Admin duyệt.')
     await load()
   } catch (error) {
     errorMessage.value = userErrorMessage(error, 'Không thể gửi chấm công.')
@@ -58,14 +61,12 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
-    <div><div class="small text-secondary">Công việc</div><h1 class="h3 mb-0">Chấm công</h1></div>
-    <button class="btn btn-outline-primary" :disabled="loading" @click="load">Làm mới</button>
-  </div>
-  <div v-if="successMessage" class="alert alert-success" role="status">{{ successMessage }}</div>
+  <AppPageHeader title="Chấm công" eyebrow="Công việc" description="Gửi hoặc cập nhật chấm công cho các buổi đã hoàn thành.">
+    <template #actions><button class="btn btn-outline-primary" :disabled="loading" @click="load">Làm mới</button></template>
+  </AppPageHeader>
   <div v-if="errorMessage" class="alert alert-danger" role="alert">{{ errorMessage }}</div>
-  <div v-if="loading" class="text-center text-secondary py-4" role="status">Đang tải buổi học…</div>
-  <div v-else-if="!completedSessions.length" class="card border-0 shadow-sm"><div class="card-body text-center text-secondary py-5">Chưa có buổi học hoàn tất để gửi chấm công.</div></div>
+  <AppState v-if="loading" kind="loading" title="Đang tải buổi học" />
+  <div v-else-if="!completedSessions.length" class="card"><AppState kind="empty" title="Chưa có buổi học hoàn tất" message="Buổi học sẽ xuất hiện tại đây sau khi được hoàn thành." /></div>
   <div v-else class="row g-3">
     <div v-for="session in completedSessions" :key="session.id" class="col-12">
       <article class="card border-0 shadow-sm">

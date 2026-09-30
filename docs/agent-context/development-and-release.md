@@ -1,8 +1,8 @@
 # Phát triển, kiểm tra và phát hành
 
-## Môi trường phát triển
+## Môi trường local
 
-Dự án yêu cầu Node.js 22.x và npm 10 trở lên. Repo dùng npm workspaces; frontend nằm ở frontend/.
+Yêu cầu Node.js 22.x, npm 10 trở lên. Frontend là npm workspace tại frontend/.
 
 - npm install
 - npm run dev
@@ -10,7 +10,7 @@ Dự án yêu cầu Node.js 22.x và npm 10 trở lên. Repo dùng npm workspace
 - npm run test:run
 - npm run build
 
-Các script root chuyển tiếp sang frontend. Build frontend chạy vue-tsc trước Vite. Test hiện dùng Vitest trong jsdom; test nằm cạnh source với hậu tố .test.ts.
+Các script root chuyển tiếp đến frontend; build chạy vue-tsc trước Vite. Vitest dùng jsdom, test đặt cạnh source với hậu tố .test.ts.
 
 Supabase local:
 
@@ -18,37 +18,27 @@ Supabase local:
 - supabase db reset
 - supabase functions serve
 
-Bootstrap ROOT tương tác qua bash scripts/bootstrap-root.sh. Script cần Supabase CLI, Python 3, curl và phiên CLI có quyền trên project; không truyền credential qua tham số command hoặc ghi vào repo.
+Bootstrap ROOT dùng bash scripts/bootstrap-root.sh; cần Supabase CLI, Python 3, curl và phiên CLI phù hợp. Không truyền credential qua command argument hoặc ghi vào repo.
 
 ## Biến môi trường
 
-Frontend:
+Frontend: VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY, VITE_APP_BASE_PATH. frontend/.env.example chỉ là mẫu.
 
-- VITE_SUPABASE_URL
-- VITE_SUPABASE_PUBLISHABLE_KEY
-- VITE_APP_BASE_PATH
+Workflow Supabase dùng SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_REF và SUPABASE_DB_PASSWORD qua GitHub Secrets. Bootstrap dùng CUSTOM_BOOTSTRAP_SECRET phía Supabase. Không đặt secret vào biến VITE_ vì Vite đưa chúng vào bundle công khai.
 
-Tạo giá trị từ môi trường phù hợp. frontend/.env.example là mẫu; không commit file .env hoặc giá trị production.
+## CI và workflow
 
-Workflow Supabase dùng secrets SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_REF và SUPABASE_DB_PASSWORD. Bootstrap dùng CUSTOM_BOOTSTRAP_SECRET phía Supabase. Không đặt những secret này trong biến VITE_ vì Vite đưa biến đó vào bundle công khai.
+- .github/workflows/quality-check.yml chạy Node 22, npm ci, typecheck, test:run, build và quét một số mẫu secret.
+- .github/workflows/deploy-pages.yml build frontend, kiểm tra cấu hình public, rồi deploy GitHub Pages.
+- .github/workflows/deploy-supabase.yml chỉ chạy thủ công (workflow_dispatch), link project, push migration, deploy functions và dọn danh sách function legacy đã khai báo. Không sửa danh sách function xóa nếu chưa xác minh endpoint đang dùng.
+- Workflow có sẵn không đồng nghĩa người dùng đã yêu cầu deploy.
 
-## CI và deploy
+## Phát hành và trạng thái từ xa
 
-- Quality Check chạy khi pull request và khi push lên main. CI cài Node 22, chạy npm ci, typecheck, test:run và build; có bước quét một số mẫu secret.
-- Deploy Frontend build static app, kiểm tra URL/key công khai, đóng gói frontend/dist và deploy GitHub Pages.
-- Deploy Supabase là workflow_dispatch. Workflow link project, chạy supabase db push, deploy Edge Functions, xóa tên các function legacy được liệt kê trong workflow rồi deploy các function cần bỏ qua xác minh JWT. `timesheet-submit` là endpoint hiện hành và không được đưa vào danh sách xóa legacy.
-- Việc workflow có sẵn không đồng nghĩa người dùng đã yêu cầu deploy. Chỉ chạy thao tác production theo yêu cầu hiện tại, sau khi xác minh target, trạng thái migration, kết nối và backup.
+Không lưu trạng thái production, migration đã áp dụng, backup, DNS hoặc credential hiện thời trong context. Báo cáo QA và roadmap là snapshot có ngày, không phải nguồn trạng thái trực tiếp.
 
-## Trạng thái đã ghi nhận (ảnh chụp, không phải trạng thái trực tiếp)
+Khi có yêu cầu vận hành rõ ràng, trước thao tác phải xác minh target từ CLI/config/dịch vụ trực tiếp; kiểm tra migration hiện có, kết nối, backup và quy trình workflow; chỉ tiếp tục trong đúng phạm vi được yêu cầu. Không reset, seed, tạo tài khoản, ghi/xóa dữ liệu, áp migration hoặc deploy production như một phép thử.
 
-- docs/DELIVERY_ROADMAP.md ghi migration 0039 chưa áp dụng production và còn các gate QA dữ liệu/RLS/scheduler, backup và backend.
-- docs/QA_TEST_REPORT_2026-09-28.md ghi lần kiểm tra ngày 2026-09-28: frontend tải được nhưng backend Supabase không phân giải DNS; QA migration/RLS/scheduler và luồng vai trò chưa hoàn tất. Báo cáo cũng ghi kiểm tra frontend từng chạy trên Node 24, trong khi yêu cầu repo và CI là Node 22.
-- docs/IMPLEMENTATION.md vẫn yêu cầu không áp migration production cho đến khi kết nối backend hoạt động và backup được xác nhận.
+## Chọn xác minh theo phạm vi
 
-Các thông tin trên chỉ là mốc theo tài liệu tại ngày ghi. Trước khi chẩn đoán hoặc thay đổi production, kiểm tra lại DNS/kết nối, Secrets, migration đã áp dụng, backup và sự cho phép hiện hành. Không coi lỗi DNS trong báo cáo cũ là nguyên nhân hiện tại nếu chưa xác minh.
-
-## Cách xác minh thay đổi
-
-Với thay đổi frontend, dùng các script hiện có khi phạm vi yêu cầu bao gồm kiểm thử: typecheck, test:run và build. Với migration hoặc Edge Function, kiểm tra local Supabase/Deno theo môi trường sẵn có; kiểm thử quyền bằng dữ liệu synthetic QA-.
-
-Không dùng hồ sơ trong docs/accounts/ hoặc workbook trong docs/data_seed/ làm dữ liệu test. Không áp migration production như một phép xác minh. Báo cáo rõ lệnh đã chạy, kết quả và môi trường Node/CLI thực tế.
+Khi người dùng yêu cầu test/xác minh hoặc task yêu cầu bằng chứng, dùng các script frontend hiện có cho thay đổi frontend. Với migration/Edge Function, dùng Supabase local/Deno/Postgres cô lập sẵn có và fixture tổng hợp QA-. Không dùng docs/accounts/ hoặc docs/data_seed/. Báo cáo rõ lệnh, môi trường và giới hạn; kết quả QA lịch sử không chứng minh hiện trạng.
