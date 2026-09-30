@@ -196,10 +196,11 @@ async function selectSession(session: SessionRow) {
   catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể tải chi tiết buổi học.' }
 }
 
-function openSessionForm(dateKey = todayDateKey.value) {
+function openSessionForm(dateKey?: string) {
+  const selectedDate = dateKey || refreshTodayDateKey()
   sessionForm.value = {
     class_id: selectedClassId.value,
-    date: dateKey,
+    date: selectedDate,
     start_time: '17:30',
     end_time: '19:30',
     staff_ids: [],

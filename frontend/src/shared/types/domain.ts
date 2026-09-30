@@ -14,6 +14,7 @@ export interface Profile {
 
 export type SessionStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
 export type AttendanceStatus = 'PRESENT' | 'LATE' | 'ABSENT' | 'EXCUSED'
+export type TimesheetStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
 
 export interface ClassDetailRow {
   id: string
@@ -114,4 +115,24 @@ export interface StudentHistoryRow {
   classes?: { code: string; name: string } | null
   attendance?: AttendanceHistoryRow | null
   teachers: string[]
+}
+
+export interface TimesheetRow {
+  id: string
+  session_id: string
+  staff_id: string
+  status: TimesheetStatus
+  submitted_at: string
+  approved_at: string | null
+  approved_by: string | null
+  rejection_reason: string | null
+  notes: string | null
+  sessions?: {
+    id: string
+    scheduled_start_at: string
+    scheduled_end_at: string
+    status: SessionStatus
+    classes?: { name: string } | null
+  } | null
+  staff?: { id: string; staff_code: string | null; full_name: string } | null
 }

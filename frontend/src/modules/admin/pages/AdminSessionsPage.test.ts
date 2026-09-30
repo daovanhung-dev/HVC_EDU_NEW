@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionRow } from '@/shared/types/domain'
-import { addCalendarDays, formatBusinessMonth, getBusinessDateKey, shiftCalendarMonth } from '@/shared/utils/session-calendar'
+import { addCalendarDays, formatBusinessDate, formatBusinessMonth, getBusinessDateKey, shiftCalendarMonth } from '@/shared/utils/session-calendar'
 import AdminSessionsPage from './AdminSessionsPage.vue'
 
 const mockState = vi.hoisted(() => ({
@@ -78,7 +78,7 @@ async function clickButtonWithText(wrapper: ReturnType<typeof mount>, text: stri
 }
 
 describe('AdminSessionsPage calendar', () => {
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers() })
 
   beforeEach(() => {
     mockState.route.query.class_id = ''
@@ -146,6 +146,20 @@ describe('AdminSessionsPage calendar', () => {
     expect(mockState.getSessionStudents).toHaveBeenCalledWith(session.id)
     expect(wrapper.findAll('h2').at(-1)?.text()).toBe('Lớp Toán QA')
     expect(wrapper.text()).not.toContain('QA-CLASS-1')
+  })
+
+  it('refreshes the default date when opening the form and preserves a calendar date', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-08-31T12:00:00+07:00'))
+    const wrapper = mountPage()
+    await flushPromises()
+
+    vi.setSystemTime(new Date('2026-09-01T12:00:00+07:00'))
+    await clickButtonWithText(wrapper, 'Thêm buổi')
+    expect((wrapper.get('input[type="date"]').element as HTMLInputElement).value).toBe('2026-09-01')
+
+    await wrapper.get(`button[aria-label="Thêm buổi ngày ${formatBusinessDate('2026-09-03')}"]`).trigger('click')
+    expect((wrapper.get('input[type="date"]').element as HTMLInputElement).value).toBe('2026-09-03')
   })
 
   it('reschedules and cancels a selected future session through the existing admin command', async () => {

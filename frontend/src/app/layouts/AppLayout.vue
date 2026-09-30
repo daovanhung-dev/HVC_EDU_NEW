@@ -13,6 +13,7 @@ const links = computed(() => {
   ]
   if (auth.isTeacher) return [
     { to: '/staff/sessions', label: 'Buổi học', icon: '▣' },
+    { to: '/staff/timesheets', label: 'Chấm công', icon: '✓' },
     { to: '/staff/profile', label: 'Thông tin cá nhân', icon: '◌' },
   ]
   return [
@@ -20,6 +21,7 @@ const links = computed(() => {
     { to: '/admin/staff', label: 'Nhân sự', icon: '◌' },
     { to: '/admin/classes', label: 'Lớp học và lịch', icon: '▤' },
     { to: '/admin/sessions', label: 'Buổi học', icon: '▣' },
+    { to: '/admin/timesheets', label: 'Duyệt công', icon: '✓' },
   ]
 })
 

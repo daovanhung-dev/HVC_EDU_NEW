@@ -6,7 +6,7 @@
 |---|---|
 | ROOT_ADMIN | Dùng giao diện Admin; quản lý hoạt động của trung tâm và tài khoản quản trị. |
 | ADMIN | Quản lý học sinh, giáo viên, lớp, lịch lặp và buổi học. |
-| TEACHER | Xem các buổi được phân công, bắt đầu buổi, ghi nhận việc học, hoàn thành buổi và sửa thông tin liên hệ cá nhân. |
+| TEACHER | Xem các buổi được phân công, bắt đầu buổi, ghi nhận việc học, hoàn thành buổi, gửi chấm công cho buổi đã hoàn tất và sửa thông tin liên hệ cá nhân. |
 | STUDENT | Xem lịch và hồ sơ học tập thuộc tài khoản học sinh của mình. Phụ huynh dùng chung thông tin đăng nhập với học sinh. |
 
 ASSISTANT là vai trò lịch sử; migration 0039 đổi hồ sơ và phân công hiện có sang TEACHER, giữ nguyên user id và lịch sử. PARENT là vai trò lịch sử; migration 0038 chặn quyền xem dữ liệu học sinh, còn các profile/link lịch sử được giữ lại.
@@ -41,6 +41,13 @@ Trạng thái điểm danh: PRESENT, LATE, ABSENT, EXCUSED. Các đánh giá hi�
 
 Học sinh xem lịch và lịch sử của mình; kết quả học tập chỉ được đọc sau khi buổi hoàn tất theo chính sách dữ liệu. Không dùng route hay bộ lọc giao diện làm căn cứ bảo mật.
 
+## Chấm công theo buổi
+
+- Chỉ giáo viên được phân công cho buổi COMPLETED mới gửi yêu cầu chấm công; mỗi giáo viên/buổi chỉ có một yêu cầu đang chờ hoặc đã duyệt.
+- Giáo viên chỉ xem yêu cầu gắn với hồ sơ nhân sự của mình. Admin xem danh sách yêu cầu và duyệt hoặc từ chối; từ chối phải có lý do.
+- Giáo viên có thể gửi lại yêu cầu sau khi bị từ chối; yêu cầu đã duyệt không thể gửi lại.
+- Đây là xác nhận công dạy theo buổi, không ghi giờ vào/ra, không tính payroll và không khôi phục nghiệp vụ tài chính cũ.
+
 ## Ngoài phạm vi ứng dụng hiện hành
 
-Không tạo tháng vận hành mới và không đưa UI/API cho học phí, payroll, accounting, timesheet, báo cáo/xuất file, dashboard thống kê, notification hoặc permission group động vào app chỉ vì chúng còn trong tài liệu/database lịch sử.
+Không tạo tháng vận hành mới và không đưa UI/API cho học phí, payroll, accounting, báo cáo/xuất file, dashboard thống kê, notification hoặc permission group động vào app chỉ vì chúng còn trong tài liệu/database lịch sử. Chỉ luồng chấm công theo buổi mô tả ở trên thuộc phạm vi hiện hành.

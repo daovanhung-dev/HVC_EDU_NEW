@@ -23,6 +23,14 @@ export function completeSession(session_id: string) {
   return invokeFunction<{ session_id: string }, unknown>('session-complete', { session_id })
 }
 
+export function submitTimesheet(input: { session_id: string; notes?: string | null }) {
+  return invokeFunction<typeof input, { timesheet_id: string; status: 'PENDING' }>('timesheet-submit', input)
+}
+
+export function reviewTimesheet(input: { timesheet_id: string; approve: boolean; reason?: string | null }) {
+  return invokeFunction<typeof input, { timesheet_id: string; status: 'APPROVED' | 'REJECTED' }>('timesheet-review', input)
+}
+
 export function startSession(session_id: string) {
   return invokeFunction<{ session_id: string }, unknown>('session-start', { session_id })
 }

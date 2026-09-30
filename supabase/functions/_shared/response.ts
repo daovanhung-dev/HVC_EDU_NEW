@@ -52,7 +52,9 @@ const knownCodes = [
   "FORBIDDEN",
   "SESSION_NOT_COMPLETEABLE",
   "SESSION_NOT_FOUND",
+  "SESSION_NOT_COMPLETED",
   "SESSION_NOT_IN_PROGRESS",
+  "SESSION_STAFF_REQUIRED",
   "SESSION_TEACHER_REQUIRED",
   "CLASS_MONTH_NOT_FOUND",
   "CLASS_MONTH_NOT_DRAFT",
@@ -99,6 +101,10 @@ const knownCodes = [
   "INVALID_ATTITUDE_SCORE",
   "CLASS_MONTH_ALREADY_EXISTS",
   "INVALID_CLASS_MONTH",
+  "TIMESHEET_NOT_FOUND",
+  "TIMESHEET_ALREADY_SUBMITTED",
+  "TIMESHEET_NOT_PENDING",
+  "REJECTION_REASON_REQUIRED",
 ];
 
 const publicMessages: Record<string, string> = {
@@ -118,6 +124,12 @@ const publicMessages: Record<string, string> = {
     "Tạo tài khoản thất bại và cần được kiểm tra để hoàn tất khôi phục dữ liệu.",
   ACCOUNT_INACTIVE: "Tài khoản không ở trạng thái ACTIVE.",
   PARENT_LOGIN_DISABLED: "Đăng nhập phụ huynh đã ngừng hỗ trợ. Vui lòng dùng tài khoản học sinh của con.",
+  SESSION_NOT_COMPLETED: "Chỉ có thể gửi chấm công sau khi buổi học hoàn thành.",
+  SESSION_STAFF_REQUIRED: "Bạn không được phân công cho buổi học này.",
+  TIMESHEET_NOT_FOUND: "Không tìm thấy bản ghi chấm công.",
+  TIMESHEET_ALREADY_SUBMITTED: "Buổi học này đã được gửi chấm công.",
+  TIMESHEET_NOT_PENDING: "Yêu cầu chấm công này đã được xử lý.",
+  REJECTION_REASON_REQUIRED: "Nhập lý do trước khi từ chối chấm công.",
 };
 
 function asErrorLike(error: unknown): ErrorLike {

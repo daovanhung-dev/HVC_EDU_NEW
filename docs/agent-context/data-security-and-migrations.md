@@ -23,6 +23,7 @@ Migration theo thứ tự số trong supabase/migrations. Các thay đổi lớn
 - 0039 tạo lịch lặp, mapping giáo viên theo lịch, gắn session với lớp, chuyển ASSISTANT sang TEACHER, siết quyền database và thêm hàm vận hành liên tục.
 - 0040 thay các policy đọc chéo bảng bằng helper `SECURITY DEFINER` có `search_path` cố định để tránh vòng lặp RLS; kiểm thử vai trò nằm trong `supabase/tests/continuous_learning_rls.test.sql`.
 - 0041 bổ sung cờ nhận diện buổi tạo thủ công và ngoại lệ phân công giáo viên; thêm các RPC Admin để tạo buổi, áp dụng tuần mẫu vào tháng và đổi giáo viên cho một buổi. RPC kiểm tra quyền, roster theo ngày, xung đột lịch và ghi audit. Generator giữ nguyên buổi thủ công/ngoại lệ giáo viên; lưu trữ lịch lặp hủy buổi tương lai còn SCHEDULED mà không xóa lịch sử. Fixture kiểm thử tổng hợp nằm ở `supabase/tests/admin_monthly_session_planning.test.sql`.
+- 0042 mở lại riêng chấm công theo buổi đã hoàn tất: giáo viên được phân công gửi yêu cầu, Admin duyệt/từ chối kèm lý do, giáo viên chỉ đọc yêu cầu của mình và có thể gửi lại sau khi bị từ chối. RPC chỉ cho service role gọi; Edge Function xác thực vai trò trước khi gọi. Fixture tổng hợp nằm ở `supabase/tests/timesheet_workflow.test.sql`. Migration này không mở payroll, học phí hoặc kế toán.
 
 Các migration cũ hơn tạo schema nền, enums, auth/profile, RBAC, hồ sơ, lớp/tháng, buổi, điểm danh, tài chính, hàm, RLS, index và các lần hardening. Đọc migration cụ thể trước khi sửa để hiểu dữ liệu lịch sử và ràng buộc tương thích.
 
@@ -32,6 +33,7 @@ Khi đổi schema, thêm migration mới kế tiếp số hiện có. Không s�
 
 - RLS là lớp bắt buộc cho bảng được truy cập từ frontend. Quyền Admin, giáo viên được phân công và học sinh chủ sở hữu được đánh giá trong PostgreSQL.
 - Các RPC lịch của migration 0041 là đường ghi cho thao tác tạo/copy buổi và đổi giáo viên; không cấp quyền ghi trực tiếp mới vào bảng sessions/session_staff cho frontend. Phân công giáo viên của từng buổi tiếp tục là căn cứ database cho quyền thao tác học tập.
+- Bảng `timesheets` chỉ đọc qua RLS: Admin xem hàng đợi, giáo viên chỉ xem yêu cầu thuộc hồ sơ của mình. Không cấp INSERT/UPDATE/DELETE trực tiếp cho authenticated; Edge Function kiểm tra TEACHER được phân công hoặc ADMIN trước khi gọi RPC service-only.
 - Giáo viên chỉ truy cập những buổi/lớp được phân công và được phép chỉnh sửa dữ liệu học tập trong luồng được giao.
 - Học sinh chỉ đọc hồ sơ, lịch và kết quả của mình; kết quả bị giới hạn theo trạng thái hoàn tất của buổi.
 - Các Edge Function xác thực JWT/profile đang hoạt động qua helper requireCaller. Tác vụ cần đặc quyền dùng server-side secret và phải xác nhận vai trò/quyền ở server hoặc RPC.

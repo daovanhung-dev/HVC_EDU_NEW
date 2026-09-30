@@ -39,3 +39,26 @@ Bài kiểm tra PostgreSQL cô lập dùng schema-shaped fixture và assertion s
 ## Việc cần xác minh trước E2E
 
 Để hoàn tất kiểm thử ghi trên project production, cần xác nhận gửi riêng từng form tạo tài khoản QA ngay trước khi gửi. Sau khi các tài khoản tổng hợp được tạo, tiếp tục ma trận admin/teacher/student bằng dữ liệu `QA-`; không reset database, không xóa dữ liệu học tập đã ghi. Không sử dụng dữ liệu định danh từ `docs/accounts/` hoặc `docs/data_seed/` trong báo cáo.
+
+## Cập nhật bổ sung — 2026-09-30 16:57 ICT
+
+- Đọc hai tài liệu tài khoản local-only theo yêu cầu; nội dung, thông tin đăng nhập và hồ sơ không được sao chép vào báo cáo. Chưa dùng chúng để đăng nhập vai trò khác.
+- Chrome xác nhận trước đó request buổi học lỗi với PostgreSQL `42703`, thiếu `sessions.manual_schedule`. Sau khi áp dụng migration và tải lại trang, thông báo lỗi tải buổi học không còn xuất hiện. Không tạo hay sửa bản ghi nghiệp vụ trong lần kiểm tra này.
+- Trước khi ghi, CLI xác nhận project `dtftytlyaqmxjgynicqs` đang hoạt động; migration list ghi nhận `0001–0040` đã áp dụng. Dry-run chỉ liệt kê `0041_admin_monthly_session_planning.sql` và `0042_restore_session_timesheets.sql`.
+- `supabase db push --linked --yes` đã áp dụng đúng `0041–0042`, không reset và không chạy seed. Migration list sau đó xác nhận `0001–0042` đã áp dụng.
+- Đã triển khai riêng Edge Functions `timesheet-submit` và `timesheet-review`; danh sách function sau triển khai hiển thị cả hai ACTIVE với xác minh JWT bật. Workflow Supabase cũng được cập nhật để không xóa endpoint `timesheet-submit` đã phục hồi.
+- Đã sửa ở source việc làm mới ngày mặc định khi mở form buổi; chọn ngày cụ thể trên lịch vẫn được giữ. Thêm hai màn hình chấm công, RLS/RPC giới hạn giáo viên theo buổi được phân công và Admin theo vai trò, cùng kiểm thử hồi quy.
+
+| Kiểm tra local | Kết quả |
+|---|---|
+| Node.js 22.23.3 — `npm run typecheck` | Đạt |
+| `npm run test:run` | Đạt, 39/39 test |
+| `npm run build` | Đạt; Vite có cảnh báo bundle chính lớn hơn 500 kB |
+| `deno check` cho hai Edge Function mới | Đạt |
+| pgTAP trên Supabase local | Chưa chạy: Docker không có và tài khoản PostgreSQL local hiện tại không kết nối được; không chạy pgTAP trên production |
+
+### Phát hành frontend và kiểm thử vai trò
+
+- Thay đổi đã commit cục bộ ở `3a61d31`; push lên GitHub thất bại do terminal không có credential và không có SSH identity. GitHub connector có quyền đọc nhưng thao tác tạo nhánh trả 403. Vì thế GitHub Pages chưa nhận frontend mới; nút điều hướng và màn hình chấm công mới chưa có trên website trực tiếp.
+- Chưa tạo người dùng hoặc dữ liệu QA trên production; chưa đăng nhập Teacher/Student, chưa chấm công/duyệt công và chưa nhập kết quả học tập. Các luồng đó vẫn **chưa kiểm thử**.
+- Chưa tạo backup và không xóa dữ liệu, theo phạm vi người dùng đã chấp nhận. Cần có quyền GitHub ghi để phát hành commit local rồi tiếp tục E2E qua Chrome bằng tài khoản QA và dữ liệu tổng hợp.

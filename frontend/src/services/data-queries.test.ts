@@ -28,7 +28,7 @@ vi.mock('./supabase', () => ({
   },
 }))
 
-import { getClassActiveRosterSize, getMyAttendance, getMySessions, getStudentHistory } from './data-queries'
+import { getClassActiveRosterSize, getMyAttendance, getMySessions, getMyTimesheets, getStudentHistory, getTimesheets } from './data-queries'
 
 const assignedStaffRelation = 'staff!session_staff_staff_id_fkey('
 
@@ -85,5 +85,33 @@ describe('class roster summary query', () => {
 
     const selection = mockState.selections.find((item) => item.table === 'class_memberships')
     expect(selection?.columns).toBe('id')
+  })
+})
+
+describe('timesheet queries', () => {
+  beforeEach(() => {
+    mockState.selections.length = 0
+    mockState.responses = {
+      timesheets: [{
+        id: 'qa-timesheet', session_id: 'qa-session', staff_id: 'qa-teacher', status: 'PENDING',
+        submitted_at: '2026-09-30T10:00:00Z', approved_at: null, approved_by: null,
+        rejection_reason: null, notes: 'QA note',
+        sessions: [{ id: 'qa-session', scheduled_start_at: '2026-09-30T10:00:00Z', scheduled_end_at: '2026-09-30T12:00:00Z', status: 'COMPLETED', classes: [{ name: 'QA class' }] }],
+        staff: [{ id: 'qa-teacher', staff_code: 'QA-T-1', full_name: 'QA Teacher' }],
+      }],
+    }
+  })
+
+  it('loads and normalizes own timesheets using the same RLS-protected table query', async () => {
+    const rows = await getMyTimesheets()
+    expect(rows).toHaveLength(1)
+    expect(rows[0].sessions?.classes?.name).toBe('QA class')
+    expect(rows[0].staff?.full_name).toBe('QA Teacher')
+    expect(mockState.selections.find((item) => item.table === 'timesheets')?.columns).toContain('sessions(')
+  })
+
+  it('loads the admin review queue through the same RLS-protected query', async () => {
+    await expect(getTimesheets()).resolves.toHaveLength(1)
+    expect(mockState.selections.filter((item) => item.table === 'timesheets')).toHaveLength(1)
   })
 })

@@ -25,6 +25,8 @@ const publicMessages: Record<string, string> = {
   SESSION_NOT_COMPLETEABLE: 'Chưa thể hoàn thành vì còn học sinh chưa có điểm danh.',
   TIMESHEET_NOT_FOUND: 'Không tìm thấy bản ghi chấm công.',
   TIMESHEET_ALREADY_SUBMITTED: 'Buổi học này đã được gửi chấm công.',
+  TIMESHEET_NOT_PENDING: 'Yêu cầu chấm công này đã được xử lý.',
+  REJECTION_REASON_REQUIRED: 'Nhập lý do trước khi từ chối chấm công.',
   SESSION_NOT_COMPLETED: 'Chỉ có thể gửi chấm công sau khi buổi học hoàn thành.',
   FEATURE_DISABLED: 'Chức năng này đã được ngừng sử dụng.',
   SESSION_LOCKED: 'Buổi học đã khóa và không thể chỉnh sửa ở vai trò này.',

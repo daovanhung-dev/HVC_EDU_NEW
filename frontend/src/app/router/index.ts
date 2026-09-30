@@ -12,6 +12,8 @@ import SessionsPage from '@/modules/admin/pages/AdminSessionsPage.vue'
 import StaffSessionsPage from '@/modules/staff/pages/SessionsPage.vue'
 import StaffProfilePage from '@/modules/staff/pages/StaffProfilePage.vue'
 import StudentPage from '@/modules/student/pages/StudentPage.vue'
+import StaffTimesheetsPage from '@/modules/staff/pages/StaffTimesheetsPage.vue'
+import AdminTimesheetsPage from '@/modules/admin/pages/AdminTimesheetsPage.vue'
 import { useAuthStore } from '@/stores/auth.store'
 import { useAppErrorStore } from '@/stores/app-error.store'
 
@@ -28,7 +30,9 @@ const router = createRouter({
     { path: '/admin/classes', component: AppLayout, children: [{ path: '', component: ClassesPage, meta: { requiresAuth: true, adminOnly: true } }] },
     { path: '/admin/classes/:classId', component: AppLayout, children: [{ path: '', component: ClassDetailPage, meta: { requiresAuth: true, adminOnly: true } }] },
     { path: '/admin/sessions', component: AppLayout, children: [{ path: '', component: SessionsPage, meta: { requiresAuth: true, adminOnly: true } }] },
+    { path: '/admin/timesheets', component: AppLayout, children: [{ path: '', component: AdminTimesheetsPage, meta: { requiresAuth: true, adminOnly: true } }] },
     { path: '/staff/sessions', component: AppLayout, children: [{ path: '', component: StaffSessionsPage, meta: { requiresAuth: true, staffOnly: true } }] },
+    { path: '/staff/timesheets', component: AppLayout, children: [{ path: '', component: StaffTimesheetsPage, meta: { requiresAuth: true, staffOnly: true } }] },
     { path: '/staff/profile', component: AppLayout, children: [{ path: '', component: StaffProfilePage, meta: { requiresAuth: true, staffOnly: true } }] },
     { path: '/student/:module(schedule|attendance)', component: AppLayout, children: [{ path: '', component: StudentPage, meta: { requiresAuth: true, learnerOnly: true } }] },
     { path: '/:pathMatch(.*)*', redirect: '/' },

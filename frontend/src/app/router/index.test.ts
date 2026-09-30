@@ -48,6 +48,8 @@ describe('authentication route guard', () => {
     mocks.profileRows.push(profile('TEACHER'))
     await router.push('/staff/profile?case=teacher')
     expect(router.currentRoute.value.path).toBe('/staff/profile')
+    await router.push('/staff/timesheets?case=teacher')
+    expect(router.currentRoute.value.path).toBe('/staff/timesheets')
     await router.push('/admin/classes?case=teacher')
     expect(router.currentRoute.value.path).toBe('/staff/sessions')
   })
@@ -55,6 +57,8 @@ describe('authentication route guard', () => {
   it('allows students to use their own learning portal and blocks admin routes', async () => {
     mocks.profileRows.push(profile('STUDENT'))
     await router.push('/student/schedule?case=student')
+    expect(router.currentRoute.value.path).toBe('/student/schedule')
+    await router.push('/staff/timesheets?case=student')
     expect(router.currentRoute.value.path).toBe('/student/schedule')
     await router.push('/admin/classes?case=student')
     expect(router.currentRoute.value.path).toBe('/student/schedule')
@@ -76,7 +80,8 @@ describe('authentication route guard', () => {
   it('registers continuous class and student profile routes, not retired modules', () => {
     expect(router.resolve('/admin/classes/class-1').matched.some((record) => record.path === '/admin/classes/:classId')).toBe(true)
     expect(router.resolve('/admin/students/student-1').matched.some((record) => record.path === '/admin/students/:studentId')).toBe(true)
+    expect(router.resolve('/admin/timesheets').matched.some((record) => record.path === '/admin/timesheets')).toBe(true)
+    expect(router.resolve('/staff/timesheets').matched.some((record) => record.path === '/staff/timesheets')).toBe(true)
     expect(router.resolve('/admin/class-months').matched.some((record) => record.path === '/admin/class-months')).toBe(false)
-    expect(router.resolve('/staff/timesheets').matched.some((record) => record.path === '/staff/timesheets')).toBe(false)
   })
 })

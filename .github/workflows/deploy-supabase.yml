@@ -38,7 +38,7 @@ jobs:
             class-month-activate class-month-copy \
             payroll-adjustment payroll-calculate payroll-confirm payroll-pay payroll-period-create \
             report-export session-reopen session-replace-staff \
-            timesheet-approve timesheet-submit tuition-confirm-paid; do
+            timesheet-approve tuition-confirm-paid; do
             if printf '%s' "$deployed" | jq -e --arg name "$function_name" 'any(.[]; .name == $name)' >/dev/null; then
               supabase functions delete "$function_name" --project-ref "$SUPABASE_PROJECT_REF" --yes
             fi

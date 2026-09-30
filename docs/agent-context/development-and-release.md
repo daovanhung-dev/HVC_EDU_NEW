@@ -36,7 +36,7 @@ Workflow Supabase dùng secrets SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_REF và 
 
 - Quality Check chạy khi pull request và khi push lên main. CI cài Node 22, chạy npm ci, typecheck, test:run và build; có bước quét một số mẫu secret.
 - Deploy Frontend build static app, kiểm tra URL/key công khai, đóng gói frontend/dist và deploy GitHub Pages.
-- Deploy Supabase là workflow_dispatch. Workflow link project, chạy supabase db push, deploy Edge Functions, xóa tên các function legacy được liệt kê trong workflow rồi deploy các function cần bỏ qua xác minh JWT.
+- Deploy Supabase là workflow_dispatch. Workflow link project, chạy supabase db push, deploy Edge Functions, xóa tên các function legacy được liệt kê trong workflow rồi deploy các function cần bỏ qua xác minh JWT. `timesheet-submit` là endpoint hiện hành và không được đưa vào danh sách xóa legacy.
 - Việc workflow có sẵn không đồng nghĩa người dùng đã yêu cầu deploy. Chỉ chạy thao tác production theo yêu cầu hiện tại, sau khi xác minh target, trạng thái migration, kết nối và backup.
 
 ## Trạng thái đã ghi nhận (ảnh chụp, không phải trạng thái trực tiếp)
