@@ -1,48 +1,74 @@
-import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionRow } from '@/shared/types/domain'
-import { formatBusinessMonth, getBusinessDateKey, shiftCalendarMonth } from '@/shared/utils/session-calendar'
+import { addCalendarDays, formatBusinessMonth, getBusinessDateKey, shiftCalendarMonth } from '@/shared/utils/session-calendar'
 import AdminSessionsPage from './AdminSessionsPage.vue'
 
 const mockState = vi.hoisted(() => ({
+  route: { query: { class_id: '' } },
   getMySessions: vi.fn(),
   getSessionStudents: vi.fn(),
+  getClasses: vi.fn(),
+  getStaff: vi.fn(),
+  getClassSchedules: vi.fn(),
+  getClassActiveRosterSize: vi.fn(),
   updateSessionOccurrence: vi.fn(),
+  createManualSession: vi.fn(),
+  applyWeekToMonth: vi.fn(),
+  updateSessionTeachers: vi.fn(),
+  addTeacherToClassSchedule: vi.fn(),
+  createClassSchedule: vi.fn(),
+  removeTeacherFromClassSchedule: vi.fn(),
+  setClassScheduleStatus: vi.fn(),
+  updateClassSchedule: vi.fn(),
 }))
 
 vi.mock('@/services/data-queries', () => ({
   getMySessions: mockState.getMySessions,
   getSessionStudents: mockState.getSessionStudents,
+  getClasses: mockState.getClasses,
+  getStaff: mockState.getStaff,
+  getClassSchedules: mockState.getClassSchedules,
+  getClassActiveRosterSize: mockState.getClassActiveRosterSize,
 }))
 
 vi.mock('@/services/commands', () => ({
   updateSessionOccurrence: mockState.updateSessionOccurrence,
+  createManualSession: mockState.createManualSession,
+  applyWeekToMonth: mockState.applyWeekToMonth,
+  updateSessionTeachers: mockState.updateSessionTeachers,
+  addTeacherToClassSchedule: mockState.addTeacherToClassSchedule,
+  createClassSchedule: mockState.createClassSchedule,
+  removeTeacherFromClassSchedule: mockState.removeTeacherFromClassSchedule,
+  setClassScheduleStatus: mockState.setClassScheduleStatus,
+  updateClassSchedule: mockState.updateClassSchedule,
 }))
+
+vi.mock('vue-router', () => ({ useRoute: () => mockState.route }))
 
 function makeSession(
   id = 'qa-session-1',
   className = 'Lớp Toán QA',
   start = '10:00',
   end = '12:00',
+  date = getBusinessDateKey(new Date()),
+  staffIds: string[] = [],
 ): SessionRow {
-  const businessDate = getBusinessDateKey(new Date())
   return {
     id,
     class_id: 'qa-class-1',
-    scheduled_start_at: `${businessDate}T${start}:00+07:00`,
-    scheduled_end_at: `${businessDate}T${end}:00+07:00`,
+    scheduled_start_at: `${date}T${start}:00+07:00`,
+    scheduled_end_at: `${date}T${end}:00+07:00`,
     status: 'SCHEDULED',
     session_note: null,
     classes: { id: 'qa-class-1', name: className },
-    session_staff: [],
+    session_staff: staffIds.map((staff_id) => ({ staff_id, assignment_role: 'TEACHER', staff: { id: staff_id, full_name: 'Giáo viên QA' } })),
     session_students: [],
   }
 }
 
 function mountPage() {
-  return mount(AdminSessionsPage, {
-    global: { stubs: { RouterLink: RouterLinkStub } },
-  })
+  return mount(AdminSessionsPage)
 }
 
 async function clickButtonWithText(wrapper: ReturnType<typeof mount>, text: string) {
@@ -52,10 +78,28 @@ async function clickButtonWithText(wrapper: ReturnType<typeof mount>, text: stri
 }
 
 describe('AdminSessionsPage calendar', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
   beforeEach(() => {
+    mockState.route.query.class_id = ''
     mockState.getMySessions.mockReset().mockResolvedValue([])
     mockState.getSessionStudents.mockReset().mockResolvedValue([])
+    mockState.getClasses.mockReset().mockResolvedValue([{ id: 'qa-class-1', code: 'QA-CODE-1', name: 'Lớp Toán QA', status: 'ACTIVE' }])
+    mockState.getStaff.mockReset().mockResolvedValue([
+      { id: 'qa-teacher-1', full_name: 'Giáo viên QA 1', status: 'ACTIVE' },
+      { id: 'qa-teacher-2', full_name: 'Giáo viên QA 2', status: 'ACTIVE' },
+    ])
+    mockState.getClassSchedules.mockReset().mockResolvedValue([])
+    mockState.getClassActiveRosterSize.mockReset().mockResolvedValue(0)
     mockState.updateSessionOccurrence.mockReset().mockResolvedValue(undefined)
+    mockState.createManualSession.mockReset().mockResolvedValue({ session_id: 'qa-new-session' })
+    mockState.applyWeekToMonth.mockReset().mockResolvedValue({ created: 4 })
+    mockState.updateSessionTeachers.mockReset().mockResolvedValue({})
+    mockState.addTeacherToClassSchedule.mockReset().mockResolvedValue({})
+    mockState.createClassSchedule.mockReset().mockResolvedValue({ id: 'qa-schedule' })
+    mockState.removeTeacherFromClassSchedule.mockReset().mockResolvedValue(undefined)
+    mockState.setClassScheduleStatus.mockReset().mockResolvedValue({})
+    mockState.updateClassSchedule.mockReset().mockResolvedValue({})
   })
 
   it('defaults to month view and supports month, week, and list modes', async () => {
@@ -84,6 +128,7 @@ describe('AdminSessionsPage calendar', () => {
     await clickButtonWithText(wrapper, 'Danh sách')
     expect(wrapper.find('.session-list').text()).toContain('Lớp Toán QA')
     expect(wrapper.find('.session-list').text()).toContain('Lớp Lý QA')
+    expect(wrapper.find('thead').text()).toContain('Thời gian')
     expect(wrapper.find('.calendar-grid').exists()).toBe(false)
     expect(previousMonth).toMatch(/^\d{4}-\d{2}-01$/)
   })
@@ -103,6 +148,40 @@ describe('AdminSessionsPage calendar', () => {
     expect(wrapper.text()).not.toContain('QA-CLASS-1')
   })
 
+  it('reschedules and cancels a selected future session through the existing admin command', async () => {
+    const session = makeSession('qa-session-edit', 'Lớp Lịch QA', '10:00', '12:00', addCalendarDays(getBusinessDateKey(new Date()), 1))
+    mockState.getMySessions.mockResolvedValue([session])
+    const wrapper = mountPage()
+    await flushPromises()
+    await wrapper.get('.calendar-event').trigger('click')
+    await flushPromises()
+
+    await clickButtonWithText(wrapper, 'Lưu lịch mới')
+    expect(mockState.updateSessionOccurrence).toHaveBeenCalledWith(expect.objectContaining({ session_id: session.id, start: expect.any(String), end: expect.any(String) }))
+
+    vi.stubGlobal('confirm', vi.fn(() => true))
+    await clickButtonWithText(wrapper, 'Hủy buổi học')
+    expect(mockState.updateSessionOccurrence).toHaveBeenLastCalledWith({ session_id: session.id, cancel: true })
+  })
+
+  it('applies future sessions from the visible week to the month in view', async () => {
+    const today = getBusinessDateKey(new Date())
+    const session = makeSession('qa-week-template', 'Lớp Mẫu QA', '17:30', '19:30', addCalendarDays(today, 1), ['qa-teacher-1'])
+    mockState.getMySessions.mockResolvedValue([session])
+    const wrapper = mountPage()
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Tuần')
+
+    vi.stubGlobal('confirm', vi.fn(() => true))
+    await clickButtonWithText(wrapper, 'Áp dụng tuần này cho tháng')
+    await flushPromises()
+
+    expect(mockState.applyWeekToMonth).toHaveBeenCalledWith({
+      source_session_ids: [session.id],
+      month_start: `${today.slice(0, 7)}-01`,
+    })
+  })
+
   it('shows the empty state and reports load errors without claiming there are no sessions', async () => {
     mockState.getMySessions.mockResolvedValue([])
     const emptyPage = mountPage()
@@ -120,11 +199,51 @@ describe('AdminSessionsPage calendar', () => {
     expect(failedPage.find('.session-list').text()).not.toContain('Chưa có buổi học.')
   })
 
-  it('links admins to class scheduling', () => {
+  it('opens integrated schedule management from the Buổi học page', async () => {
     const wrapper = mountPage()
-    const scheduleLink = wrapper.findComponent(RouterLinkStub)
-    expect(scheduleLink.exists()).toBe(true)
-    expect(scheduleLink.props('to')).toBe('/admin/classes')
-    expect(scheduleLink.text()).toBe('Xếp lịch lớp')
+    await clickButtonWithText(wrapper, 'Chỉnh sửa lịch')
+    expect(wrapper.text()).toContain('Khung lịch cố định')
+    expect(wrapper.text()).toContain('Chọn một lớp ở bộ lọc để quản lý lịch cố định.')
+  })
+
+  it('creates a fixed weekly schedule and assigns its default teacher', async () => {
+    mockState.route.query.class_id = 'qa-class-1'
+    const wrapper = mountPage()
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Chỉnh sửa lịch')
+    await wrapper.findAll('.schedule-editor-form select').at(-1)?.setValue('qa-teacher-1')
+    await wrapper.get('.schedule-editor-form').trigger('submit')
+    await flushPromises()
+
+    expect(mockState.createClassSchedule).toHaveBeenCalledWith({
+      class_id: 'qa-class-1', day_of_week: 1, start_time: '17:30', end_time: '19:30', room: null,
+    })
+    expect(mockState.addTeacherToClassSchedule).toHaveBeenCalledWith('qa-schedule', 'qa-teacher-1')
+  })
+
+  it('creates a date-specific session and preselects the fixed teacher for a matching slot', async () => {
+    const date = getBusinessDateKey(new Date())
+    const weekday = new Date(`${date}T12:00:00Z`).getUTCDay() || 7
+    mockState.getClassSchedules.mockResolvedValue([{
+      id: 'qa-fixed-slot', class_id: 'qa-class-1', day_of_week: weekday,
+      start_time: '17:30:00', end_time: '19:30:00', room: null, status: 'ACTIVE', reviewed_at: null,
+      class_schedule_staff: [{ staff_id: 'qa-teacher-1', staff: { id: 'qa-teacher-1', full_name: 'Giáo viên QA 1' } }],
+    }])
+    const wrapper = mountPage()
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Thêm buổi')
+    await wrapper.get('.session-create-form select').setValue('qa-class-1')
+    await flushPromises()
+
+    expect((wrapper.get('select[multiple]').element as HTMLSelectElement).selectedOptions[0]?.value).toBe('qa-teacher-1')
+    await wrapper.get('.session-create-form').trigger('submit')
+    await flushPromises()
+
+    expect(mockState.createManualSession).toHaveBeenCalledWith({
+      class_id: 'qa-class-1',
+      start: new Date(`${date}T17:30:00+07:00`).toISOString(),
+      end: new Date(`${date}T19:30:00+07:00`).toISOString(),
+      staff_ids: ['qa-teacher-1'],
+    })
   })
 })

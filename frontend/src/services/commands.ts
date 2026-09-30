@@ -168,3 +168,37 @@ export async function updateSessionOccurrence(input: { session_id: string; start
   if (error) throw error
   return data
 }
+
+export async function createManualSession(input: {
+  class_id: string
+  start: string
+  end: string
+  staff_ids: string[]
+}) {
+  const { data, error } = await supabase.rpc('admin_create_session', {
+    p_class_id: input.class_id,
+    p_scheduled_start_at: input.start,
+    p_scheduled_end_at: input.end,
+    p_staff_ids: input.staff_ids,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function applyWeekToMonth(input: { source_session_ids: string[]; month_start: string }) {
+  const { data, error } = await supabase.rpc('admin_apply_week_to_month', {
+    p_source_session_ids: input.source_session_ids,
+    p_month_start: input.month_start,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function updateSessionTeachers(input: { session_id: string; staff_ids: string[] }) {
+  const { data, error } = await supabase.rpc('admin_update_session_teachers', {
+    p_session_id: input.session_id,
+    p_staff_ids: input.staff_ids,
+  })
+  if (error) throw error
+  return data
+}

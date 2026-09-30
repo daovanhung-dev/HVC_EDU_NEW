@@ -51,13 +51,19 @@ export async function getClassActiveMemberships(classId: string): Promise<ClassM
   return rows.map((row) => ({ ...row, students: oneRelation(row.students) }) as ClassMembershipDetailRow)
 }
 
+export async function getClassActiveRosterSize(classId: string): Promise<number> {
+  const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date())
+  const rows = await unwrap<Array<{ id: string }>>(supabase.from('class_memberships').select('id').eq('class_id', classId).eq('status', 'ACTIVE').lte('start_date', today).or(`end_date.is.null,end_date.gte.${today}`).limit(1))
+  return rows.length
+}
+
 export async function getClassSchedules(classId: string): Promise<ClassScheduleRow[]> {
   const rows = await unwrap<any[]>(supabase.from('class_schedules').select('id,class_id,day_of_week,start_time,end_time,room,status,reviewed_at,class_schedule_staff(staff_id,staff(id,staff_code,full_name))').eq('class_id', classId).order('day_of_week').order('start_time'))
   return rows.map((row) => ({ ...row, class_schedule_staff: (row.class_schedule_staff || []).map((item: any) => ({ ...item, staff: oneRelation(item.staff) })) })) as ClassScheduleRow[]
 }
 
 export function getMySessions() {
-  return unwrap<SessionRow[]>(supabase.from('sessions').select('id,class_id,recurrence_schedule_id,recurrence_occurrence_date,scheduled_start_at,scheduled_end_at,status,session_note,schedule_override,classes(id,name),class_schedules(room),session_students(student_id,students(id,student_code,full_name)),session_staff(staff_id,assignment_role,staff!session_staff_staff_id_fkey(id,staff_code,full_name))').order('scheduled_start_at', { ascending: false }))
+  return unwrap<SessionRow[]>(supabase.from('sessions').select('id,class_id,recurrence_schedule_id,recurrence_occurrence_date,scheduled_start_at,scheduled_end_at,status,session_note,schedule_override,manual_schedule,staff_assignment_override,classes(id,name),class_schedules(room),session_students(student_id,students(id,student_code,full_name)),session_staff(staff_id,assignment_role,staff!session_staff_staff_id_fkey(id,staff_code,full_name))').order('scheduled_start_at', { ascending: false }))
 }
 
 export async function getMyStaff() {

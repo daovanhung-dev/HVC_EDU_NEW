@@ -14,8 +14,10 @@ vi.mock('./supabase', () => ({
           return query
         },
         eq() { return query },
+        lte() { return query },
         or() { return query },
         order() { return query },
+        limit() { return query },
         maybeSingle() { return query },
         then(resolve: (value: { data: unknown; error: null }) => unknown, reject?: (reason: unknown) => unknown) {
           return Promise.resolve({ data: mockState.responses[table] ?? [], error: null }).then(resolve, reject)
@@ -26,7 +28,7 @@ vi.mock('./supabase', () => ({
   },
 }))
 
-import { getMyAttendance, getMySessions, getStudentHistory } from './data-queries'
+import { getClassActiveRosterSize, getMyAttendance, getMySessions, getStudentHistory } from './data-queries'
 
 const assignedStaffRelation = 'staff!session_staff_staff_id_fkey('
 
@@ -69,5 +71,19 @@ describe('session staff PostgREST relations', () => {
 
     const selection = mockState.selections.find((item) => item.table === 'sessions')
     expect(selection?.columns).toContain(assignedStaffRelation)
+  })
+})
+
+describe('class roster summary query', () => {
+  beforeEach(() => {
+    mockState.selections.length = 0
+    mockState.responses = { class_memberships: [{ id: 'qa-membership' }] }
+  })
+
+  it('checks for an active roster without fetching student profile fields', async () => {
+    await expect(getClassActiveRosterSize('qa-class')).resolves.toBe(1)
+
+    const selection = mockState.selections.find((item) => item.table === 'class_memberships')
+    expect(selection?.columns).toBe('id')
   })
 })

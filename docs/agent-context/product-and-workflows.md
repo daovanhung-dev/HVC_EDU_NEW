@@ -18,13 +18,18 @@ ASSISTANT là vai trò lịch sử; migration 0039 đổi hồ sơ và phân cô
 - Admin tạo hoặc cập nhật hồ sơ, lưu trữ hồ sơ thay vì xóa lịch sử, và quản lý danh sách thành viên lớp.
 - Thành viên lớp hiện hành được dùng để dựng roster cho các buổi sắp tới.
 
-## Lịch lặp và sinh buổi
+## Lịch lớp và sinh buổi
 
 - class_schedules lưu thứ trong tuần, giờ bắt đầu/kết thúc, phòng và trạng thái của từng lịch lặp. class_schedule_staff gắn giáo viên với từng lịch.
-- Lịch chuyển đổi từ ClassMonth được tạo ở trạng thái INACTIVE. Admin cần kiểm tra roster và giáo viên trên trang chi tiết lớp trước khi bật lịch.
+- Admin quản lý lịch ở trang **Buổi học**. Chi tiết lớp tập trung vào roster và có liên kết sang trang Buổi học đã lọc theo lớp.
+- Trang Buổi học có chế độ tháng, tuần, danh sách và bộ lọc lớp. Admin có thể tạo buổi cụ thể, đổi giờ/giáo viên, hoặc hủy buổi bằng trạng thái; cột thời gian hiển thị giờ bắt đầu–kết thúc.
+- Admin có thể chọn các buổi SCHEDULED trong tuần đang xem làm mẫu rồi áp dụng cho tháng đang chọn. Hệ thống giữ thứ, giờ, thời lượng, lớp và giáo viên; bỏ qua ngày đã qua/ngày mẫu và từ chối toàn bộ đợt nếu có xung đột. Các bản sao là buổi theo ngày cụ thể, không lặp sang tháng tiếp theo.
+- class_schedule_staff là phân công cố định theo khung thứ/giờ. Buổi kế thừa giáo viên của khung phù hợp; Admin có thể ghi đè phân công riêng cho một buổi mà không đổi các buổi cùng lịch.
+- Lịch chuyển đổi từ ClassMonth được tạo ở trạng thái INACTIVE. Admin cần kiểm tra roster và giáo viên trước khi bật lịch.
 - Lịch ACTIVE sinh buổi SCHEDULED cho 30 ngày tới theo Asia/Ho_Chi_Minh. docs/IMPLEMENTATION.md ghi job Supabase Cron chạy hằng ngày lúc 17:00 UTC; xác minh migration/cấu hình backend hiện hành trước khi dựa vào lịch chạy này.
-- Hàm sinh buổi có cơ chế chống chạy đồng thời và ràng buộc duy nhất cho một lần xuất hiện của lịch. Nó cập nhật roster và giáo viên cho buổi chưa bắt đầu, đồng thời giữ nguyên buổi đã bắt đầu hoặc hoàn thành.
+- Hàm sinh buổi có cơ chế chống chạy đồng thời và ràng buộc duy nhất cho một lần xuất hiện của lịch. Nó cập nhật roster và giáo viên cho buổi chưa bắt đầu, đồng thời giữ nguyên buổi đã bắt đầu hoặc hoàn thành. Buổi tạo thủ công được đánh dấu để generator không nhận nhầm hoặc ghi đè.
 - Admin có thể hủy hoặc đổi giờ buổi SCHEDULED trong tương lai. Thao tác riêng được đánh dấu bằng schedule_override để việc sinh lịch không ghi đè quyết định đó.
+- Lưu trữ khung lịch chuyển trạng thái sang ARCHIVED và hủy buổi tương lai còn SCHEDULED; buổi đã bắt đầu/hoàn tất và dữ liệu học tập vẫn được giữ.
 
 Các ngày trong tuần lưu theo ISO: 1 là Thứ Hai, 7 là Chủ Nhật.
 
