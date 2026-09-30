@@ -21,6 +21,7 @@ Migration theo thứ tự số trong supabase/migrations. Các thay đổi lớn
 - 0037 xác định phạm vi quyền học tập mới.
 - 0038 retire PARENT khỏi đăng nhập/quyền truy cập nhưng giữ profile/link lịch sử.
 - 0039 tạo lịch lặp, mapping giáo viên theo lịch, gắn session với lớp, chuyển ASSISTANT sang TEACHER, siết quyền database và thêm hàm vận hành liên tục.
+- 0040 thay các policy đọc chéo bảng bằng helper `SECURITY DEFINER` có `search_path` cố định để tránh vòng lặp RLS; kiểm thử vai trò nằm trong `supabase/tests/continuous_learning_rls.test.sql`.
 
 Các migration cũ hơn tạo schema nền, enums, auth/profile, RBAC, hồ sơ, lớp/tháng, buổi, điểm danh, tài chính, hàm, RLS, index và các lần hardening. Đọc migration cụ thể trước khi sửa để hiểu dữ liệu lịch sử và ràng buộc tương thích.
 

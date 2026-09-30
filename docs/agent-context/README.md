@@ -15,7 +15,7 @@ HVC_EDU là ứng dụng quản lý trung tâm luyện thi, hiện tập trung v
 
 1. Dùng mã nguồn hiện hành và các migration trong supabase/migrations để xác định hành vi, schema và quyền được quản lý trong repo.
 2. Dùng README.md cho cấu hình/chạy dự án và docs/IMPLEMENTATION.md cho phạm vi nghiệp vụ hiện hành.
-3. docs/DELIVERY_ROADMAP.md và docs/QA_TEST_REPORT_2026-09-28.md là ảnh chụp trạng thái tại thời điểm ghi. Chúng hữu ích để biết điều cần kiểm tra, nhưng không chứng minh trạng thái hiện tại.
+3. docs/DELIVERY_ROADMAP.md, docs/QA_TEST_REPORT_2026-09-28.md và các báo cáo QA staging có ngày trong tên là ảnh chụp trạng thái tại thời điểm ghi. Chúng hữu ích để biết điều cần kiểm tra, nhưng không chứng minh trạng thái hiện tại.
 4. docs/Hung_Cuong_Business_Design_v1.0.md và docs/Hung_Cuong_Project_Architecture_GitHubPages_Supabase.md được đánh dấu là tài liệu lịch sử. Một số nội dung về ClassMonth, payroll, tuition, accounting, timesheet, notification, reporting và permission group không còn thuộc ứng dụng hiện tại.
 5. docs/plans/ chứa kế hoạch cho nhiệm vụ cụ thể trong quá khứ. Chỉ áp dụng khi người dùng yêu cầu đúng công việc đó và các giả định vẫn còn đúng.
 
