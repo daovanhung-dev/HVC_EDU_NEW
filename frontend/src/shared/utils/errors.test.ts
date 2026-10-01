@@ -42,15 +42,15 @@ describe('error normalization', () => {
     expect(normalizeAppError(new Error('ROOM_ALREADY_BOOKED')).message).toContain('Phòng này đã có buổi học khác')
   })
 
-  it('explains why a session cannot be created for a class without an active roster', () => {
+  it('explains why a session cannot be created for a class without members on the selected date', () => {
     const result = normalizeAppError({ code: 'P0001', message: 'NO_ACTIVE_STUDENTS' }, 'Không thể tạo buổi học.')
-    expect(result.message).toContain('chưa có học sinh đang học')
+    expect(result.message).toContain('chưa có thành viên trong ngày đã chọn')
     expect(result.code).toBe('NO_ACTIVE_STUDENTS')
   })
 
   it('maps session input and assignment errors to actionable messages', () => {
-    expect(normalizeAppError(new Error('INVALID_INPUT')).message).toContain('giờ bắt đầu trong tương lai')
-    expect(normalizeAppError(new Error('CLASS_NOT_ACTIVE')).message).toContain('Lớp đã ngừng hoạt động')
+    expect(normalizeAppError(new Error('INVALID_INPUT')).message).toContain('ngày, giờ bắt đầu và giờ kết thúc')
+    expect(normalizeAppError(new Error('CLASS_NOT_ACTIVE')).message).toContain('lớp đang hoạt động')
     expect(normalizeAppError(new Error('TEACHER_NOT_ACTIVE')).message).toContain('giáo viên đang hoạt động')
   })
 

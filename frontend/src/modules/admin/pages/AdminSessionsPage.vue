@@ -30,6 +30,7 @@ import ConfirmModal from '@/app/components/ConfirmModal.vue'
 import AppField from '@/app/components/AppField.vue'
 import AppPageHeader from '@/app/components/AppPageHeader.vue'
 import DetailModal from '@/app/components/DetailModal.vue'
+import TeacherPicker from '../components/TeacherPicker.vue'
 import {
   addCalendarDays,
   formatBusinessDate,
@@ -72,6 +73,7 @@ const scheduleEditorOpen = ref(false)
 const sessionFormOpen = ref(false)
 const sessionFormBusy = ref(false)
 const sessionFormDirty = ref(false)
+const sessionFormTeacherTouched = ref(false)
 const scheduleFormOpen = ref(false)
 const scheduleFormBusy = ref(false)
 const scheduleFormDirty = ref(false)
@@ -91,6 +93,16 @@ const scheduleFormEnd = computed({ get: () => editingScheduleId.value ? editSche
 const scheduleFormRoom = computed({ get: () => editingScheduleId.value ? editSchedule.value.room : scheduleForm.value.room, set: (value: string) => { if (editingScheduleId.value) editSchedule.value.room = value; else scheduleForm.value.room = value } })
 const teachers = computed(() => (selected.value?.session_staff || []).map((item) => item.staff?.full_name).filter(Boolean).join(', ') || 'Chưa phân công')
 const activeTeachers = computed(() => teachersList.value.filter((row) => row.status === 'ACTIVE'))
+const sessionFormStartTimestamp = computed(() => {
+  if (!sessionForm.value.date || !sessionForm.value.start_time) return Number.NaN
+  return Date.parse(`${sessionForm.value.date}T${sessionForm.value.start_time}:00+07:00`)
+})
+const sessionFormIsBackdated = computed(() => Number.isFinite(sessionFormStartTimestamp.value)
+  && sessionFormStartTimestamp.value <= Date.now())
+const sessionFormClasses = computed(() => sessionFormIsBackdated.value
+  ? classes.value
+  : classes.value.filter((row) => row.status === 'ACTIVE'))
+const classFilterOptions = computed(() => classes.value.filter((row) => row.status !== 'ARCHIVED'))
 const activeRosterReady = ref(false)
 const selectedClassTeacherIds = computed(() => getClassTeacherIds(selectedClassId.value, Object.values(schedulesByClass.value).flat(), sessions.value))
 const sessionFormTeacherBaseIds = computed(() => getClassTeacherIds(sessionForm.value.class_id, Object.values(schedulesByClass.value).flat(), sessions.value))
@@ -200,7 +212,7 @@ async function load() {
     }
 
     if (classResult.status === 'fulfilled') {
-      classes.value = (classResult.value as ClassDetailRow[]).filter((row) => row.status !== 'ARCHIVED')
+      classes.value = classResult.value as ClassDetailRow[]
     } else {
       loadErrors.push(classResult.reason instanceof Error ? classResult.reason.message : 'Không thể tải danh sách lớp.')
     }
@@ -211,7 +223,7 @@ async function load() {
       loadErrors.push(staffResult.reason instanceof Error ? staffResult.reason.message : 'Không thể tải danh sách giáo viên.')
     }
 
-    if (selectedClassId.value && !classes.value.some((row) => row.id === selectedClassId.value)) selectedClassId.value = ''
+    if (selectedClassId.value && !classFilterOptions.value.some((row) => row.id === selectedClassId.value)) selectedClassId.value = ''
     errorMessage.value = loadErrors.join(' ')
   } finally {
     loading.value = false
@@ -282,13 +294,42 @@ function teacherLimitMessage(error: unknown, fallback: string) {
   return userErrorMessage(error, fallback)
 }
 
+function teacherIdsFrom(value: string | string[]) {
+  return Array.isArray(value) ? value : value ? [value] : []
+}
+
+function updateCreateTeacherSelection(value: string | string[]) {
+  sessionFormTeacherTouched.value = true
+  sessionForm.value.staff_ids = teacherIdsFrom(value)
+}
+
+function updateSelectedTeacherSelection(value: string | string[]) {
+  selectedTeacherIds.value = teacherIdsFrom(value)
+}
+
+function updateScheduleFormTeacher(value: string | string[]) {
+  scheduleForm.value.staff_id = Array.isArray(value) ? value[0] || '' : value
+}
+
+function updateScheduleTeacherSelection(scheduleId: string, value: string | string[]) {
+  teacherSelections.value[scheduleId] = Array.isArray(value) ? value[0] || '' : value
+}
+
+function classStatusLabel(status: ClassDetailRow['status']) {
+  if (status === 'INACTIVE') return 'Ngừng hoạt động'
+  if (status === 'ARCHIVED') return 'Đã lưu trữ'
+  return 'Đang hoạt động'
+}
+
 function manualSessionTimeError(start: string, end: string) {
   const startAt = Date.parse(start)
   const endAt = Date.parse(end)
   if (!Number.isFinite(startAt) || !Number.isFinite(endAt) || endAt <= startAt) {
     return 'Giờ kết thúc phải sau giờ bắt đầu.'
   }
-  if (startAt <= Date.now()) return 'Giờ bắt đầu phải ở trong tương lai.'
+  if (getBusinessDateKey(new Date(startAt)) !== getBusinessDateKey(new Date(endAt))) {
+    return 'Buổi học phải bắt đầu và kết thúc trong cùng một ngày.'
+  }
   return ''
 }
 
@@ -338,8 +379,12 @@ async function selectSession(session: SessionRow) {
 
 function openSessionForm(dateKey?: string) {
   const selectedDate = dateKey || refreshTodayDateKey()
+  const selectedClass = classes.value.find((row) => row.id === selectedClassId.value)
+  const defaultStartAt = Date.parse(`${selectedDate}T17:30:00+07:00`)
+  const canUseFilteredClass = selectedClass
+    && (selectedClass.status === 'ACTIVE' || (Number.isFinite(defaultStartAt) && defaultStartAt <= Date.now()))
   sessionForm.value = {
-    class_id: selectedClassId.value,
+    class_id: canUseFilteredClass ? selectedClassId.value : '',
     date: selectedDate,
     start_time: '17:30',
     end_time: '19:30',
@@ -347,13 +392,15 @@ function openSessionForm(dateKey?: string) {
     staff_ids: [],
   }
   sessionFormDirty.value = false
+  sessionFormTeacherTouched.value = false
   errorMessage.value = ''
   sessionFormOpen.value = true
   void loadCreateDefaults()
 }
 
-async function loadCreateDefaults() {
-  sessionForm.value.staff_ids = []
+async function loadCreateDefaults(resetTeacherSelection = false) {
+  if (resetTeacherSelection) sessionFormTeacherTouched.value = false
+  if (!sessionFormTeacherTouched.value) sessionForm.value.staff_ids = []
   if (!sessionForm.value.class_id) return
   try {
     const rows = await loadClassSchedules(sessionForm.value.class_id)
@@ -363,7 +410,9 @@ async function loadCreateDefaults() {
       && String(row.start_time).slice(0, 5) === sessionForm.value.start_time
       && String(row.end_time).slice(0, 5) === sessionForm.value.end_time)
     if (preferred) {
-      sessionForm.value.staff_ids = (preferred.class_schedule_staff || []).map((item) => item.staff_id)
+      if (!sessionFormTeacherTouched.value) {
+        sessionForm.value.staff_ids = (preferred.class_schedule_staff || []).map((item) => item.staff_id)
+      }
       sessionForm.value.room = preferred.room || ''
     }
   } catch {
@@ -385,6 +434,11 @@ async function createSession() {
   }
   const start = localDateTime(sessionForm.value.date, sessionForm.value.start_time)
   const end = localDateTime(sessionForm.value.date, sessionForm.value.end_time)
+  const classRow = classes.value.find((row) => row.id === sessionForm.value.class_id)
+  if (!classRow || (!sessionFormIsBackdated.value && classRow.status !== 'ACTIVE')) {
+    errorMessage.value = 'Chỉ có thể tạo lịch tương lai cho lớp đang hoạt động.'
+    return
+  }
   const timeError = manualSessionTimeError(start, end)
   if (timeError) {
     errorMessage.value = timeError
@@ -400,7 +454,7 @@ async function createSession() {
       staff_ids: sessionForm.value.staff_ids,
       room: sessionForm.value.room.trim() || null,
     })
-    toast.success('Đã tạo buổi học.')
+    toast.success(sessionFormIsBackdated.value ? 'Đã tạo buổi điểm danh bù.' : 'Đã tạo buổi học.')
     sessionFormOpen.value = false
     sessionFormDirty.value = false
     await load()
@@ -636,6 +690,16 @@ watch(() => route.query.class_id, (value) => {
   selectedClassId.value = typeof value === 'string' ? value : ''
   changeClassFilter()
 })
+watch(sessionFormIsBackdated, (isBackdated) => {
+  if (isBackdated) return
+  const classRow = classes.value.find((row) => row.id === sessionForm.value.class_id)
+  if (classRow && classRow.status !== 'ACTIVE') {
+    sessionForm.value.class_id = ''
+    sessionForm.value.staff_ids = []
+    sessionForm.value.room = ''
+    sessionFormTeacherTouched.value = false
+  }
+})
 </script>
 
 <template>
@@ -654,7 +718,7 @@ watch(() => route.query.class_id, (value) => {
         <label for="session-class-filter" class="form-label">Lọc theo lớp</label>
         <select id="session-class-filter" v-model="selectedClassId" class="form-select" @change="changeClassFilter">
           <option value="">Tất cả lớp</option>
-          <option v-for="classRow in classes" :key="classRow.id" :value="classRow.id">{{ classRow.name }}</option>
+          <option v-for="classRow in classFilterOptions" :key="classRow.id" :value="classRow.id">{{ classRow.name }}</option>
         </select>
       </div>
       <div v-if="viewMode === 'week'" class="d-flex align-items-center gap-2">
@@ -666,14 +730,17 @@ watch(() => route.query.class_id, (value) => {
     </div>
   </div>
 
-  <FormModal v-model="sessionFormOpen" title="Tạo buổi học riêng" description="Chọn thời gian và giáo viên. Quy tắc giới hạn 5 giáo viên và kiểm tra xung đột hiện hành vẫn được áp dụng." :busy="sessionFormBusy" :dirty="sessionFormDirty" :submit-disabled="!sessionForm.class_id || !sessionForm.staff_ids.length || (teacherCountKnown(sessionForm.class_id) && sessionFormTeacherCount > MAX_CLASS_TEACHERS)" submit-label="Tạo buổi học" @submit="createSession" @cancel="sessionFormOpen = false">
+  <FormModal v-model="sessionFormOpen" title="Tạo buổi học riêng" description="Chọn thời gian và giáo viên. Lịch cũ sẽ tạo buổi điểm danh bù; giới hạn 5 giáo viên và kiểm tra trùng lịch vẫn được áp dụng." :busy="sessionFormBusy" :dirty="sessionFormDirty" :submit-disabled="!sessionForm.class_id || !sessionForm.staff_ids.length || (teacherCountKnown(sessionForm.class_id) && sessionFormTeacherCount > MAX_CLASS_TEACHERS)" submit-label="Tạo buổi học" @submit="createSession" @cancel="sessionFormOpen = false">
     <form id="session-create-form" class="row g-3 session-create-form" @submit.prevent="createSession" @input="sessionFormDirty = true" @change="sessionFormDirty = true">
-      <AppField id="session-class" class="col-md-6" label="Lớp" required><template #default="field"><select :id="field.id" v-model="sessionForm.class_id" class="form-select" required data-modal-autofocus @change="loadCreateDefaults"><option value="">Chọn lớp</option><option v-for="classRow in classes.filter((row) => row.status === 'ACTIVE')" :key="classRow.id" :value="classRow.id">{{ classRow.name }}</option></select></template></AppField>
-      <AppField id="session-date" class="col-md-6" label="Ngày" required><template #default="field"><input :id="field.id" v-model="sessionForm.date" type="date" class="form-control" required @change="loadCreateDefaults" /></template></AppField>
-      <AppField id="session-start-time" class="col-md-6" label="Giờ bắt đầu" required><template #default="field"><input :id="field.id" v-model="sessionForm.start_time" type="time" class="form-control" required @change="loadCreateDefaults" /></template></AppField>
-      <AppField id="session-end-time" class="col-md-6" label="Giờ kết thúc" required><template #default="field"><input :id="field.id" v-model="sessionForm.end_time" type="time" class="form-control" required @change="loadCreateDefaults" /></template></AppField>
+      <AppField id="session-class" class="col-md-6" label="Lớp" required><template #default="field"><select :id="field.id" v-model="sessionForm.class_id" class="form-select" required data-modal-autofocus @change="loadCreateDefaults(true)"><option value="">Chọn lớp</option><option v-for="classRow in sessionFormClasses" :key="classRow.id" :value="classRow.id">{{ classRow.name }}{{ classRow.status === 'ACTIVE' ? '' : ` · ${classStatusLabel(classRow.status)}` }}</option></select></template></AppField>
+      <AppField id="session-date" class="col-md-6" label="Ngày" required><template #default="field"><input :id="field.id" v-model="sessionForm.date" type="date" class="form-control" required @change="loadCreateDefaults()" /></template></AppField>
+      <AppField id="session-start-time" class="col-md-6" label="Giờ bắt đầu" required><template #default="field"><input :id="field.id" v-model="sessionForm.start_time" type="time" class="form-control" required @change="loadCreateDefaults()" /></template></AppField>
+      <AppField id="session-end-time" class="col-md-6" label="Giờ kết thúc" required><template #default="field"><input :id="field.id" v-model="sessionForm.end_time" type="time" class="form-control" required @change="loadCreateDefaults()" /></template></AppField>
       <AppField id="session-room" class="col-md-6" label="Phòng"><template #default="field"><input :id="field.id" v-model="sessionForm.room" class="form-control" placeholder="Ví dụ: A1" /></template></AppField>
-      <AppField id="session-teachers" class="col-md-6" :label="`Giáo viên được phân công (${teacherCountLabel(sessionForm.class_id, sessionForm.staff_ids)})`" required description="Có thể chọn nhiều giáo viên trong giới hạn tối đa 5 người."><template #default="field"><select :id="field.id" v-model="sessionForm.staff_ids" class="form-select" multiple required size="3" :aria-describedby="field.describedBy"><option v-for="teacher in activeTeachers" :key="teacher.id" :value="teacher.id" :disabled="!canSelectCreateTeacher(teacher.id)">{{ teacher.full_name }}</option></select></template></AppField>
+      <div v-if="sessionFormIsBackdated" class="col-12">
+        <div class="alert alert-warning py-2 mb-0" role="status">Buổi điểm danh bù · {{ formatBusinessDate(sessionForm.date) }}. Giáo viên được phân công sẽ bắt đầu buổi và nhập điểm danh theo luồng thường.</div>
+      </div>
+      <AppField id="session-teachers" class="col-md-6" :label="`Giáo viên được phân công (${teacherCountLabel(sessionForm.class_id, sessionForm.staff_ids)})`" required description="Tìm theo tên hoặc mã giáo viên. Có thể chọn nhiều người, tối đa 5 giáo viên duy nhất trên một lớp."><template #default="field"><TeacherPicker :id="field.id" :model-value="sessionForm.staff_ids" :teachers="activeTeachers" multiple :disabled-ids="activeTeachers.filter((teacher) => !canSelectCreateTeacher(teacher.id)).map((teacher) => teacher.id)" :described-by="field.describedBy" @update:model-value="updateCreateTeacherSelection" /></template></AppField>
     </form>
     <div v-if="errorMessage" class="alert alert-danger mt-3 mb-0" role="alert">{{ errorMessage }}</div>
     <template #footer><button class="btn btn-outline-secondary" type="button" :disabled="sessionFormBusy" @click="sessionFormOpen = false">Hủy</button><button class="btn btn-primary" type="button" :disabled="sessionFormBusy || !sessionForm.class_id || !sessionForm.staff_ids.length || (teacherCountKnown(sessionForm.class_id) && sessionFormTeacherCount > MAX_CLASS_TEACHERS)" @click="createSession"><span v-if="sessionFormBusy" class="app-button__spinner" aria-hidden="true"></span>{{ sessionFormBusy ? 'Đang tạo…' : 'Tạo buổi học' }}</button></template>
@@ -713,7 +780,7 @@ watch(() => route.query.class_id, (value) => {
             </div>
           </div>
           <form v-if="schedule.status !== 'ARCHIVED'" class="row g-2 mt-2" @submit.prevent="addScheduleTeacher(schedule)">
-            <div class="col-sm-8"><select v-model="teacherSelections[schedule.id]" class="form-select form-select-sm"><option value="">Thêm giáo viên cố định vào khung</option><option v-for="teacher in activeTeachers.filter((row) => !(schedule.class_schedule_staff || []).some((mapping) => mapping.staff_id === row.id))" :key="teacher.id" :value="teacher.id" :disabled="!canSelectScheduleTeacher(teacher.id)">{{ teacher.full_name }}</option></select></div>
+            <div class="col-sm-8"><TeacherPicker :id="`schedule-add-teacher-${schedule.id}`" :model-value="teacherSelections[schedule.id] || ''" label="Giáo viên cần thêm" label-class="visually-hidden" placeholder="Tìm giáo viên để thêm vào khung" :teachers="activeTeachers.filter((row) => !(schedule.class_schedule_staff || []).some((mapping) => mapping.staff_id === row.id))" :disabled-ids="activeTeachers.filter((teacher) => !canSelectScheduleTeacher(teacher.id)).map((teacher) => teacher.id)" @update:model-value="updateScheduleTeacherSelection(schedule.id, $event)" /></div>
             <div class="col-sm-4"><button class="btn btn-sm btn-outline-primary" :disabled="!teacherSelections[schedule.id]">Phân công</button></div>
           </form>
         </div>
@@ -728,7 +795,7 @@ watch(() => route.query.class_id, (value) => {
       <AppField id="schedule-start" class="col-md-6" label="Giờ bắt đầu" required><template #default="field"><input :id="field.id" v-model="scheduleFormStart" type="time" class="form-control" required /></template></AppField>
       <AppField id="schedule-end" class="col-md-6" label="Giờ kết thúc" required><template #default="field"><input :id="field.id" v-model="scheduleFormEnd" type="time" class="form-control" required /></template></AppField>
       <AppField id="schedule-room" class="col-md-6" label="Phòng"><template #default="field"><input :id="field.id" v-model="scheduleFormRoom" class="form-control" /></template></AppField>
-      <AppField v-if="!editingScheduleId" id="schedule-teacher" class="col-12" :label="`Giáo viên cố định (${teacherCountLabel(selectedClassId)})`" description="Phân công có thể chỉnh lại trong thẻ khung lịch."><template #default="field"><select :id="field.id" v-model="scheduleForm.staff_id" class="form-select" :aria-describedby="field.describedBy"><option value="">Chưa phân công giáo viên</option><option v-for="teacher in activeTeachers" :key="teacher.id" :value="teacher.id" :disabled="!canSelectScheduleTeacher(teacher.id)">{{ teacher.full_name }}</option></select></template></AppField>
+      <AppField v-if="!editingScheduleId" id="schedule-teacher" class="col-12" :label="`Giáo viên cố định (${teacherCountLabel(selectedClassId)})`" description="Tìm theo tên hoặc mã giáo viên. Có thể phân công thêm trong thẻ khung lịch."><template #default="field"><TeacherPicker :id="field.id" :model-value="scheduleForm.staff_id" :teachers="activeTeachers" placeholder="Tìm giáo viên hoặc để trống" :disabled-ids="activeTeachers.filter((teacher) => !canSelectScheduleTeacher(teacher.id)).map((teacher) => teacher.id)" :described-by="field.describedBy" @update:model-value="updateScheduleFormTeacher" /></template></AppField>
     </form>
     <div v-if="errorMessage" class="alert alert-danger mt-3 mb-0" role="alert">{{ errorMessage }}</div>
   </FormModal>
@@ -843,7 +910,7 @@ watch(() => route.query.class_id, (value) => {
           <h2 class="h5">{{ className(selected) }}</h2>
           <div class="text-secondary mb-3">Giáo viên: {{ teachers }} · {{ selected.status }} · {{ sessionRoomInput || 'Chưa xếp phòng' }}</div>
           <div v-if="selected.status === 'SCHEDULED'" class="row g-2 align-items-end mb-3">
-            <div class="col-md-8"><label class="form-label">Giáo viên được phân công cho buổi này ({{ teacherCountLabel(selected.class_id, selectedTeacherIds, selected.id) }})</label><select v-model="selectedTeacherIds" class="form-select" multiple size="3"><option v-for="teacher in activeTeachers" :key="teacher.id" :value="teacher.id" :disabled="!canSelectSessionTeacher(teacher.id)">{{ teacher.full_name }}</option></select></div>
+            <div class="col-md-8"><label class="form-label" for="session-detail-teachers">Giáo viên được phân công cho buổi này ({{ teacherCountLabel(selected.class_id, selectedTeacherIds, selected.id) }})</label><TeacherPicker id="session-detail-teachers" :model-value="selectedTeacherIds" :teachers="activeTeachers" multiple placeholder="Tìm theo tên hoặc mã giáo viên" :disabled-ids="activeTeachers.filter((teacher) => !canSelectSessionTeacher(teacher.id)).map((teacher) => teacher.id)" @update:model-value="updateSelectedTeacherSelection" /></div>
             <div class="col-md-4"><button class="btn btn-outline-primary" :disabled="selectedSessionTeacherCount > MAX_CLASS_TEACHERS" @click="saveTeachers">Lưu phân công buổi này</button></div>
           </div>
           <div class="row g-2 mb-3">

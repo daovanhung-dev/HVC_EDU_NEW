@@ -87,6 +87,12 @@ async function clickButtonWithText(wrapper: ReturnType<typeof mount>, text: stri
   await button.trigger('click')
 }
 
+async function chooseTeacher(wrapper: ReturnType<typeof mount>, pickerId: string, teacherId: string) {
+  const picker = wrapper.get(`#${pickerId}`)
+  await picker.trigger('focus')
+  await wrapper.get(`#${pickerId}-option-${teacherId}`).setValue(true)
+}
+
 describe('AdminSessionsPage calendar', () => {
   afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers() })
 
@@ -94,14 +100,18 @@ describe('AdminSessionsPage calendar', () => {
     mockState.route.query.class_id = ''
     mockState.getMySessions.mockReset().mockResolvedValue([])
     mockState.getSessionStudents.mockReset().mockResolvedValue([])
-    mockState.getClasses.mockReset().mockResolvedValue([{ id: 'qa-class-1', code: 'QA-CODE-1', name: 'Lớp Toán QA', status: 'ACTIVE' }])
+    mockState.getClasses.mockReset().mockResolvedValue([
+      { id: 'qa-class-1', code: 'QA-CODE-1', name: 'Lớp Toán QA', status: 'ACTIVE' },
+      { id: 'qa-class-inactive', code: 'QA-CODE-2', name: 'Lớp ngừng hoạt động QA', status: 'INACTIVE' },
+      { id: 'qa-class-archived', code: 'QA-CODE-3', name: 'Lớp lưu trữ QA', status: 'ARCHIVED' },
+    ])
     mockState.getStaff.mockReset().mockResolvedValue([
-      { id: 'qa-teacher-1', full_name: 'Giáo viên QA 1', status: 'ACTIVE' },
-      { id: 'qa-teacher-2', full_name: 'Giáo viên QA 2', status: 'ACTIVE' },
-      { id: 'qa-teacher-3', full_name: 'Giáo viên QA 3', status: 'ACTIVE' },
-      { id: 'qa-teacher-4', full_name: 'Giáo viên QA 4', status: 'ACTIVE' },
-      { id: 'qa-teacher-5', full_name: 'Giáo viên QA 5', status: 'ACTIVE' },
-      { id: 'qa-teacher-6', full_name: 'Giáo viên QA 6', status: 'ACTIVE' },
+      { id: 'qa-teacher-1', staff_code: 'QA-T-001', full_name: 'Giáo viên QA 1', status: 'ACTIVE' },
+      { id: 'qa-teacher-2', staff_code: 'QA-T-002', full_name: 'Giáo viên QA 2', status: 'ACTIVE' },
+      { id: 'qa-teacher-3', staff_code: 'QA-T-003', full_name: 'Giáo viên QA 3', status: 'ACTIVE' },
+      { id: 'qa-teacher-4', staff_code: 'QA-T-004', full_name: 'Giáo viên QA 4', status: 'ACTIVE' },
+      { id: 'qa-teacher-5', staff_code: 'QA-T-005', full_name: 'Giáo viên QA 5', status: 'ACTIVE' },
+      { id: 'qa-teacher-6', staff_code: 'QA-T-006', full_name: 'Giáo viên QA 6', status: 'ACTIVE' },
     ])
     mockState.getClassSchedules.mockReset().mockResolvedValue([])
     mockState.getClassActiveRosterSize.mockReset().mockResolvedValue(0)
@@ -236,10 +246,11 @@ describe('AdminSessionsPage calendar', () => {
 
     expect(wrapper.text()).toContain('Không thể tải buổi học.')
     expect(wrapper.find('#session-class-filter option[value="qa-class-1"]').exists()).toBe(true)
+    expect(wrapper.find('#session-class-filter option[value="qa-class-archived"]').exists()).toBe(false)
 
     await clickButtonWithText(wrapper, 'Thêm buổi')
     expect(wrapper.find('.session-create-form select option[value="qa-class-1"]').exists()).toBe(true)
-    expect(wrapper.find('.session-create-form select option[value="qa-teacher-1"]').exists()).toBe(true)
+    expect(wrapper.find('#session-teachers').exists()).toBe(true)
   })
 
   it('opens integrated schedule management from the Buổi học page', async () => {
@@ -255,7 +266,7 @@ describe('AdminSessionsPage calendar', () => {
     await flushPromises()
     await clickButtonWithText(wrapper, 'Chỉnh sửa lịch')
     await clickButtonWithText(wrapper, 'Thêm khung lịch')
-    await wrapper.findAll('.schedule-editor-form select').at(-1)?.setValue('qa-teacher-1')
+    await chooseTeacher(wrapper, 'schedule-teacher', 'qa-teacher-1')
     await wrapper.get('.schedule-editor-form').trigger('submit')
     await flushPromises()
 
@@ -276,10 +287,11 @@ describe('AdminSessionsPage calendar', () => {
     const wrapper = mountPage()
     await flushPromises()
     await clickButtonWithText(wrapper, 'Thêm buổi')
-    await wrapper.get('.session-create-form select').setValue('qa-class-1')
+    await wrapper.get('#session-class').setValue('qa-class-1')
     await flushPromises()
 
-    expect((wrapper.get('select[multiple]').element as HTMLSelectElement).selectedOptions[0]?.value).toBe('qa-teacher-1')
+    await wrapper.get('#session-teachers').trigger('focus')
+    expect((wrapper.get('#session-teachers-option-qa-teacher-1').element as HTMLInputElement).checked).toBe(true)
     expect((wrapper.get('.session-create-form input[placeholder="Ví dụ: A1"]').element as HTMLInputElement).value).toBe('QA-Room-A')
     await wrapper.get('.session-create-form').trigger('submit')
     await flushPromises()
@@ -293,6 +305,30 @@ describe('AdminSessionsPage calendar', () => {
     })
   })
 
+  it('keeps a manually chosen teacher when changing the date after applying the fixed-schedule default', async () => {
+    const date = getBusinessDateKey(new Date())
+    const weekday = new Date(`${date}T12:00:00Z`).getUTCDay() || 7
+    mockState.getClassSchedules.mockResolvedValue([{
+      id: 'qa-fixed-slot', class_id: 'qa-class-1', day_of_week: weekday,
+      start_time: '17:30:00', end_time: '19:30:00', room: 'QA-Room-A', status: 'ACTIVE', reviewed_at: null,
+      class_schedule_staff: [{ staff_id: 'qa-teacher-1', staff: { id: 'qa-teacher-1', full_name: 'Giáo viên QA 1' } }],
+    }])
+    const wrapper = mountPage()
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Thêm buổi')
+    await wrapper.get('#session-class').setValue('qa-class-1')
+    await flushPromises()
+
+    await wrapper.get('#session-teachers').trigger('focus')
+    expect((wrapper.get('#session-teachers-option-qa-teacher-1').element as HTMLInputElement).checked).toBe(true)
+    await chooseTeacher(wrapper, 'session-teachers', 'qa-teacher-2')
+    await wrapper.get('#session-date').setValue(addCalendarDays(date, 1))
+    await flushPromises()
+
+    expect(wrapper.find('button[aria-label="Bỏ chọn Giáo viên QA 1"]').exists()).toBe(true)
+    expect(wrapper.find('button[aria-label="Bỏ chọn Giáo viên QA 2"]').exists()).toBe(true)
+  })
+
   it('shows the active-roster reason when the server rejects session creation', async () => {
     mockState.createManualSession.mockRejectedValue(new Error('NO_ACTIVE_STUDENTS'))
     const wrapper = mountPage()
@@ -301,38 +337,64 @@ describe('AdminSessionsPage calendar', () => {
     await wrapper.get('#session-class').setValue('qa-class-1')
     await wrapper.get('#session-date').setValue('2099-01-01')
     await flushPromises()
-    await wrapper.get('#session-teachers').setValue(['qa-teacher-1'])
+    await chooseTeacher(wrapper, 'session-teachers', 'qa-teacher-1')
     await wrapper.get('.session-create-form').trigger('submit')
     await flushPromises()
 
     expect(mockState.createManualSession).toHaveBeenCalledOnce()
-    expect(wrapper.text()).toContain('Lớp chưa có học sinh đang học trong ngày đã chọn.')
+    expect(wrapper.text()).toContain('Lớp chưa có thành viên trong ngày đã chọn.')
     expect(wrapper.text()).not.toContain('Không thể tạo buổi học.')
   })
 
-  it('rejects past or reversed manual session times before calling the RPC', async () => {
+  it('creates past sessions and still rejects reversed manual session times', async () => {
     const wrapper = mountPage()
     await flushPromises()
     await clickButtonWithText(wrapper, 'Thêm buổi')
     await wrapper.get('#session-class').setValue('qa-class-1')
     await wrapper.get('#session-date').setValue('2020-01-01')
     await flushPromises()
-    await wrapper.get('#session-teachers').setValue(['qa-teacher-1'])
+    await chooseTeacher(wrapper, 'session-teachers', 'qa-teacher-1')
+    expect(wrapper.text()).toContain('Buổi điểm danh bù')
     await wrapper.get('.session-create-form').trigger('submit')
     await flushPromises()
 
-    expect(mockState.createManualSession).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain('Giờ bắt đầu phải ở trong tương lai.')
+    expect(mockState.createManualSession).toHaveBeenCalledWith(expect.objectContaining({
+      class_id: 'qa-class-1',
+      start: new Date('2020-01-01T17:30:00+07:00').toISOString(),
+      end: new Date('2020-01-01T19:30:00+07:00').toISOString(),
+    }))
 
+    await clickButtonWithText(wrapper, 'Thêm buổi')
+    await wrapper.get('#session-class').setValue('qa-class-1')
     await wrapper.get('#session-date').setValue('2099-01-01')
     await wrapper.get('#session-start-time').setValue('19:30')
     await wrapper.get('#session-end-time').setValue('18:30')
-    await wrapper.get('#session-teachers').setValue(['qa-teacher-1'])
+    await chooseTeacher(wrapper, 'session-teachers', 'qa-teacher-1')
     await wrapper.get('.session-create-form').trigger('submit')
     await flushPromises()
 
-    expect(mockState.createManualSession).not.toHaveBeenCalled()
+    expect(mockState.createManualSession).toHaveBeenCalledOnce()
     expect(wrapper.text()).toContain('Giờ kết thúc phải sau giờ bắt đầu.')
+  })
+
+  it('offers every class for a past session and only active classes for a future session', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Thêm buổi')
+    await wrapper.get('#session-date').setValue('2099-01-01')
+    expect(wrapper.find('#session-class option[value="qa-class-inactive"]').exists()).toBe(false)
+    expect(wrapper.find('#session-class option[value="qa-class-archived"]').exists()).toBe(false)
+
+    await wrapper.get('#session-date').setValue('2020-01-01')
+    expect(wrapper.find('#session-class option[value="qa-class-inactive"]').exists()).toBe(true)
+    expect(wrapper.find('#session-class option[value="qa-class-archived"]').exists()).toBe(true)
+    expect(wrapper.find('#session-class option[value="qa-class-archived"]').text()).toContain('Đã lưu trữ')
+
+    await wrapper.get('#session-class').setValue('qa-class-archived')
+    await wrapper.get('#session-date').setValue('2099-01-01')
+    await flushPromises()
+    expect((wrapper.get('#session-class').element as HTMLSelectElement).value).toBe('')
+    expect(wrapper.find('#session-class option[value="qa-class-archived"]').exists()).toBe(false)
   })
 
   it('shows and updates the room on a selected session', async () => {
@@ -376,13 +438,15 @@ describe('AdminSessionsPage calendar', () => {
     await clickButtonWithText(wrapper, 'Chỉnh sửa lịch')
     expect(wrapper.text()).toContain('Giáo viên của lớp: 5/5')
     await clickButtonWithText(wrapper, 'Thêm khung lịch')
-    expect(wrapper.get('.schedule-editor-form option[value="qa-teacher-6"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('#schedule-teacher').trigger('focus')
+    expect(wrapper.get('#schedule-teacher-option-qa-teacher-6').attributes('disabled')).toBeDefined()
 
     await clickButtonWithText(wrapper, 'Thêm buổi')
     await flushPromises()
     expect(wrapper.findAll('.session-create-form label').map((label) => label.text()).find((text) => text.includes('Giáo viên'))).toContain('5/5')
-    expect(wrapper.get('.session-create-form option[value="qa-teacher-6"]').attributes('disabled')).toBeDefined()
-    expect(wrapper.get('.session-create-form option[value="qa-teacher-1"]').attributes('disabled')).toBeUndefined()
+    await wrapper.get('#session-teachers').trigger('focus')
+    expect(wrapper.get('#session-teachers-option-qa-teacher-6').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('#session-teachers-option-qa-teacher-1').attributes('disabled')).toBeUndefined()
   })
 
   it('allows replacing a selected-session teacher while keeping the class at five', async () => {
@@ -404,13 +468,13 @@ describe('AdminSessionsPage calendar', () => {
 
     const detailModal = wrapper.findAll('.app-modal').find((modal) => modal.find('input[type="datetime-local"]').exists())
     if (!detailModal) throw new Error('Selected session detail sheet not found')
-    const teacherSelect = detailModal.get('select[multiple]')
-    expect(teacherSelect.element).toBeTruthy()
+    const teacherPicker = detailModal.get('#session-detail-teachers')
+    await teacherPicker.trigger('focus')
     expect(wrapper.text()).toContain('5/5')
-    expect(teacherSelect.get('option[value="qa-teacher-6"]').attributes('disabled')).toBeDefined()
-    await teacherSelect.setValue([])
-    expect(teacherSelect.get('option[value="qa-teacher-6"]').attributes('disabled')).toBeUndefined()
-    await teacherSelect.setValue(['qa-teacher-6'])
+    expect(detailModal.get('#session-detail-teachers-option-qa-teacher-6').attributes('disabled')).toBeDefined()
+    await detailModal.get('#session-detail-teachers-option-qa-teacher-5').setValue(false)
+    expect(detailModal.get('#session-detail-teachers-option-qa-teacher-6').attributes('disabled')).toBeUndefined()
+    await detailModal.get('#session-detail-teachers-option-qa-teacher-6').setValue(true)
     expect(wrapper.text()).toContain('5/5')
   })
 })

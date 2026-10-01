@@ -54,6 +54,7 @@
 | frontend/src/app/components/ConfirmModal.vue | Frontend / nền tảng và dịch vụ | Vue SFC |
 | frontend/src/app/components/DetailModal.vue | Frontend / nền tảng và dịch vụ | Vue SFC |
 | frontend/src/app/components/FormModal.vue | Frontend / nền tảng và dịch vụ | Vue SFC |
+| frontend/src/app/layouts/AppLayout.test.ts | Frontend / nền tảng và dịch vụ | TypeScript |
 | frontend/src/app/layouts/AppLayout.vue | Frontend / nền tảng và dịch vụ | Vue SFC |
 | frontend/src/app/layouts/AuthLayout.vue | Frontend / nền tảng và dịch vụ | Vue SFC |
 | frontend/src/app/router/index.test.ts | Frontend / nền tảng và dịch vụ | TypeScript |
@@ -65,17 +66,21 @@
 | frontend/src/devtools/ui-review/ReviewApp.vue | Frontend / nền tảng và dịch vụ | Vue SFC |
 | frontend/src/env.d.ts | Frontend / nền tảng và dịch vụ | TypeScript |
 | frontend/src/main.ts | Frontend / nền tảng và dịch vụ | TypeScript |
+| frontend/src/modules/admin/components/TeacherPicker.test.ts | Frontend / Admin | TypeScript |
+| frontend/src/modules/admin/components/TeacherPicker.vue | Frontend / Admin | Vue SFC |
 | frontend/src/modules/admin/pages/AdminSessionsPage.test.ts | Frontend / Admin | TypeScript |
 | frontend/src/modules/admin/pages/AdminSessionsPage.vue | Frontend / Admin | Vue SFC |
 | frontend/src/modules/admin/pages/AdminTimesheetsPage.test.ts | Frontend / Admin | TypeScript |
 | frontend/src/modules/admin/pages/AdminTimesheetsPage.vue | Frontend / Admin | Vue SFC |
 | frontend/src/modules/admin/pages/ClassDetailPage.vue | Frontend / Admin | Vue SFC |
 | frontend/src/modules/admin/pages/ClassesPage.vue | Frontend / Admin | Vue SFC |
+| frontend/src/modules/admin/pages/StaffPage.test.ts | Frontend / Admin | TypeScript |
 | frontend/src/modules/admin/pages/StaffPage.vue | Frontend / Admin | Vue SFC |
 | frontend/src/modules/admin/pages/StudentDetailPage.vue | Frontend / Admin | Vue SFC |
 | frontend/src/modules/admin/pages/StudentsPage.test.ts | Frontend / Admin | TypeScript |
 | frontend/src/modules/admin/pages/StudentsPage.vue | Frontend / Admin | Vue SFC |
 | frontend/src/modules/auth/pages/ChangePasswordPage.vue | Frontend / Đăng nhập | Vue SFC |
+| frontend/src/modules/auth/pages/LoginPage.test.ts | Frontend / Đăng nhập | TypeScript |
 | frontend/src/modules/auth/pages/LoginPage.vue | Frontend / Đăng nhập | Vue SFC |
 | frontend/src/modules/staff/pages/SessionsPage.vue | Frontend / Giáo viên | Vue SFC |
 | frontend/src/modules/staff/pages/StaffProfilePage.vue | Frontend / Giáo viên | Vue SFC |
@@ -174,11 +179,13 @@
 | supabase/migrations/0042_restore_session_timesheets.sql | Supabase / migrations | SQL |
 | supabase/migrations/0043_limit_class_teachers.sql | Supabase / migrations | SQL |
 | supabase/migrations/0044_allow_parallel_sessions_by_room.sql | Supabase / migrations | SQL |
+| supabase/migrations/0045_backdated_attendance_sessions.sql | Supabase / migrations | SQL |
 | supabase/seed.sql | Supabase / cấu hình và seed | SQL |
 | supabase/tests/admin_monthly_session_planning.test.sql | Supabase / kiểm thử SQL | SQL |
+| supabase/tests/backdated_session_creation.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/class_teacher_limit.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/continuous_learning_rls.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/parallel_session_rooms.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/timesheet_workflow.test.sql | Supabase / kiểm thử SQL | SQL |
 
-Tổng: 174 đường dẫn có trong inventory.
+Tổng: 181 đường dẫn có trong inventory.
