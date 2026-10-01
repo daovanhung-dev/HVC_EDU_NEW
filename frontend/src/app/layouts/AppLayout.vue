@@ -88,7 +88,7 @@ async function signOut() {
         <div class="app-topbar__user d-none d-md-block">{{ auth.displayName || auth.username }}</div>
       </header>
       <main id="main-content" class="app-main" tabindex="-1">
-        <RouterView v-slot="{ Component }"><Transition name="app" mode="out-in"><component :is="Component" /></Transition></RouterView>
+        <RouterView v-slot="{ Component }"><Transition name="app" mode="out-in"><component :is="Component" :key="route.path" /></Transition></RouterView>
       </main>
     </section>
 
