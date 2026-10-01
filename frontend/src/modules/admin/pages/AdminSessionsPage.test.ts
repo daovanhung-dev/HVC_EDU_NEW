@@ -293,6 +293,48 @@ describe('AdminSessionsPage calendar', () => {
     })
   })
 
+  it('shows the active-roster reason when the server rejects session creation', async () => {
+    mockState.createManualSession.mockRejectedValue(new Error('NO_ACTIVE_STUDENTS'))
+    const wrapper = mountPage()
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Thêm buổi')
+    await wrapper.get('#session-class').setValue('qa-class-1')
+    await wrapper.get('#session-date').setValue('2099-01-01')
+    await flushPromises()
+    await wrapper.get('#session-teachers').setValue(['qa-teacher-1'])
+    await wrapper.get('.session-create-form').trigger('submit')
+    await flushPromises()
+
+    expect(mockState.createManualSession).toHaveBeenCalledOnce()
+    expect(wrapper.text()).toContain('Lớp chưa có học sinh đang học trong ngày đã chọn.')
+    expect(wrapper.text()).not.toContain('Không thể tạo buổi học.')
+  })
+
+  it('rejects past or reversed manual session times before calling the RPC', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Thêm buổi')
+    await wrapper.get('#session-class').setValue('qa-class-1')
+    await wrapper.get('#session-date').setValue('2020-01-01')
+    await flushPromises()
+    await wrapper.get('#session-teachers').setValue(['qa-teacher-1'])
+    await wrapper.get('.session-create-form').trigger('submit')
+    await flushPromises()
+
+    expect(mockState.createManualSession).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Giờ bắt đầu phải ở trong tương lai.')
+
+    await wrapper.get('#session-date').setValue('2099-01-01')
+    await wrapper.get('#session-start-time').setValue('19:30')
+    await wrapper.get('#session-end-time').setValue('18:30')
+    await wrapper.get('#session-teachers').setValue(['qa-teacher-1'])
+    await wrapper.get('.session-create-form').trigger('submit')
+    await flushPromises()
+
+    expect(mockState.createManualSession).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Giờ kết thúc phải sau giờ bắt đầu.')
+  })
+
   it('shows and updates the room on a selected session', async () => {
     const session = { ...makeSession('qa-room-session'), room: 'QA-Room-A' }
     mockState.getMySessions.mockResolvedValue([session])

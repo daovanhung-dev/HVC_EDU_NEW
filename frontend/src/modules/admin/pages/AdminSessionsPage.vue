@@ -282,6 +282,16 @@ function teacherLimitMessage(error: unknown, fallback: string) {
   return userErrorMessage(error, fallback)
 }
 
+function manualSessionTimeError(start: string, end: string) {
+  const startAt = Date.parse(start)
+  const endAt = Date.parse(end)
+  if (!Number.isFinite(startAt) || !Number.isFinite(endAt) || endAt <= startAt) {
+    return 'Giờ kết thúc phải sau giờ bắt đầu.'
+  }
+  if (startAt <= Date.now()) return 'Giờ bắt đầu phải ở trong tương lai.'
+  return ''
+}
+
 function roomGenerationWarning(value: unknown) {
   const result = value && typeof value === 'object' ? value as { room_conflicts?: number; missing_room_conflicts?: number } : {}
   const occupied = Number(result.room_conflicts || 0)
@@ -373,13 +383,20 @@ async function createSession() {
     errorMessage.value = `Mỗi lớp được phân công tối đa ${MAX_CLASS_TEACHERS} giáo viên hiện hành.`
     return
   }
+  const start = localDateTime(sessionForm.value.date, sessionForm.value.start_time)
+  const end = localDateTime(sessionForm.value.date, sessionForm.value.end_time)
+  const timeError = manualSessionTimeError(start, end)
+  if (timeError) {
+    errorMessage.value = timeError
+    return
+  }
   errorMessage.value = ''
   sessionFormBusy.value = true
   try {
     await createManualSession({
       class_id: sessionForm.value.class_id,
-      start: localDateTime(sessionForm.value.date, sessionForm.value.start_time),
-      end: localDateTime(sessionForm.value.date, sessionForm.value.end_time),
+      start,
+      end,
       staff_ids: sessionForm.value.staff_ids,
       room: sessionForm.value.room.trim() || null,
     })
