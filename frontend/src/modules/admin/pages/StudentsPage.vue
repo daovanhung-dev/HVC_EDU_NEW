@@ -25,7 +25,7 @@ const formDirty = ref(false)
 const errorMessage = ref('')
 const temporaryPassword = ref('')
 const showPassword = ref(false)
-const form = ref({ full_name: '', student_code: '', username: '', phone: '', parent_name: '', parent_phone: '' })
+const form = ref({ full_name: '', student_code: '', username: '', password: '', phone: '', parent_name: '', parent_phone: '' })
 const editForm = ref<StudentForm>({ student_code: '', full_name: '', phone: '', parent_name: '', parent_phone: '' })
 const confirmOpen = ref(false)
 const confirmBusy = ref(false)
@@ -44,7 +44,7 @@ async function load() {
 function openCreate() {
   editing.value = null
   formDirty.value = false
-  form.value = { full_name: '', student_code: '', username: '', phone: '', parent_name: '', parent_phone: '' }
+  form.value = { full_name: '', student_code: '', username: '', password: '', phone: '', parent_name: '', parent_phone: '' }
   errorMessage.value = ''
   showForm.value = true
 }
@@ -68,12 +68,14 @@ async function saveForm() {
       await updateStudent(row.id, { student_code: editForm.value.student_code, full_name: editForm.value.full_name, phone: editForm.value.phone || null, parent_name: editForm.value.parent_name || null, parent_phone: editForm.value.parent_phone || null })
       toast.success('Đã cập nhật hồ sơ học sinh.')
     } else {
-      const result = await adminCreateUser({ role: 'STUDENT', username: form.value.username, phone: form.value.phone || undefined, display_name: form.value.full_name, student: { student_code: form.value.student_code || undefined, full_name: form.value.full_name, parent_name: form.value.parent_name, parent_phone: form.value.parent_phone } })
-      newTemporaryPassword = result.temporary_password
+      const suppliedPassword = form.value.password
+      form.value.password = ''
+      const result = await adminCreateUser({ role: 'STUDENT', username: form.value.username, password: suppliedPassword || undefined, phone: form.value.phone || undefined, display_name: form.value.full_name, student: { student_code: form.value.student_code || undefined, full_name: form.value.full_name, parent_name: form.value.parent_name, parent_phone: form.value.parent_phone } })
+      if (!suppliedPassword) newTemporaryPassword = result.temporary_password
     }
     showForm.value = false
     formDirty.value = false
-    form.value = { full_name: '', student_code: '', username: '', phone: '', parent_name: '', parent_phone: '' }
+    form.value = { full_name: '', student_code: '', username: '', password: '', phone: '', parent_name: '', parent_phone: '' }
     await load()
     if (newTemporaryPassword) {
       temporaryPassword.value = newTemporaryPassword
@@ -137,10 +139,10 @@ onMounted(load)
     </tbody></table></div>
   </div></section>
 
-  <FormModal v-model="showForm" :title="modalTitle" :description="editing ? 'Cập nhật thông tin hồ sơ hiện có.' : 'Tài khoản mới sẽ nhận mật khẩu tạm để đăng nhập lần đầu.'" :busy="formBusy" :dirty="formDirty" :submit-disabled="editing ? !editForm.full_name : !form.full_name" :submit-label="editing ? 'Lưu thay đổi' : 'Tạo tài khoản'" @submit="saveForm" @cancel="showForm = false">
+  <FormModal v-model="showForm" :title="modalTitle" :description="editing ? 'Cập nhật thông tin hồ sơ hiện có.' : 'Có thể đặt mật khẩu ban đầu; để trống để hệ thống tạo mật khẩu tạm.'" :busy="formBusy" :dirty="formDirty" :submit-disabled="editing ? !editForm.full_name : !form.full_name" :submit-label="editing ? 'Lưu thay đổi' : 'Tạo tài khoản'" @submit="saveForm" @cancel="showForm = false">
     <div class="row g-3" @input="formDirty = true" @change="formDirty = true">
       <template v-if="editing"><AppField id="student-name-edit" class="col-md-7" label="Họ tên" required><template #default="field"><input :id="field.id" v-model="editForm.full_name" class="form-control" required :aria-describedby="field.describedBy" /></template></AppField><AppField id="student-code-edit" class="col-md-5" label="Mã học sinh"><template #default="field"><input :id="field.id" v-model="editForm.student_code" class="form-control" /></template></AppField><AppField id="student-phone-edit" class="col-md-6" label="Số điện thoại"><template #default="field"><input :id="field.id" v-model="editForm.phone" class="form-control" inputmode="tel" /></template></AppField><AppField id="parent-name-edit" class="col-md-6" label="Tên phụ huynh"><template #default="field"><input :id="field.id" v-model="editForm.parent_name" class="form-control" /></template></AppField><AppField id="parent-phone-edit" class="col-12" label="Số điện thoại phụ huynh"><template #default="field"><input :id="field.id" v-model="editForm.parent_phone" class="form-control" inputmode="tel" /></template></AppField></template>
-      <template v-else><AppField id="student-name" class="col-md-7" label="Họ tên" required><template #default="field"><input :id="field.id" v-model="form.full_name" class="form-control" required data-modal-autofocus /></template></AppField><AppField id="student-code" class="col-md-5" label="Mã học sinh" description="Để trống để hệ thống tự tạo."><template #default="field"><input :id="field.id" v-model="form.student_code" class="form-control" :aria-describedby="field.describedBy" /></template></AppField><AppField id="student-username" class="col-md-6" label="Tên đăng nhập" description="Có thể để trống để hệ thống tự tạo."><template #default="field"><input :id="field.id" v-model="form.username" class="form-control" autocomplete="off" :aria-describedby="field.describedBy" /></template></AppField><AppField id="student-phone" class="col-md-6" label="Số điện thoại"><template #default="field"><input :id="field.id" v-model="form.phone" class="form-control" inputmode="tel" /></template></AppField><AppField id="parent-name" class="col-md-6" label="Tên phụ huynh"><template #default="field"><input :id="field.id" v-model="form.parent_name" class="form-control" /></template></AppField><AppField id="parent-phone" class="col-md-6" label="Số điện thoại phụ huynh"><template #default="field"><input :id="field.id" v-model="form.parent_phone" class="form-control" inputmode="tel" /></template></AppField></template>
+      <template v-else><AppField id="student-name" class="col-md-7" label="Họ tên" required><template #default="field"><input :id="field.id" v-model="form.full_name" class="form-control" required data-modal-autofocus /></template></AppField><AppField id="student-code" class="col-md-5" label="Mã học sinh" description="Để trống để hệ thống tự tạo."><template #default="field"><input :id="field.id" v-model="form.student_code" class="form-control" :aria-describedby="field.describedBy" /></template></AppField><AppField id="student-username" class="col-md-6" label="Tên đăng nhập" description="Có thể để trống để hệ thống tự tạo."><template #default="field"><input :id="field.id" v-model="form.username" class="form-control" autocomplete="off" :aria-describedby="field.describedBy" /></template></AppField><AppField id="student-password" class="col-md-6" label="Mật khẩu ban đầu" description="Để trống để hệ thống tạo mật khẩu tạm."><template #default="field"><input :id="field.id" v-model="form.password" class="form-control" type="password" autocomplete="new-password" :aria-describedby="field.describedBy" /></template></AppField><AppField id="student-phone" class="col-md-6" label="Số điện thoại"><template #default="field"><input :id="field.id" v-model="form.phone" class="form-control" inputmode="tel" /></template></AppField><AppField id="parent-name" class="col-md-6" label="Tên phụ huynh"><template #default="field"><input :id="field.id" v-model="form.parent_name" class="form-control" /></template></AppField><AppField id="parent-phone" class="col-md-6" label="Số điện thoại phụ huynh"><template #default="field"><input :id="field.id" v-model="form.parent_phone" class="form-control" inputmode="tel" /></template></AppField></template>
     </div>
     <div v-if="errorMessage" class="alert alert-danger mt-3 mb-0" role="alert">{{ errorMessage }}</div>
   </FormModal>

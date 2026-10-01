@@ -5,6 +5,7 @@ export interface CreateUserInput {
   role: 'ADMIN' | 'TEACHER' | 'STUDENT'
   username?: string
   email?: string
+  password?: string
   phone?: string
   display_name?: string
   student?: { student_code?: string; full_name?: string; parent_name?: string; parent_phone?: string }

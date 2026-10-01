@@ -63,6 +63,49 @@ describe('StudentsPage dialogs', () => {
     wrapper.unmount()
   })
 
+  it('sends an optional initial password without showing it as a generated password', async () => {
+    const suppliedPassword = `QA-${crypto.randomUUID()}`
+    mocks.adminCreateUser.mockResolvedValue({ temporary_password: suppliedPassword })
+    const wrapper = mountPage()
+    await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text() === 'Thêm học sinh')?.trigger('click')
+    await wrapper.get('#student-name').setValue('QA Học sinh mới')
+    await wrapper.get('#student-password').setValue(suppliedPassword)
+    expect((wrapper.get('#student-password').element as HTMLInputElement).type).toBe('password')
+    await wrapper.findAll('button').find((button) => button.text() === 'Tạo tài khoản')?.trigger('click')
+    await flushPromises()
+
+    expect(mocks.adminCreateUser).toHaveBeenCalledWith(expect.objectContaining({ role: 'STUDENT', password: suppliedPassword }))
+    expect(wrapper.find('.app-modal[aria-hidden="false"]').text()).not.toContain('Mật khẩu tạm thời')
+    wrapper.unmount()
+  })
+
+  it('clears the initial password after a failed create and leaves existing profile updates separate', async () => {
+    const suppliedPassword = `QA-${crypto.randomUUID()}`
+    mocks.adminCreateUser.mockRejectedValueOnce(new Error('QA simulated create failure'))
+    const wrapper = mountPage()
+    await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text() === 'Thêm học sinh')?.trigger('click')
+    await wrapper.get('#student-name').setValue('QA Học sinh mới')
+    await wrapper.get('#student-password').setValue(suppliedPassword)
+    await wrapper.findAll('button').find((button) => button.text() === 'Tạo tài khoản')?.trigger('click')
+    await flushPromises()
+
+    expect((wrapper.get('#student-password').element as HTMLInputElement).value).toBe('')
+    expect(wrapper.text()).toContain('QA simulated create failure')
+    expect(wrapper.text()).not.toContain(suppliedPassword)
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    await wrapper.findAll('button').find((button) => button.text() === 'Hủy')?.trigger('click')
+    confirmSpy.mockRestore()
+    await wrapper.findAll('button').find((button) => button.text() === 'Sửa')?.trigger('click')
+    await wrapper.get('#student-name-edit').setValue('QA Học sinh đã cập nhật')
+    await wrapper.findAll('button').find((button) => button.text() === 'Lưu thay đổi')?.trigger('click')
+    await flushPromises()
+    expect(mocks.updateStudent).toHaveBeenCalledWith('qa-student-1', expect.objectContaining({ full_name: 'QA Học sinh đã cập nhật' }))
+    expect(mocks.adminCreateUser).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
   it('confirms archive with the affected student before sending the archive command', async () => {
     const wrapper = mountPage()
     await flushPromises()
