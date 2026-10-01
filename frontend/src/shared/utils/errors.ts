@@ -14,6 +14,7 @@ interface ErrorLike {
 
 const publicMessages: Record<string, string> = {
   UNAUTHENTICATED: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
+  INVALID_CREDENTIALS: 'Tài khoản hoặc mật khẩu không đúng.',
   ACCOUNT_INACTIVE: 'Tài khoản hiện không hoạt động. Vui lòng liên hệ quản trị viên.',
   FORBIDDEN: 'Bạn không có quyền thực hiện thao tác này.',
   STAFF_NOT_FOUND: 'Không tìm thấy hồ sơ nhân sự của tài khoản này.',
@@ -78,9 +79,9 @@ export function normalizeAppError(error: unknown, fallback = 'Không thể hoàn
   const traceId = stringValue(value.traceId) || stringValue(value.trace_id) || clientTraceId()
 
   let message = code ? publicMessages[code] : ''
-  if (!message && status === 401) message = publicMessages.UNAUTHENTICATED
-  if (!message && status === 403) message = publicMessages.FORBIDDEN
-  if (!message && status !== undefined && status >= 500) message = publicMessages.INTERNAL_ERROR
+  if (!message && !code && status === 401) message = publicMessages.UNAUTHENTICATED
+  if (!message && !code && status === 403) message = publicMessages.FORBIDDEN
+  if (!message && !code && status !== undefined && status >= 500) message = publicMessages.INTERNAL_ERROR
   if (!message) message = fallback
 
   return { message, code, traceId }

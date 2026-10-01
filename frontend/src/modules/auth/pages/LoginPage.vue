@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.store'
 import { isSupabaseConfigured } from '@/services/supabase'
 import { useAppErrorStore } from '@/stores/app-error.store'
+import { normalizeAppError } from '@/shared/utils/errors'
 
 const auth = useAuthStore()
 const appErrors = useAppErrorStore()
@@ -14,13 +15,15 @@ const errorMessage = ref('')
 
 async function submit() {
   errorMessage.value = ''
+  appErrors.clear()
   try {
     await auth.login(identifier.value.trim(), password.value)
-    await router.push('/dashboard')
   } catch (error) {
-    const normalized = appErrors.report(error, 'Không thể đăng nhập. Vui lòng kiểm tra lại thông tin hoặc thử lại sau.')
+    const normalized = normalizeAppError(error, 'Không thể đăng nhập. Vui lòng kiểm tra lại thông tin hoặc thử lại sau.')
     errorMessage.value = normalized.message
+    return
   }
+  await router.push('/dashboard')
 }
 </script>
 

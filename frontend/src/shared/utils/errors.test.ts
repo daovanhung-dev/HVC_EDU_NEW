@@ -15,6 +15,22 @@ describe('error normalization', () => {
     expect(normalizeAppError(new Error('STAFF_NOT_FOUND')).message).toContain('hồ sơ nhân sự')
   })
 
+  it('maps rejected credentials to the credential message instead of expired session', () => {
+    const result = normalizeAppError({ code: 'INVALID_CREDENTIALS', status: 401, message: 'Unauthorized' }, 'fallback')
+
+    expect(result.message).toBe('Tài khoản hoặc mật khẩu không đúng.')
+    expect(result.code).toBe('INVALID_CREDENTIALS')
+  })
+
+  it('uses the expired-session message only for unauthenticated or unclassified 401 errors', () => {
+    expect(normalizeAppError({ code: 'UNAUTHENTICATED', status: 401 }, 'fallback').message)
+      .toBe('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.')
+    expect(normalizeAppError({ status: 401 }, 'fallback').message)
+      .toBe('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.')
+    expect(normalizeAppError({ code: 'NEW_DOMAIN_ERROR', status: 401 }, 'Không thể đăng nhập.').message)
+      .toBe('Không thể đăng nhập.')
+  })
+
   it('maps the database class teacher limit to a useful validation message', () => {
     const result = normalizeAppError({ code: 'P0001', message: 'CLASS_TEACHER_LIMIT' }, 'Không thể phân công.')
     expect(result.message).toContain('tối đa 5 giáo viên')
