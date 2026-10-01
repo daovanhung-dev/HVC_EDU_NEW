@@ -19,9 +19,27 @@ function page(name: string, onMount: () => void) {
     name,
     setup() {
       onMounted(onMount)
-      return () => h('div', { 'data-testid': name }, name)
+      return () => [
+        h('span', { 'data-testid': `${name}-fragment-start` }),
+        h('div', { 'data-testid': name }, name),
+      ]
     },
   })
+}
+
+function mountLayout(router: ReturnType<typeof createRouter>) {
+  return mount(root, {
+    global: {
+      plugins: [createPinia(), router],
+    },
+  })
+}
+
+async function finishRouteTransition(wrapper: ReturnType<typeof mount>) {
+  const routeView = wrapper.find('.app-route-view')
+  if (routeView.exists()) await routeView.trigger('transitionend')
+  await flushPromises()
+  await nextTick()
 }
 
 describe('AppLayout route view lifecycle', () => {
@@ -47,7 +65,7 @@ describe('AppLayout route view lifecycle', () => {
 
     await router.push('/admin/students')
     await router.isReady()
-    const wrapper = mount(root, { global: { plugins: [createPinia(), router] } })
+    const wrapper = mountLayout(router)
     await flushPromises()
     await nextTick()
     expect(wrapper.find('[data-testid="students"]').exists()).toBe(true)
@@ -58,8 +76,10 @@ describe('AppLayout route view lifecycle', () => {
       await link.trigger('click')
       await flushPromises()
       await nextTick()
+      await finishRouteTransition(wrapper)
 
       expect(router.currentRoute.value.path).toBe(path)
+      expect(wrapper.find('.app-route-view').exists()).toBe(true)
       expect(wrapper.find(`[data-testid="${name}"]`).exists()).toBe(true)
       expect(mounts[name]).toHaveBeenCalledTimes(1)
     }
@@ -84,7 +104,7 @@ describe('AppLayout route view lifecycle', () => {
 
     await router.push('/admin/students')
     await router.isReady()
-    const wrapper = mount(root, { global: { plugins: [createPinia(), router] } })
+    const wrapper = mountLayout(router)
     await flushPromises()
     await nextTick()
     expect(mountPage).toHaveBeenCalledTimes(1)
@@ -92,6 +112,7 @@ describe('AppLayout route view lifecycle', () => {
     await wrapper.find('.app-sidebar a[href="/admin/staff"]').trigger('click')
     await flushPromises()
     await nextTick()
+    await finishRouteTransition(wrapper)
 
     expect(router.currentRoute.value.path).toBe('/admin/staff')
     expect(wrapper.find('[data-testid="shared-page"]').exists()).toBe(true)
@@ -116,7 +137,7 @@ describe('AppLayout route view lifecycle', () => {
 
     await router.push('/admin/sessions')
     await router.isReady()
-    const wrapper = mount(root, { global: { plugins: [createPinia(), router] } })
+    const wrapper = mountLayout(router)
     await flushPromises()
     await nextTick()
     await router.push('/admin/sessions?class_id=QA-CLASS')
