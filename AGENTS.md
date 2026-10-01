@@ -7,6 +7,10 @@
 3. Mở [mục lục context](docs/agent-context/README.md), chỉ đọc gói tài liệu tối thiểu theo nhiệm vụ; sau đó lần theo code và migration thực tế.
 4. Xác định phạm vi và lớp kiểm soát bị ảnh hưởng trước khi sửa. Nếu ý định sản phẩm còn mơ hồ sau khi đã kiểm tra nguồn trong repo, hỏi người dùng trước phần phụ thuộc vào ý định đó.
 
+## Dùng Chrome cho tác vụ phát triển
+
+- Với mọi tác vụ coding, test hoặc fix bug, luôn dùng [@Chrome](plugin://chrome@openai-bundled) trong quá trình thực hiện để mở/chạy ứng dụng, tái hiện tình huống hoặc kiểm tra kết quả liên quan.
+
 ## Nguồn sự thật và phạm vi
 
 - Code hiện hành và thứ tự migration trong supabase/migrations là căn cứ về hành vi, schema, quyền và trạng thái được quản lý trong repo.

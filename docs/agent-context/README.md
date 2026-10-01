@@ -9,6 +9,8 @@ Không cần đọc toàn bộ tài liệu cho mọi nhiệm vụ. Đi theo chu�
 3. Dùng bản đồ mã nguồn để tìm entrypoint, service, function, migration và test cụ thể; xác minh mô tả bằng code hiện hành.
 4. Trước thay đổi quyền/dữ liệu/phát hành, kiểm tra lớp bảo vệ và rủi ro vận hành tương ứng.
 
+Với mọi tác vụ coding, test hoặc fix bug, luôn dùng [@Chrome](plugin://chrome@openai-bundled) trong quá trình thực hiện để mở/chạy ứng dụng, tái hiện tình huống hoặc kiểm tra kết quả liên quan.
+
 | Loại nhiệm vụ | Gói context nên đọc trước | Sau đó lần theo |
 |---|---|---|
 | Phạm vi sản phẩm, vai trò, lịch/buổi, kết quả học tập | [Nghiệp vụ và luồng sử dụng](product-and-workflows.md) | Màn hình và lệnh đang thực thi luồng đó |
