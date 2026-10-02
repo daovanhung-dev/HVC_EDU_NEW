@@ -10,7 +10,7 @@
 
 ## Chuỗi migration
 
-Migration được đánh số trong supabase/migrations; repo hiện có đến 0044. Luôn đọc file liên quan và phần migration sau đó đã thay đổi cùng object.
+Migration được đánh số trong supabase/migrations; repo hiện có đến 0045. Luôn đọc file liên quan và phần migration sau đó đã thay đổi cùng object.
 
 - 0036–0038 thêm rồi retire vai trò PARENT; hồ sơ/liên kết lịch sử còn được giữ.
 - 0039 chuyển ứng dụng sang lịch lặp, membership liên tục, gắn session với class và chuyển ASSISTANT thành TEACHER.
@@ -19,6 +19,7 @@ Migration được đánh số trong supabase/migrations; repo hiện có đến
 - 0042 mở lại riêng luồng chấm công cho buổi COMPLETED; giáo viên gửi, Admin duyệt/từ chối có lý do, giáo viên có thể gửi lại sau từ chối. Không mở payroll/tài chính.
 - 0043 giới hạn tối đa 5 giáo viên duy nhất trên một lớp theo các lịch/buổi còn hiệu lực.
 - 0044 lưu phòng trên từng buổi và kiểm tra xung đột xuyên suốt tạo, sao chép và sinh buổi. Lớp khác nhau có thể trùng giờ nếu khác phòng; cùng lớp/học sinh/phòng hoặc thiếu phòng khi giao giờ thì bị chặn.
+- 0045 cho phép Admin tạo buổi điểm danh bù trong quá khứ, vẫn giữ kiểm tra quyền, roster, giới hạn giáo viên và xung đột lịch.
 
 Các migration cũ hơn tạo schema nền, role, RBAC, lớp tháng, buổi, điểm danh, tài chính, function, RLS và index. Không suy ra phạm vi sản phẩm hiện tại từ migration cũ.
 

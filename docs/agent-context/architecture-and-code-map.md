@@ -34,7 +34,7 @@
 ## Supabase và kiểm thử
 
 - supabase/functions/ chứa handler theo chức năng; _shared/ chứa auth, CORS và response/error.
-- supabase/migrations/ chứa schema, hàm, RLS, grant, seed danh mục và các lần hardening; migration hiện có mới nhất là 0044. Đọc migration cụ thể cùng migration thay thế nó trước khi sửa hành vi.
+- supabase/migrations/ chứa schema, hàm, RLS, grant, seed danh mục và các lần hardening; migration hiện có mới nhất là 0045. Đọc migration cụ thể cùng migration thay thế nó trước khi sửa hành vi.
 - supabase/tests/ có fixture SQL tổng hợp cho RLS học tập, lập buổi theo tuần/tháng, giới hạn giáo viên, xung đột phòng và chấm công theo buổi.
 - frontend tests đặt cạnh source với hậu tố .test.ts. Các script root chuyển tiếp đến workspace frontend.
 - .github/workflows/ chứa Quality Check, deploy GitHub Pages và workflow_dispatch deploy Supabase. Có workflow không đồng nghĩa đã được yêu cầu vận hành.

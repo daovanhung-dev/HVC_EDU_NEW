@@ -4,7 +4,7 @@
 
 ## Database và quyền
 
-- Migration hiện có chạy đến 0044 trong repo. Thêm migration mới với số tiếp theo; tuyệt đối không sửa, xóa hoặc đổi số migration lịch sử.
+- Migration hiện có chạy đến 0045 trong repo. Thêm migration mới với số tiếp theo; tuyệt đối không sửa, xóa hoặc đổi số migration lịch sử.
 - Rà quyền đọc/ghi, RLS policy, helper, RPC/SECURITY DEFINER, search_path, grants và vai trò bị ảnh hưởng cho mọi thay đổi schema hoặc API.
 - Không dùng client-side role, route, id từ trình duyệt hay hidden button làm căn cứ cấp quyền.
 - Bảo toàn audit và lịch sử học tập; dùng fixture tổng hợp QA- cho kiểm thử.
