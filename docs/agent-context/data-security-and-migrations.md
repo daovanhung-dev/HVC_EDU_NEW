@@ -10,7 +10,7 @@
 
 ## Chuỗi migration
 
-Migration được đánh số trong supabase/migrations; repo hiện có đến 0046. Luôn đọc file liên quan và phần migration sau đó đã thay đổi cùng object.
+Migration được đánh số trong supabase/migrations; repo hiện có đến 0047. Luôn đọc file liên quan và phần migration sau đó đã thay đổi cùng object.
 
 - 0036–0038 thêm rồi retire vai trò PARENT; hồ sơ/liên kết lịch sử còn được giữ.
 - 0039 chuyển ứng dụng sang lịch lặp, membership liên tục, gắn session với class và chuyển ASSISTANT thành TEACHER.
@@ -21,6 +21,7 @@ Migration được đánh số trong supabase/migrations; repo hiện có đến
 - 0044 lưu phòng trên từng buổi và kiểm tra xung đột xuyên suốt tạo, sao chép và sinh buổi. Lớp khác nhau có thể trùng giờ nếu khác phòng; cùng lớp/học sinh/phòng hoặc thiếu phòng khi giao giờ thì bị chặn.
 - 0045 cho phép Admin tạo buổi điểm danh bù trong quá khứ, vẫn giữ kiểm tra quyền, roster, giới hạn giáo viên và xung đột lịch.
 - 0046 cho phép Edge Function gọi các RPC bắt đầu, hoàn thành và cập nhật kết quả buổi bằng Supabase secret key không có JWT role claim. Quyền EXECUTE vẫn chỉ cấp cho service_role; RPC vẫn xác minh giáo viên đang hoạt động được phân công.
+- 0047 thêm link YouTube tùy chọn cho buổi học và mở rộng RPC học tập mà vẫn giữ EXECUTE chỉ cho service_role; audit lưu link cũ/mới. `student-ai-tutor` chỉ phục vụ học sinh đang hoạt động, kiểm tra quyền sở hữu buổi được chọn và gửi cho Gemini câu hỏi, lịch sử chat cùng tên lớp/môn, ngày và nội dung buổi học; không gửi điểm, chuyên cần, nhận xét cá nhân hoặc video.
 
 Các migration cũ hơn tạo schema nền, role, RBAC, lớp tháng, buổi, điểm danh, tài chính, function, RLS và index. Không suy ra phạm vi sản phẩm hiện tại từ migration cũ.
 

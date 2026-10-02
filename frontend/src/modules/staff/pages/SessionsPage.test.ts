@@ -215,4 +215,32 @@ describe('Staff SessionsPage', () => {
     expect(failed.find('.session-month__grid').exists()).toBe(false)
     unmountSessionsPage(failed)
   })
+
+  it('saves a validated YouTube link with session learning content', async () => {
+    const wrapper = mountSessionsPage()
+    await flushPromises()
+    await wrapper.get('.session-month__session-card').trigger('click')
+    await flushPromises()
+    await wrapper.get('#lesson-youtube-url').setValue('https://youtu.be/dQw4w9WgXcQ')
+    await wrapper.findAll('button').find((button) => button.text().includes('Lưu nội dung'))?.trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateSessionLearning).toHaveBeenCalledWith(expect.objectContaining({
+      session_id: 'qa-teacher-session', lesson_youtube_url: 'https://youtu.be/dQw4w9WgXcQ',
+    }))
+  })
+
+  it('rejects a non-YouTube lesson URL before saving', async () => {
+    const wrapper = mountSessionsPage()
+    await flushPromises()
+    await wrapper.get('.session-month__session-card').trigger('click')
+    await flushPromises()
+    await wrapper.get('#lesson-youtube-url').setValue('https://example.test/watch?v=bad')
+    await wrapper.findAll('button').find((button) => button.text().includes('Lưu nội dung'))?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Chỉ nhập link video YouTube hợp lệ.')
+    expect(mocks.updateSessionLearning).not.toHaveBeenCalled()
+    unmountSessionsPage(wrapper)
+  })
 })

@@ -78,11 +78,12 @@ export interface SessionRow {
   scheduled_end_at: string
   status: SessionStatus
   session_note: string | null
+  lesson_youtube_url?: string | null
   room?: string | null
   schedule_override?: boolean
   manual_schedule?: boolean
   staff_assignment_override?: boolean
-  classes?: { id?: string; name: string } | null
+  classes?: { id?: string; name: string; subjects?: { name: string } | null; grades?: { name: string } | null } | null
   class_schedules?: { room: string | null } | null
   session_students?: Array<{ student_id: string; students?: { id: string; student_code: string; full_name: string } | null }>
   session_staff?: SessionStaffRow[]

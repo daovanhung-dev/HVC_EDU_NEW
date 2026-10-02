@@ -1,6 +1,6 @@
 begin;
 
-select plan(21);
+select plan(27);
 
 -- Fixtures are synthetic, and the transaction is rolled back after these checks.
 insert into auth.users (
@@ -40,6 +40,14 @@ values (
   (((now() at time zone 'Asia/Ho_Chi_Minh')::date - 1) + time '19:30') at time zone 'Asia/Ho_Chi_Minh',
   'SCHEDULED', 'QA-SESSION-COMMAND-ROOM'
 );
+insert into public.sessions (id, class_id, scheduled_start_at, scheduled_end_at, status, room, lesson_youtube_url)
+values (
+  'f0460000-0000-0000-0000-000000000502',
+  'f0460000-0000-0000-0000-000000000401',
+  (((now() at time zone 'Asia/Ho_Chi_Minh')::date - 2) + time '17:30') at time zone 'Asia/Ho_Chi_Minh',
+  (((now() at time zone 'Asia/Ho_Chi_Minh')::date - 2) + time '19:30') at time zone 'Asia/Ho_Chi_Minh',
+  'COMPLETED', 'QA-SESSION-COMMAND-ROOM', 'https://youtu.be/dQw4w9WgXcQ'
+);
 select ok(
   (select scheduled_start_at < now() and status = 'SCHEDULED'
    from public.sessions where id = 'f0460000-0000-0000-0000-000000000501'),
@@ -47,7 +55,8 @@ select ok(
 );
 insert into public.session_students (session_id, student_id) values
   ('f0460000-0000-0000-0000-000000000501', 'f0460000-0000-0000-0000-000000000201'),
-  ('f0460000-0000-0000-0000-000000000501', 'f0460000-0000-0000-0000-000000000202');
+  ('f0460000-0000-0000-0000-000000000501', 'f0460000-0000-0000-0000-000000000202'),
+  ('f0460000-0000-0000-0000-000000000502', 'f0460000-0000-0000-0000-000000000202');
 insert into public.session_staff (session_id, staff_id, assignment_role)
 values ('f0460000-0000-0000-0000-000000000501', 'f0460000-0000-0000-0000-000000000101', 'TEACHER');
 
@@ -58,12 +67,15 @@ select ok(
   has_function_privilege('service_role', 'public.start_session(uuid,uuid)', 'EXECUTE')
   and has_function_privilege('service_role', 'public.complete_session(uuid,uuid)', 'EXECUTE')
   and has_function_privilege('service_role', 'public.update_session_learning(uuid,uuid,text,jsonb)', 'EXECUTE')
+  and has_function_privilege('service_role', 'public.update_session_learning(uuid,uuid,text,text,jsonb)', 'EXECUTE')
   and not has_function_privilege('authenticated', 'public.start_session(uuid,uuid)', 'EXECUTE')
   and not has_function_privilege('authenticated', 'public.complete_session(uuid,uuid)', 'EXECUTE')
   and not has_function_privilege('authenticated', 'public.update_session_learning(uuid,uuid,text,jsonb)', 'EXECUTE')
+  and not has_function_privilege('authenticated', 'public.update_session_learning(uuid,uuid,text,text,jsonb)', 'EXECUTE')
   and not has_function_privilege('anon', 'public.start_session(uuid,uuid)', 'EXECUTE')
   and not has_function_privilege('anon', 'public.complete_session(uuid,uuid)', 'EXECUTE')
-  and not has_function_privilege('anon', 'public.update_session_learning(uuid,uuid,text,jsonb)', 'EXECUTE'),
+  and not has_function_privilege('anon', 'public.update_session_learning(uuid,uuid,text,jsonb)', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.update_session_learning(uuid,uuid,text,text,jsonb)', 'EXECUTE'),
   'session RPC execution remains restricted to service_role'
 );
 select is(current_setting('request.jwt.claim.role', true), ''::text, 'service_role test call has no JWT role claim');
@@ -92,6 +104,25 @@ select lives_ok($$
     '[{"student_id":"f0460000-0000-0000-0000-000000000201","status":"PRESENT","homework_score":8}]'::jsonb
   )
 $$, 'assigned teacher can save attendance and learning results');
+select lives_ok($$
+  select public.update_session_learning(
+    'f0460000-0000-0000-0000-000000000501',
+    'f0460000-0000-0000-0000-000000000001',
+    'QA session note with video',
+    'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    '[]'::jsonb
+  )
+$$, 'assigned teacher can save a YouTube link while the session is in progress');
+select ok(
+  (select lesson_youtube_url = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' from public.sessions where id = 'f0460000-0000-0000-0000-000000000501')
+  and exists (
+    select 1 from public.audit_logs
+    where entity_id = 'f0460000-0000-0000-0000-000000000501'
+      and action = 'SESSION_LEARNING_UPDATE'
+      and old_data ? 'lesson_youtube_url'
+      and old_data->>'lesson_youtube_url' is null
+      and new_data->>'lesson_youtube_url' = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+  ), 'saved video link is persisted and included in the learning audit');
 select is((select count(*)::integer from public.student_attendances where session_id = 'f0460000-0000-0000-0000-000000000501'), 1, 'the first learning result is persisted');
 select throws_ok($$
   select public.complete_session(
@@ -131,6 +162,15 @@ select lives_ok($$
 $$, 'assigned teacher can complete the session without a JWT role claim');
 select is((select status::text from public.sessions where id = 'f0460000-0000-0000-0000-000000000501'), 'COMPLETED'::text, 'completion changes the session status');
 select is((select ended_by from public.sessions where id = 'f0460000-0000-0000-0000-000000000501'), 'f0460000-0000-0000-0000-000000000001'::uuid, 'completion records the assigned teacher');
+select throws_ok($$
+  select public.update_session_learning(
+    'f0460000-0000-0000-0000-000000000501',
+    'f0460000-0000-0000-0000-000000000001',
+    null,
+    'https://youtu.be/dQw4w9WgXcQ',
+    '[]'::jsonb
+  )
+$$, 'P0001', 'SESSION_LOCKED', 'a completed session cannot be edited to add a video');
 
 reset role;
 set local role authenticated;
@@ -144,6 +184,15 @@ $$, '42501', 'permission denied for function complete_session', 'authenticated c
 select throws_ok($$
   select public.update_session_learning('f0460000-0000-0000-0000-000000000501', 'f0460000-0000-0000-0000-000000000001', null, '[]'::jsonb)
 $$, '42501', 'permission denied for function update_session_learning', 'authenticated cannot invoke update_session_learning directly');
+select throws_ok($$
+  select public.update_session_learning('f0460000-0000-0000-0000-000000000501', 'f0460000-0000-0000-0000-000000000001', null, null, '[]'::jsonb)
+$$, '42501', 'permission denied for function update_session_learning', 'authenticated cannot invoke the video RPC directly');
+
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'f0460000-0000-0000-0000-000000000003', true);
+select is((select lesson_youtube_url from public.sessions where id = 'f0460000-0000-0000-0000-000000000501'), 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'::text, 'a student can read the video on their own session');
+select is((select count(*)::integer from public.sessions where id = 'f0460000-0000-0000-0000-000000000502'), 0, 'a student cannot read another student session video');
 
 select * from finish();
 rollback;

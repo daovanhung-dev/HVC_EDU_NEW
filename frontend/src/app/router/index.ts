@@ -12,6 +12,8 @@ import SessionsPage from '@/modules/admin/pages/AdminSessionsPage.vue'
 import StaffSessionsPage from '@/modules/staff/pages/SessionsPage.vue'
 import StaffProfilePage from '@/modules/staff/pages/StaffProfilePage.vue'
 import StudentPage from '@/modules/student/pages/StudentPage.vue'
+import StudentReviewPage from '@/modules/student/pages/StudentReviewPage.vue'
+import StudentAiChatPage from '@/modules/student/pages/StudentAiChatPage.vue'
 import StaffTimesheetsPage from '@/modules/staff/pages/StaffTimesheetsPage.vue'
 import AdminTimesheetsPage from '@/modules/admin/pages/AdminTimesheetsPage.vue'
 import { useAuthStore } from '@/stores/auth.store'
@@ -35,6 +37,8 @@ const router = createRouter({
     { path: '/staff/timesheets', component: AppLayout, children: [{ path: '', component: StaffTimesheetsPage, meta: { requiresAuth: true, staffOnly: true } }] },
     { path: '/staff/profile', component: AppLayout, children: [{ path: '', component: StaffProfilePage, meta: { requiresAuth: true, staffOnly: true } }] },
     { path: '/student/:module(schedule|attendance)', component: AppLayout, children: [{ path: '', component: StudentPage, meta: { requiresAuth: true, learnerOnly: true } }] },
+    { path: '/student/review', component: AppLayout, children: [{ path: '', component: StudentReviewPage, meta: { requiresAuth: true, learnerOnly: true } }] },
+    { path: '/student/ai', component: AppLayout, children: [{ path: '', component: StudentAiChatPage, meta: { requiresAuth: true, learnerOnly: true } }] },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })

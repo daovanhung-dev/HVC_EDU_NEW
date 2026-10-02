@@ -186,7 +186,7 @@ describe('AdminSessionsPage calendar', () => {
   })
 
   it('opens the selected session details and displays the class name', async () => {
-    const session = makeSession()
+    const session = { ...makeSession(), lesson_youtube_url: 'https://youtu.be/dQw4w9WgXcQ' }
     mockState.getMySessions.mockResolvedValue([session])
     const wrapper = mountPage()
     await flushPromises()
@@ -198,6 +198,7 @@ describe('AdminSessionsPage calendar', () => {
     expect(mockState.getSessionStudents).toHaveBeenCalledWith(session.id)
     expect(findAllPageOrBody(wrapper, '.app-modal .modal-title').map((title) => title.text())).toContain('Lớp Toán QA')
     expect(pageAndBodyText(wrapper)).not.toContain('QA-CLASS-1')
+    expect(findPageOrBody(wrapper, '.app-modal iframe').attributes('src')).toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ')
   })
 
   it('refreshes the default date when opening the form and preserves a calendar date', async () => {

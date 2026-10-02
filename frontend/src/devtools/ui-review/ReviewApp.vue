@@ -19,6 +19,8 @@ const pages: Array<{ label: string; path: string; role: ReviewRole }> = [
   { label: 'Giáo viên · Chấm công', path: '/staff/timesheets', role: 'TEACHER' },
   { label: 'Học sinh · Lịch học', path: '/student/schedule', role: 'STUDENT' },
   { label: 'Học sinh · Kết quả', path: '/student/attendance', role: 'STUDENT' },
+  { label: 'Học sinh · Xem lại bài cũ', path: '/student/review', role: 'STUDENT' },
+  { label: 'Học sinh · Hỏi AI', path: '/student/ai', role: 'STUDENT' },
   { label: 'Đăng nhập', path: '/login', role: 'ADMIN' },
   { label: 'Đổi mật khẩu', path: '/auth/change-password', role: 'ADMIN' },
 ]

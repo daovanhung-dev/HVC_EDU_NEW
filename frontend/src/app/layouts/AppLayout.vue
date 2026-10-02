@@ -13,6 +13,8 @@ const links = computed(() => {
   if (auth.isLearner) return [
     { to: '/student/schedule', label: 'Lịch học', icon: 'schedule' },
     { to: '/student/attendance', label: 'Kết quả', icon: 'results' },
+    { to: '/student/review', label: 'Xem lại bài cũ', icon: 'video' },
+    { to: '/student/ai', label: 'Hỏi AI', icon: 'chat' },
   ]
   if (auth.isTeacher) return [
     { to: '/staff/sessions', label: 'Lịch dạy', icon: 'sessions' },
@@ -31,6 +33,8 @@ const pageTitle = computed(() => {
   const path = route.path
   if (/\/admin\/students\/[^/]+/.test(path)) return 'Hồ sơ học sinh'
   if (/\/admin\/classes\/[^/]+/.test(path)) return 'Chi tiết lớp'
+  if (path === '/student/review') return 'Xem lại bài cũ'
+  if (path === '/student/ai') return 'Hỏi AI'
   return links.value.find((link) => path.startsWith(link.to))?.label || roleLabel.value
 })
 

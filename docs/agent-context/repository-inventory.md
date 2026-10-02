@@ -79,6 +79,7 @@
 | frontend/src/app/components/FormModal.vue | Frontend / nền tảng và dịch vụ | Vue SFC |
 | frontend/src/app/components/SessionMonthCalendar.test.ts | Frontend / nền tảng và dịch vụ | TypeScript |
 | frontend/src/app/components/SessionMonthCalendar.vue | Frontend / nền tảng và dịch vụ | Vue SFC |
+| frontend/src/app/components/YouTubePlayer.vue | Frontend / nền tảng và dịch vụ | Vue SFC |
 | frontend/src/app/layouts/AppLayout.test.ts | Frontend / nền tảng và dịch vụ | TypeScript |
 | frontend/src/app/layouts/AppLayout.vue | Frontend / nền tảng và dịch vụ | Vue SFC |
 | frontend/src/app/layouts/AuthLayout.vue | Frontend / nền tảng và dịch vụ | Vue SFC |
@@ -115,8 +116,12 @@
 | frontend/src/modules/staff/pages/StaffProfilePage.vue | Frontend / Giáo viên | Vue SFC |
 | frontend/src/modules/staff/pages/StaffTimesheetsPage.test.ts | Frontend / Giáo viên | TypeScript |
 | frontend/src/modules/staff/pages/StaffTimesheetsPage.vue | Frontend / Giáo viên | Vue SFC |
+| frontend/src/modules/student/pages/StudentAiChatPage.test.ts | Frontend / Học sinh | TypeScript |
+| frontend/src/modules/student/pages/StudentAiChatPage.vue | Frontend / Học sinh | Vue SFC |
 | frontend/src/modules/student/pages/StudentPage.test.ts | Frontend / Học sinh | TypeScript |
 | frontend/src/modules/student/pages/StudentPage.vue | Frontend / Học sinh | Vue SFC |
+| frontend/src/modules/student/pages/StudentReviewPage.test.ts | Frontend / Học sinh | TypeScript |
+| frontend/src/modules/student/pages/StudentReviewPage.vue | Frontend / Học sinh | Vue SFC |
 | frontend/src/services/commands.test.ts | Frontend / nền tảng và dịch vụ | TypeScript |
 | frontend/src/services/commands.ts | Frontend / nền tảng và dịch vụ | TypeScript |
 | frontend/src/services/data-queries.test.ts | Frontend / nền tảng và dịch vụ | TypeScript |
@@ -133,6 +138,8 @@
 | frontend/src/shared/utils/format.ts | Frontend / nền tảng và dịch vụ | TypeScript |
 | frontend/src/shared/utils/session-calendar.test.ts | Frontend / nền tảng và dịch vụ | TypeScript |
 | frontend/src/shared/utils/session-calendar.ts | Frontend / nền tảng và dịch vụ | TypeScript |
+| frontend/src/shared/utils/youtube.test.ts | Frontend / nền tảng và dịch vụ | TypeScript |
+| frontend/src/shared/utils/youtube.ts | Frontend / nền tảng và dịch vụ | TypeScript |
 | frontend/src/stores/app-error.store.ts | Frontend / nền tảng và dịch vụ | TypeScript |
 | frontend/src/stores/auth.store.test.ts | Frontend / nền tảng và dịch vụ | TypeScript |
 | frontend/src/stores/auth.store.ts | Frontend / nền tảng và dịch vụ | TypeScript |
@@ -164,7 +171,12 @@
 | supabase/functions/login-by-identifier/index.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/session-complete/index.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/session-learning-update/index.ts | Supabase / Edge Functions | TypeScript |
+| supabase/functions/session-learning-update/youtube.test.ts | Supabase / Edge Functions | TypeScript |
+| supabase/functions/session-learning-update/youtube.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/session-start/index.ts | Supabase / Edge Functions | TypeScript |
+| supabase/functions/student-ai-tutor/handler.test.ts | Supabase / Edge Functions | TypeScript |
+| supabase/functions/student-ai-tutor/handler.ts | Supabase / Edge Functions | TypeScript |
+| supabase/functions/student-ai-tutor/index.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/teacher-comment-optimize/handler.test.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/teacher-comment-optimize/handler.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/teacher-comment-optimize/index.ts | Supabase / Edge Functions | TypeScript |
@@ -216,6 +228,7 @@
 | supabase/migrations/0044_allow_parallel_sessions_by_room.sql | Supabase / migrations | SQL |
 | supabase/migrations/0045_backdated_attendance_sessions.sql | Supabase / migrations | SQL |
 | supabase/migrations/0046_allow_secret_key_session_rpcs.sql | Supabase / migrations | SQL |
+| supabase/migrations/0047_lesson_videos_and_ai_tutor.sql | Supabase / migrations | SQL |
 | supabase/seed.sql | Supabase / cấu hình và seed | SQL |
 | supabase/tests/admin_monthly_session_planning.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/backdated_session_creation.test.sql | Supabase / kiểm thử SQL | SQL |
@@ -225,4 +238,4 @@
 | supabase/tests/session_learning_commands.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/timesheet_workflow.test.sql | Supabase / kiểm thử SQL | SQL |
 
-Tổng: 218 đường dẫn có trong inventory.
+Tổng: 231 đường dẫn có trong inventory.

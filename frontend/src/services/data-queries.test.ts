@@ -43,7 +43,9 @@ describe('session staff PostgREST relations', () => {
 
     const selection = mockState.selections.find((item) => item.table === 'sessions')
     expect(selection?.columns).toContain(assignedStaffRelation)
-    expect(selection?.columns).toContain('classes(id,name)')
+    expect(selection?.columns).toContain('classes(id,name,subjects(name),grades(name))')
+    expect(selection?.columns).toContain('lesson_youtube_url')
+    expect(selection?.columns).toContain('subjects(name)')
     expect(selection?.columns).toContain('room')
     expect(selection?.columns).not.toContain('classes(id,code,name)')
     expect(selection?.columns).not.toContain('manual_schedule')

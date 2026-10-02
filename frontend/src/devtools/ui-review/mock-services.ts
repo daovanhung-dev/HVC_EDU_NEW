@@ -39,7 +39,7 @@ export const schedules: any[] = [
 export const sessions: any[] = [
   { id: 'qa-session-1', class_id: 'qa-class-1', scheduled_start_at: at(1, '17:30'), scheduled_end_at: at(1, '19:00'), status: 'SCHEDULED', room: 'QA-A1', session_note: null, classes: classes[0], class_schedules: schedules[0], session_staff: [{ staff_id: 'qa-teacher-1', assignment_role: 'TEACHER', staff: teachers[0] }], session_students: memberships.map((item) => ({ student_id: item.student_id })) },
   { id: 'qa-session-2', class_id: 'qa-class-1', scheduled_start_at: at(0, '10:00'), scheduled_end_at: at(0, '11:30'), status: 'IN_PROGRESS', room: 'QA-A1', session_note: 'Phân số và bài tập ứng dụng.', classes: classes[0], class_schedules: schedules[0], session_staff: [{ staff_id: 'qa-teacher-1', assignment_role: 'TEACHER', staff: teachers[0] }], session_students: memberships.map((item) => ({ student_id: item.student_id })) },
-  { id: 'qa-session-3', class_id: 'qa-class-2', scheduled_start_at: at(-1, '15:00'), scheduled_end_at: at(-1, '16:30'), status: 'COMPLETED', room: 'QA-B2', session_note: 'Ôn tập từ vựng.', classes: classes[1], class_schedules: null, session_staff: [{ staff_id: 'qa-teacher-2', assignment_role: 'TEACHER', staff: teachers[1] }], session_students: [] },
+  { id: 'qa-session-3', class_id: 'qa-class-2', scheduled_start_at: at(-1, '15:00'), scheduled_end_at: at(-1, '16:30'), status: 'COMPLETED', room: 'QA-B2', session_note: 'Ôn tập từ vựng.', lesson_youtube_url: 'https://youtu.be/dQw4w9WgXcQ', classes: classes[1], class_schedules: null, session_staff: [{ staff_id: 'qa-teacher-2', assignment_role: 'TEACHER', staff: teachers[1] }], session_students: [] },
   { id: 'qa-session-4', class_id: 'qa-class-1', scheduled_start_at: at(-3, '17:30'), scheduled_end_at: at(-3, '19:00'), status: 'COMPLETED', room: 'QA-A1', session_note: 'Phép chia và luyện tập.', classes: classes[0], class_schedules: schedules[0], session_staff: [{ staff_id: 'qa-teacher-1', assignment_role: 'TEACHER', staff: teachers[0] }], session_students: [] },
 ]
 
@@ -111,13 +111,14 @@ export async function startSession(id: string) { const row = sessions.find((item
 export async function completeSession(id: string) { const row = sessions.find((item) => item.id === id); if (row) row.status = 'COMPLETED' }
 export async function updateSessionLearning(input: any) {
   const session = sessions.find((item) => item.id === input.session_id)
-  if (session) session.session_note = input.session_note
+  if (session) { session.session_note = input.session_note; if (input.lesson_youtube_url !== undefined) session.lesson_youtube_url = input.lesson_youtube_url || null }
   for (const change of input.students || []) {
     const existing = attendance.find((item) => item.session_id === input.session_id && item.student_id === change.student_id)
     if (existing) Object.assign(existing, change)
     else attendance.push({ id: `qa-attendance-${Date.now()}-${change.student_id}`, session_id: input.session_id, ...change })
   }
 }
+export async function askStudentAI(input: any) { return { answer: `QA- Mình sẽ hướng dẫn từng bước${input.session_id ? ' theo bài đã chọn' : ''}.` } }
 export async function optimizeTeacherComment(comment: string) {
   return { optimized_comment: `QA- Gợi ý diễn đạt: ${comment.trim().replace(/[.!?]+$/u, '')} với lời nhận xét rõ ràng và tích cực hơn.` }
 }

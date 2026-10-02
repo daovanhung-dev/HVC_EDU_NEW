@@ -82,6 +82,8 @@ describe('authentication route guard', () => {
     expect(router.resolve('/admin/students/student-1').matched.some((record) => record.path === '/admin/students/:studentId')).toBe(true)
     expect(router.resolve('/admin/timesheets').matched.some((record) => record.path === '/admin/timesheets')).toBe(true)
     expect(router.resolve('/staff/timesheets').matched.some((record) => record.path === '/staff/timesheets')).toBe(true)
+    expect(router.resolve('/student/review').matched.some((record) => record.path === '/student/review')).toBe(true)
+    expect(router.resolve('/student/ai').matched.some((record) => record.path === '/student/ai')).toBe(true)
     expect(router.resolve('/admin/class-months').matched.some((record) => record.path === '/admin/class-months')).toBe(false)
   })
 })

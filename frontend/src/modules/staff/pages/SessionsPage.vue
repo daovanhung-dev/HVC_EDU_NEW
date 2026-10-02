@@ -11,6 +11,8 @@ import AppState from '@/app/components/AppState.vue'
 import SessionMonthCalendar from '@/app/components/SessionMonthCalendar.vue'
 import StaffAttendanceModal from '../components/StaffAttendanceModal.vue'
 import { attendanceIsDirty, attendanceStatusLabel, attendanceValidationError, createAttendanceValue, toAttendanceSaveInput, type AttendanceStudentRow } from '../attendance'
+import { isValidYouTubeUrl } from '@/shared/utils/youtube'
+import YouTubePlayer from '@/app/components/YouTubePlayer.vue'
 
 interface SessionStudentSource {
   student_id: string
@@ -24,6 +26,7 @@ const sessions = ref<SessionRow[]>([])
 const students = ref<AttendanceStudentRow[]>([])
 const selected = ref<SessionRow | null>(null)
 const sessionNote = ref('')
+const lessonYoutubeUrl = ref('')
 const errorMessage = ref('')
 const saving = ref(false)
 const loading = ref(false)
@@ -100,6 +103,7 @@ async function load() {
 async function openSession(session: SessionRow) {
   selected.value = session
   sessionNote.value = session.session_note || ''
+  lessonYoutubeUrl.value = session.lesson_youtube_url || ''
   errorMessage.value = ''
   validationErrors.value = {}
   suggestions.value = {}
@@ -136,7 +140,6 @@ async function saveAttendance() {
   }
   validationErrors.value = nextErrors
   if (Object.keys(nextErrors).length) return
-
   saving.value = true
   errorMessage.value = ''
   try {
@@ -197,15 +200,32 @@ function handleAttendanceOpenChange(open: boolean) {
 
 async function saveNote() {
   if (!selected.value || saving.value) return
+  if (lessonYoutubeUrl.value.trim() && !isValidYouTubeUrl(lessonYoutubeUrl.value)) {
+    errorMessage.value = 'Chỉ nhập link video YouTube hợp lệ.'
+    return
+  }
   saving.value = true
   errorMessage.value = ''
   try {
-    await updateSessionLearning({ session_id: selected.value.id, session_note: sessionNote.value, students: [] })
+    await updateSessionLearning({ session_id: selected.value.id, session_note: sessionNote.value, lesson_youtube_url: lessonYoutubeUrl.value, students: [] })
+    syncSelectedLearning()
     toast.success('Đã lưu nội dung buổi học.')
   } catch (error) {
     showError(error, 'Không thể lưu nội dung buổi học.')
   } finally {
     saving.value = false
+  }
+}
+
+function syncSelectedLearning() {
+  if (!selected.value) return
+  const lessonUrl = lessonYoutubeUrl.value.trim() || null
+  selected.value.session_note = sessionNote.value.trim() || null
+  selected.value.lesson_youtube_url = lessonUrl
+  const row = sessions.value.find((item) => item.id === selected.value?.id)
+  if (row) {
+    row.session_note = selected.value.session_note
+    row.lesson_youtube_url = lessonUrl
   }
 }
 
@@ -321,6 +341,12 @@ onMounted(load)
           </div>
           <textarea v-if="selected.status === 'IN_PROGRESS'" id="session-note" v-model="sessionNote" class="form-control" rows="3" placeholder="Ghi nội dung đã học trong buổi này" aria-label="Nội dung buổi học"></textarea>
           <p v-else class="teacher-session-note__readout">{{ sessionNote || 'Chưa ghi nội dung buổi học.' }}</p>
+          <div v-if="selected.status === 'IN_PROGRESS'" class="mt-3">
+            <label class="form-label" for="lesson-youtube-url">Link video bài học (YouTube)</label>
+            <input id="lesson-youtube-url" v-model="lessonYoutubeUrl" class="form-control" type="url" inputmode="url" placeholder="https://www.youtube.com/watch?v=…" aria-describedby="lesson-youtube-help" :disabled="saving" />
+            <small id="lesson-youtube-help" class="form-text">Có thể để trống. Link được lưu cùng nội dung buổi học.</small>
+          </div>
+          <YouTubePlayer v-if="selected.lesson_youtube_url" class="mt-3" :url="selected.lesson_youtube_url" :title="`Video bài học ${selected.classes?.name || ''}`" />
         </section>
 
         <div v-if="studentsLoading" class="teacher-session-panel__loading" role="status"><span class="app-state__spinner" aria-hidden="true"></span>Đang tải danh sách học sinh…</div>

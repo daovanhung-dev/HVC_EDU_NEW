@@ -39,6 +39,7 @@ export function startSession(session_id: string) {
 export function updateSessionLearning(input: {
   session_id: string
   session_note?: string | null
+  lesson_youtube_url?: string | null
   students: Array<{
     student_id: string
     status: 'PRESENT' | 'LATE' | 'ABSENT' | 'EXCUSED'
@@ -54,6 +55,14 @@ export function updateSessionLearning(input: {
   }>
 }) {
   return invokeFunction<typeof input, { session_id: string; students_updated: number }>('session-learning-update', input)
+}
+
+export function askStudentAI(input: {
+  question: string
+  history: Array<{ role: 'user' | 'model'; text: string }>
+  session_id?: string
+}) {
+  return invokeFunction<typeof input, { answer: string }>('student-ai-tutor', input)
 }
 
 export function optimizeTeacherComment(comment: string) {

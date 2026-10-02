@@ -20,6 +20,8 @@ import StaffSessionsPage from '../src/modules/staff/pages/SessionsPage.vue'
 import StaffProfilePage from '../src/modules/staff/pages/StaffProfilePage.vue'
 import StaffTimesheetsPage from '../src/modules/staff/pages/StaffTimesheetsPage.vue'
 import StudentPage from '../src/modules/student/pages/StudentPage.vue'
+import StudentReviewPage from '../src/modules/student/pages/StudentReviewPage.vue'
+import StudentAiChatPage from '../src/modules/student/pages/StudentAiChatPage.vue'
 
 const routes = [
   { path: '/login', component: AuthLayout, children: [{ path: '', component: LoginPage }] },
@@ -36,6 +38,8 @@ const routes = [
   { path: '/staff/timesheets', component: AppLayout, children: [{ path: '', component: StaffTimesheetsPage }] },
   { path: '/student/schedule', component: AppLayout, children: [{ path: '', component: StudentPage, props: { module: 'schedule' } }] },
   { path: '/student/attendance', component: AppLayout, children: [{ path: '', component: StudentPage, props: { module: 'attendance' } }] },
+  { path: '/student/review', component: AppLayout, children: [{ path: '', component: StudentReviewPage }] },
+  { path: '/student/ai', component: AppLayout, children: [{ path: '', component: StudentAiChatPage }] },
   { path: '/:pathMatch(.*)*', redirect: '/admin/students' },
 ]
 

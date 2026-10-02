@@ -30,6 +30,7 @@ import ConfirmModal from '@/app/components/ConfirmModal.vue'
 import AppField from '@/app/components/AppField.vue'
 import AppPageHeader from '@/app/components/AppPageHeader.vue'
 import DetailModal from '@/app/components/DetailModal.vue'
+import YouTubePlayer from '@/app/components/YouTubePlayer.vue'
 import TeacherPicker from '../components/TeacherPicker.vue'
 import {
   addCalendarDays,
@@ -931,6 +932,7 @@ watch(sessionFormIsBackdated, (isBackdated) => {
             <button class="btn btn-outline-danger btn-sm" @click="cancel">Hủy buổi học</button>
           </div>
           <p v-if="selected.session_note" class="border-start border-3 ps-3">{{ selected.session_note }}</p>
+          <YouTubePlayer v-if="selected.lesson_youtube_url" class="mb-3" :url="selected.lesson_youtube_url" :title="`Video bài học ${className(selected)}`" />
           <h3 class="h6 mt-3">Học sinh và kết quả</h3>
           <div v-for="row in students" :key="row.student_id" class="border rounded p-3 mb-2">
             <div class="fw-semibold">{{ row.students?.full_name }} <small class="text-secondary">{{ row.students?.student_code }}</small></div>
