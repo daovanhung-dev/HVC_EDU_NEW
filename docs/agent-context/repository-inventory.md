@@ -24,6 +24,7 @@
 | docs/data_seed/t9/Diem_danh_7.xlsm | Dữ liệu nguồn được bảo vệ | Workbook nguồn; chỉ lập chỉ mục đường dẫn |
 | docs/data_seed/t9/Diem_danh_8.xlsm | Dữ liệu nguồn được bảo vệ | Workbook nguồn; chỉ lập chỉ mục đường dẫn |
 | docs/data_seed/t9/Diem_danh_9.xlsm | Dữ liệu nguồn được bảo vệ | Workbook nguồn; chỉ lập chỉ mục đường dẫn |
+| docs/data_seed/t9/diemdang.xlsm | Dữ liệu nguồn được bảo vệ | Workbook nguồn; chỉ lập chỉ mục đường dẫn |
 | docs/DELIVERY_ROADMAP.md | Tài liệu sản phẩm / lịch sử | Markdown |
 | docs/Hung_Cuong_Business_Design_v1.0.md | Tài liệu sản phẩm / lịch sử | Markdown |
 | docs/Hung_Cuong_Project_Architecture_GitHubPages_Supabase.md | Tài liệu sản phẩm / lịch sử | Markdown |
@@ -54,6 +55,8 @@
 | frontend/src/app/components/ConfirmModal.vue | Frontend / nền tảng và dịch vụ | Vue SFC |
 | frontend/src/app/components/DetailModal.vue | Frontend / nền tảng và dịch vụ | Vue SFC |
 | frontend/src/app/components/FormModal.vue | Frontend / nền tảng và dịch vụ | Vue SFC |
+| frontend/src/app/components/SessionMonthCalendar.test.ts | Frontend / nền tảng và dịch vụ | TypeScript |
+| frontend/src/app/components/SessionMonthCalendar.vue | Frontend / nền tảng và dịch vụ | Vue SFC |
 | frontend/src/app/layouts/AppLayout.test.ts | Frontend / nền tảng và dịch vụ | TypeScript |
 | frontend/src/app/layouts/AppLayout.vue | Frontend / nền tảng và dịch vụ | Vue SFC |
 | frontend/src/app/layouts/AuthLayout.vue | Frontend / nền tảng và dịch vụ | Vue SFC |
@@ -82,10 +85,12 @@
 | frontend/src/modules/auth/pages/ChangePasswordPage.vue | Frontend / Đăng nhập | Vue SFC |
 | frontend/src/modules/auth/pages/LoginPage.test.ts | Frontend / Đăng nhập | TypeScript |
 | frontend/src/modules/auth/pages/LoginPage.vue | Frontend / Đăng nhập | Vue SFC |
+| frontend/src/modules/staff/pages/SessionsPage.test.ts | Frontend / Giáo viên | TypeScript |
 | frontend/src/modules/staff/pages/SessionsPage.vue | Frontend / Giáo viên | Vue SFC |
 | frontend/src/modules/staff/pages/StaffProfilePage.vue | Frontend / Giáo viên | Vue SFC |
 | frontend/src/modules/staff/pages/StaffTimesheetsPage.test.ts | Frontend / Giáo viên | TypeScript |
 | frontend/src/modules/staff/pages/StaffTimesheetsPage.vue | Frontend / Giáo viên | Vue SFC |
+| frontend/src/modules/student/pages/StudentPage.test.ts | Frontend / Học sinh | TypeScript |
 | frontend/src/modules/student/pages/StudentPage.vue | Frontend / Học sinh | Vue SFC |
 | frontend/src/services/commands.test.ts | Frontend / nền tảng và dịch vụ | TypeScript |
 | frontend/src/services/commands.ts | Frontend / nền tảng và dịch vụ | TypeScript |
@@ -180,12 +185,14 @@
 | supabase/migrations/0043_limit_class_teachers.sql | Supabase / migrations | SQL |
 | supabase/migrations/0044_allow_parallel_sessions_by_room.sql | Supabase / migrations | SQL |
 | supabase/migrations/0045_backdated_attendance_sessions.sql | Supabase / migrations | SQL |
+| supabase/migrations/0046_allow_secret_key_session_rpcs.sql | Supabase / migrations | SQL |
 | supabase/seed.sql | Supabase / cấu hình và seed | SQL |
 | supabase/tests/admin_monthly_session_planning.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/backdated_session_creation.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/class_teacher_limit.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/continuous_learning_rls.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/parallel_session_rooms.test.sql | Supabase / kiểm thử SQL | SQL |
+| supabase/tests/session_learning_commands.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/timesheet_workflow.test.sql | Supabase / kiểm thử SQL | SQL |
 
-Tổng: 181 đường dẫn có trong inventory.
+Tổng: 188 đường dẫn có trong inventory.
