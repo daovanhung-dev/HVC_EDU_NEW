@@ -11,12 +11,12 @@ const props = withDefaults(defineProps<{
   size?: 'sm' | 'lg' | 'xl'
   busy?: boolean
   dirty?: boolean
-  teleportToBody?: boolean
-}>(), { description: '', size: 'lg', busy: false, dirty: false, teleportToBody: false })
+}>(), { description: '', size: 'lg', busy: false, dirty: false })
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
   'dismiss-blocked': []
+  hidden: []
 }>()
 
 const element = ref<HTMLElement | null>(null)
@@ -48,6 +48,7 @@ function onHide(event: Event) {
 function onHidden() {
   if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true })
   returnFocus = null
+  emit('hidden')
 }
 
 function close() {
@@ -126,7 +127,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <Teleport to="body" :disabled="!teleportToBody">
+  <Teleport to="body">
     <div v-bind="$attrs" ref="element" class="modal fade app-modal" tabindex="-1" role="dialog" :aria-labelledby="titleId" :aria-describedby="description ? descriptionId : undefined" aria-hidden="true">
       <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" :class="[`modal-${size}`, { 'app-modal__sheet': true }]">
         <section class="modal-content">

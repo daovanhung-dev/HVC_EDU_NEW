@@ -62,7 +62,6 @@ function studentName(row: AttendanceStudentRow) {
     :title="readOnly ? 'Kết quả điểm danh' : 'Điểm danh và kết quả học tập'"
     :description="session ? `${session.classes?.name || 'Lớp học'} · ${formatDateTime(session.scheduled_start_at)} · ${rows.length} học sinh` : ''"
     size="xl"
-    teleport-to-body
     :busy="isBusy()"
     :dirty="dirty"
     @update:model-value="emit('update:modelValue', $event)"

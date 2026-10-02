@@ -1,5 +1,5 @@
-import { flushPromises, mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { DOMWrapper, flushPromises, mount } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia } from 'pinia'
 import { useToastStore } from '@/stores/toast.store'
 import AdminTimesheetsPage from './AdminTimesheetsPage.vue'
@@ -23,7 +23,28 @@ vi.mock('bootstrap', () => ({
 vi.mock('@/services/data-queries', () => ({ getTimesheets: mocks.getTimesheets }))
 vi.mock('@/services/commands', () => ({ reviewTimesheet: mocks.reviewTimesheet }))
 
+function getPageOrBody(wrapper: ReturnType<typeof mount>, selector: string) {
+  return wrapper.find(selector).exists() ? wrapper.get(selector) : new DOMWrapper(document.body).get(selector)
+}
+
+function allButtons(wrapper: ReturnType<typeof mount>) {
+  return [...wrapper.findAll('button'), ...new DOMWrapper(document.body).findAll('button')]
+}
+
+const mountedWrappers: Array<{ unmount: () => void }> = []
+
+function track<T extends { unmount: () => void }>(wrapper: T) {
+  mountedWrappers.push(wrapper)
+  return wrapper
+}
+
 describe('AdminTimesheetsPage', () => {
+  afterEach(() => {
+    mountedWrappers.splice(0).forEach((wrapper) => wrapper.unmount())
+    document.body.querySelectorAll('.modal-backdrop').forEach((backdrop) => backdrop.remove())
+    document.body.classList.remove('modal-open')
+  })
+
   beforeEach(() => {
     mocks.getTimesheets.mockReset().mockResolvedValue([{
       id: 'qa-timesheet', session_id: 'qa-session', staff_id: 'qa-teacher', status: 'PENDING',
@@ -37,18 +58,18 @@ describe('AdminTimesheetsPage', () => {
 
   it('requires a reason for rejection and sends an approval decision', async () => {
     const pinia = createPinia()
-    const wrapper = mount(AdminTimesheetsPage, { global: { plugins: [pinia] } })
+    const wrapper = track(mount(AdminTimesheetsPage, { global: { plugins: [pinia] } }))
     await flushPromises()
     expect(wrapper.text()).toContain('QA class')
 
-    await wrapper.findAll('button').find((button) => button.text() === 'Từ chối')?.trigger('click')
-    expect(wrapper.find('textarea[required]').exists()).toBe(true)
+    await allButtons(wrapper).find((button) => button.text() === 'Từ chối')?.trigger('click')
+    expect(getPageOrBody(wrapper, 'textarea[required]').exists()).toBe(true)
     expect(mocks.reviewTimesheet).not.toHaveBeenCalled()
-    await wrapper.get('textarea[required]').setValue('QA: lý do xác nhận')
-    await wrapper.findAll('button').find((button) => button.text() === 'Hủy')?.trigger('click')
+    await getPageOrBody(wrapper, 'textarea[required]').setValue('QA: lý do xác nhận')
+    await allButtons(wrapper).find((button) => button.text() === 'Hủy')?.trigger('click')
 
-    await wrapper.findAll('button').find((button) => button.text() === 'Duyệt')?.trigger('click')
-    await wrapper.findAll('button').find((button) => button.text() === 'Duyệt chấm công')?.trigger('click')
+    await allButtons(wrapper).find((button) => button.text() === 'Duyệt')?.trigger('click')
+    await allButtons(wrapper).find((button) => button.text() === 'Duyệt chấm công')?.trigger('click')
     await flushPromises()
     expect(mocks.reviewTimesheet).toHaveBeenCalledWith({ timesheet_id: 'qa-timesheet', approve: true, reason: null })
     expect(useToastStore(pinia).items.map((item) => item.message)).toContain('Đã duyệt chấm công.')
@@ -56,11 +77,11 @@ describe('AdminTimesheetsPage', () => {
 
   it('sends a required rejection reason to the review command', async () => {
     const pinia = createPinia()
-    const wrapper = mount(AdminTimesheetsPage, { global: { plugins: [pinia] } })
+    const wrapper = track(mount(AdminTimesheetsPage, { global: { plugins: [pinia] } }))
     await flushPromises()
-    await wrapper.findAll('button').find((button) => button.text() === 'Từ chối')?.trigger('click')
-    await wrapper.get('textarea[required]').setValue('QA: cần bổ sung ghi chú')
-    await wrapper.findAll('button').find((button) => button.text() === 'Từ chối chấm công')?.trigger('click')
+    await allButtons(wrapper).find((button) => button.text() === 'Từ chối')?.trigger('click')
+    await getPageOrBody(wrapper, 'textarea[required]').setValue('QA: cần bổ sung ghi chú')
+    await allButtons(wrapper).find((button) => button.text() === 'Từ chối chấm công')?.trigger('click')
     await flushPromises()
     expect(mocks.reviewTimesheet).toHaveBeenCalledWith({ timesheet_id: 'qa-timesheet', approve: false, reason: 'QA: cần bổ sung ghi chú' })
     expect(useToastStore(pinia).items.map((item) => item.message)).toContain('Đã từ chối chấm công.')

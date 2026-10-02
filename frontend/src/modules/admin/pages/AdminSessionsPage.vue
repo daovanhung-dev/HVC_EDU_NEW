@@ -455,6 +455,7 @@ async function createSession() {
       room: sessionForm.value.room.trim() || null,
     })
     toast.success(sessionFormIsBackdated.value ? 'Đã tạo buổi điểm danh bù.' : 'Đã tạo buổi học.')
+    sessionFormBusy.value = false
     sessionFormOpen.value = false
     sessionFormDirty.value = false
     await load()
@@ -481,6 +482,7 @@ async function applyWeekNow() {
   try {
     const result = await applyWeekToMonth({ source_session_ids: sourceIds, month_start: monthStart }) as { created?: number }
     toast.success(`Đã tạo ${result.created || 0} buổi cụ thể cho tháng.`)
+    confirmBusy.value = false
     confirmOpen.value = false
     await load()
   } catch (error) {
@@ -529,6 +531,7 @@ async function createSchedule() {
     if (scheduleForm.value.staff_id) await addTeacherToClassSchedule(created.id, scheduleForm.value.staff_id)
     scheduleForm.value = { day_of_week: 1, start_time: '17:30', end_time: '19:30', room: '', staff_id: '' }
     toast.success('Đã lưu lịch cố định ở trạng thái chờ rà soát.')
+    scheduleFormBusy.value = false
     scheduleFormOpen.value = false
     scheduleFormDirty.value = false
     await loadSchedules()
@@ -577,6 +580,7 @@ async function saveClassSchedule(row: ClassScheduleRow) {
   try {
     const result = await updateClassSchedule(row.id, { ...editSchedule.value, room: editSchedule.value.room.trim() || null })
     editingScheduleId.value = ''
+    scheduleFormBusy.value = false
     scheduleFormOpen.value = false
     scheduleFormDirty.value = false
     await load()
@@ -631,6 +635,7 @@ async function archiveScheduleNow() {
   try {
     await setClassScheduleStatus(pendingSchedule.value.id, 'ARCHIVED')
     toast.success('Đã lưu trữ khung lịch và giữ nguyên lịch sử.')
+    confirmBusy.value = false
     confirmOpen.value = false
     await load()
   } catch (error) {
@@ -664,6 +669,7 @@ async function cancelSessionNow() {
   try {
     await updateSessionOccurrence({ session_id: sessionId, cancel: true, room: sessionRoomInput.value.trim() || null })
     toast.success('Đã hủy buổi học.')
+    confirmBusy.value = false
     confirmOpen.value = false
     await load()
     const refreshed = sessions.value.find((item) => item.id === sessionId)

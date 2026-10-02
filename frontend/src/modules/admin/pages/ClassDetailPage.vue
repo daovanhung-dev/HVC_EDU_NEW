@@ -58,6 +58,7 @@ async function addStudent() {
   try {
     await addClassMembership({ class_id: classId.value, student_id: membershipForm.value.student_id, start_date: membershipForm.value.start_date })
     membershipForm.value = { student_id: '', start_date: localDate() }
+    membershipBusy.value = false
     showMembership.value = false
     membershipDirty.value = false
     toast.success('Đã thêm học sinh vào lớp.')
@@ -78,6 +79,7 @@ async function confirmEndMembership() {
   const today = localDate()
   try {
     await updateClassMembership(row.id, { start_date: row.start_date, end_date: row.start_date > today ? null : today, status: 'INACTIVE' })
+    confirmBusy.value = false
     confirmEnd.value = false
     toast.success(`Đã kết thúc xếp lớp của ${row.students?.full_name || 'học sinh'}.`)
     await load()

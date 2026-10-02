@@ -15,11 +15,12 @@ withDefaults(defineProps<{
 defineEmits<{
   'update:modelValue': [value: boolean]
   confirm: []
+  hidden: []
 }>()
 </script>
 
 <template>
-  <BaseModal :model-value="modelValue" :title="title" size="sm" :busy="busy" @update:model-value="$emit('update:modelValue', $event)">
+  <BaseModal :model-value="modelValue" :title="title" size="sm" :busy="busy" @update:model-value="$emit('update:modelValue', $event)" @hidden="$emit('hidden')">
     <div class="app-confirm">
       <p>{{ message }}</p>
       <div v-if="itemName" class="app-confirm__item">{{ itemName }}</div>

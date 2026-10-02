@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { adminCreateUser, adminResetPassword, archiveStaff, setAccountStatus, updateStaff } from '@/services/commands'
 import { getStaff } from '@/services/data-queries'
 import { useToastStore } from '@/stores/toast.store'
@@ -23,6 +23,7 @@ const loading = ref(false)
 const errorMessage = ref('')
 const temporaryPassword = ref('')
 const showPassword = ref(false)
+const passwordDialogAfterClose = ref<'form' | 'confirm' | null>(null)
 const form = ref({ full_name: '', staff_code: '', username: '', email: '', password: '', phone: '' })
 const editForm = ref<StaffForm>({ staff_code: '', full_name: '', phone: '' })
 const confirmOpen = ref(false)
@@ -70,17 +71,23 @@ async function saveForm() {
       const result = await adminCreateUser({ role: 'TEACHER', username: form.value.username, email: form.value.email || undefined, password: suppliedPassword || undefined, phone: form.value.phone || undefined, display_name: form.value.full_name, staff: { staff_code: form.value.staff_code || undefined, full_name: form.value.full_name } })
       if (!suppliedPassword) newTemporaryPassword = result.temporary_password
     }
-    showForm.value = false
     formDirty.value = false
     form.value = { full_name: '', staff_code: '', username: '', email: '', password: '', phone: '' }
-    await load()
     if (newTemporaryPassword) {
       temporaryPassword.value = newTemporaryPassword
-      await nextTick()
-      showPassword.value = true
+      passwordDialogAfterClose.value = 'form'
     }
+    formBusy.value = false
+    showForm.value = false
+    await load()
   } catch (error) { errorMessage.value = error instanceof Error ? error.message : editing.value ? 'Không thể cập nhật nhân sự' : 'Không thể tạo nhân sự' }
   finally { formBusy.value = false }
+}
+
+function onFormHidden() {
+  if (passwordDialogAfterClose.value !== 'form') return
+  passwordDialogAfterClose.value = null
+  showPassword.value = true
 }
 
 function askFor(row: Staff, action: 'archive' | 'toggle' | 'reset') {
@@ -106,13 +113,20 @@ async function confirmAction() {
   errorMessage.value = ''
   try {
     await pendingAction.value()
+    if (temporaryPassword.value) passwordDialogAfterClose.value = 'confirm'
+    confirmBusy.value = false
     confirmOpen.value = false
-    if (temporaryPassword.value) { await nextTick(); showPassword.value = true }
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'Không thể hoàn tất thao tác'
     toast.error(errorMessage.value)
   }
   finally { confirmBusy.value = false }
+}
+
+function onConfirmHidden() {
+  if (passwordDialogAfterClose.value !== 'confirm') return
+  passwordDialogAfterClose.value = null
+  showPassword.value = true
 }
 
 function closePassword() { showPassword.value = false; temporaryPassword.value = '' }
@@ -133,13 +147,13 @@ onMounted(load)
     </tbody></table></div>
   </div></section>
 
-  <FormModal v-model="showForm" :title="modalTitle" :description="editing ? 'Cập nhật thông tin hồ sơ nhân sự.' : 'Tài khoản mới có vai trò Giáo viên; có thể nhập email và mật khẩu ban đầu.'" :busy="formBusy" :dirty="formDirty" :submit-disabled="editing ? !editForm.full_name : !form.full_name" :submit-label="editing ? 'Lưu thay đổi' : 'Tạo tài khoản'" @submit="saveForm" @cancel="showForm = false">
+  <FormModal v-model="showForm" :title="modalTitle" :description="editing ? 'Cập nhật thông tin hồ sơ nhân sự.' : 'Tài khoản mới có vai trò Giáo viên; có thể nhập email và mật khẩu ban đầu.'" :busy="formBusy" :dirty="formDirty" :submit-disabled="editing ? !editForm.full_name : !form.full_name" :submit-label="editing ? 'Lưu thay đổi' : 'Tạo tài khoản'" @submit="saveForm" @cancel="showForm = false" @hidden="onFormHidden">
     <div class="row g-3" @input="formDirty = true" @change="formDirty = true">
       <template v-if="editing"><AppField id="staff-name-edit" class="col-md-7" label="Họ tên" required><template #default="field"><input :id="field.id" v-model="editForm.full_name" class="form-control" required data-modal-autofocus /></template></AppField><AppField id="staff-code-edit" class="col-md-5" label="Mã nhân sự"><template #default="field"><input :id="field.id" v-model="editForm.staff_code" class="form-control" /></template></AppField><AppField id="staff-phone-edit" class="col-12" label="Số điện thoại"><template #default="field"><input :id="field.id" v-model="editForm.phone" class="form-control" inputmode="tel" /></template></AppField></template>
       <template v-else><AppField id="staff-name" class="col-md-7" label="Họ tên" required><template #default="field"><input :id="field.id" v-model="form.full_name" class="form-control" required data-modal-autofocus /></template></AppField><AppField id="staff-code" class="col-md-5" label="Mã nhân sự"><template #default="field"><input :id="field.id" v-model="form.staff_code" class="form-control" /></template></AppField><AppField id="staff-username" class="col-md-6" label="Tên đăng nhập" description="Có thể để trống để hệ thống tự tạo."><template #default="field"><input :id="field.id" v-model="form.username" class="form-control" autocomplete="off" :aria-describedby="field.describedBy" /></template></AppField><AppField id="staff-email" class="col-md-6" label="Email"><template #default="field"><input :id="field.id" v-model="form.email" class="form-control" type="email" autocomplete="email" :aria-describedby="field.describedBy" /></template></AppField><AppField id="staff-password" class="col-md-6" label="Mật khẩu ban đầu" description="Để trống để hệ thống tạo mật khẩu tạm."><template #default="field"><input :id="field.id" v-model="form.password" class="form-control" type="password" autocomplete="new-password" :aria-describedby="field.describedBy" /></template></AppField><AppField id="staff-phone" class="col-md-6" label="Số điện thoại"><template #default="field"><input :id="field.id" v-model="form.phone" class="form-control" inputmode="tel" /></template></AppField><p class="col-12 mb-0 small text-secondary">Tài khoản được tạo với vai trò Giáo viên.</p></template>
     </div>
     <div v-if="errorMessage" class="alert alert-danger mt-3 mb-0" role="alert">{{ errorMessage }}</div>
   </FormModal>
-  <ConfirmModal v-model="confirmOpen" v-bind="confirmDetails" :busy="confirmBusy" @confirm="confirmAction" />
+  <ConfirmModal v-model="confirmOpen" v-bind="confirmDetails" :busy="confirmBusy" @confirm="confirmAction" @hidden="onConfirmHidden" />
   <DetailModal v-model="showPassword" title="Mật khẩu tạm thời" description="Mật khẩu chỉ hiển thị trong phiên này. Hãy ghi lại và bàn giao qua kênh bảo mật." size="sm"><label class="form-label" for="staff-temporary-password">Mật khẩu tạm</label><input id="staff-temporary-password" class="form-control fw-semibold" :value="temporaryPassword" readonly data-modal-autofocus /><template #footer><button class="btn btn-primary" type="button" @click="closePassword">Đã ghi lại</button></template></DetailModal>
 </template>

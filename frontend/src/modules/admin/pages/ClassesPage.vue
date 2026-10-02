@@ -54,6 +54,7 @@ async function saveForm() {
     const payload = { ...form.value, max_students: form.value.capacity_policy === 'UNLIMITED' ? null : form.value.max_students }
     if (editing.value) { await updateClass(editing.value.id, payload); toast.success('Đã cập nhật lớp học.') }
     else { await createClass(payload); toast.success('Đã tạo lớp học.') }
+    formBusy.value = false
     showForm.value = false
     formDirty.value = false
     form.value = emptyForm()
@@ -67,7 +68,7 @@ async function archive() {
   if (!pendingClass.value || confirmBusy.value) return
   confirmBusy.value = true
   errorMessage.value = ''
-  try { await archiveClass(pendingClass.value.id); toast.success(`Đã lưu trữ lớp ${pendingClass.value.name}.`); confirmOpen.value = false; await load() }
+  try { await archiveClass(pendingClass.value.id); toast.success(`Đã lưu trữ lớp ${pendingClass.value.name}.`); confirmBusy.value = false; confirmOpen.value = false; await load() }
   catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'Không thể lưu trữ lớp học'
     toast.error(errorMessage.value)

@@ -44,6 +44,7 @@ async function review(row: TimesheetRow, approve: boolean) {
   try {
     await reviewTimesheet({ timesheet_id: row.id, approve, reason: approve ? null : reason })
     toast.success(approve ? 'Đã duyệt chấm công.' : 'Đã từ chối chấm công.')
+    reviewingId.value = ''
     if (approve) approvalOpen.value = false
     else rejectionOpen.value = false
     await load()

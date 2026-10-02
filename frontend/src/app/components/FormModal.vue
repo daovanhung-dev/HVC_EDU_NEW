@@ -18,11 +18,12 @@ defineEmits<{
   submit: []
   cancel: []
   'dismiss-blocked': []
+  hidden: []
 }>()
 </script>
 
 <template>
-  <BaseModal :model-value="modelValue" :title="title" :description="description" :size="size" :busy="busy" :dirty="dirty" @update:model-value="$emit('update:modelValue', $event)" @dismiss-blocked="$emit('dismiss-blocked')">
+  <BaseModal :model-value="modelValue" :title="title" :description="description" :size="size" :busy="busy" :dirty="dirty" @update:model-value="$emit('update:modelValue', $event)" @dismiss-blocked="$emit('dismiss-blocked')" @hidden="$emit('hidden')">
     <slot />
     <template #footer>
       <slot name="footer">
