@@ -9,7 +9,8 @@ const props = withDefaults(defineProps<{
   size?: 'sm' | 'lg' | 'xl'
   busy?: boolean
   dirty?: boolean
-}>(), { description: '', size: 'lg', busy: false, dirty: false })
+  teleportToBody?: boolean
+}>(), { description: '', size: 'lg', busy: false, dirty: false, teleportToBody: false })
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
@@ -123,21 +124,23 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="element" class="modal fade app-modal" tabindex="-1" role="dialog" :aria-labelledby="titleId" :aria-describedby="description ? descriptionId : undefined" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" :class="[`modal-${size}`, { 'app-modal__sheet': true }]">
-      <section class="modal-content">
-        <header class="modal-header">
-          <div>
-            <h2 :id="titleId" class="modal-title">{{ title }}</h2>
-            <p v-if="description" :id="descriptionId" class="app-modal__description">{{ description }}</p>
-          </div>
-          <button class="app-modal__close" type="button" aria-label="Đóng hộp thoại" :disabled="busy" @click="close">
-            <span aria-hidden="true">×</span>
-          </button>
-        </header>
-        <div class="modal-body"><slot /></div>
-        <footer v-if="$slots.footer" class="modal-footer"><slot name="footer" /></footer>
-      </section>
+  <Teleport to="body" :disabled="!teleportToBody">
+    <div ref="element" class="modal fade app-modal" tabindex="-1" role="dialog" :aria-labelledby="titleId" :aria-describedby="description ? descriptionId : undefined" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" :class="[`modal-${size}`, { 'app-modal__sheet': true }]">
+        <section class="modal-content">
+          <header class="modal-header">
+            <div>
+              <h2 :id="titleId" class="modal-title">{{ title }}</h2>
+              <p v-if="description" :id="descriptionId" class="app-modal__description">{{ description }}</p>
+            </div>
+            <button class="app-modal__close" type="button" aria-label="Đóng hộp thoại" :disabled="busy" @click="close">
+              <span aria-hidden="true">×</span>
+            </button>
+          </header>
+          <div class="modal-body"><slot /></div>
+          <footer v-if="$slots.footer" class="modal-footer"><slot name="footer" /></footer>
+        </section>
+      </div>
     </div>
-  </div>
+  </Teleport>
 </template>
