@@ -68,7 +68,7 @@ onMounted(load)
   <AppState v-if="loading" kind="loading" title="Đang tải buổi học" />
   <div v-else-if="!completedSessions.length" class="card"><AppState kind="empty" title="Chưa có buổi học hoàn tất" message="Buổi học sẽ xuất hiện tại đây sau khi được hoàn thành." /></div>
   <div v-else class="row g-3">
-    <div v-for="session in completedSessions" :key="session.id" class="col-12">
+    <div v-for="session in completedSessions" :key="session.id" class="col-12 staff-session-motion-item">
       <article class="card border-0 shadow-sm">
         <div class="card-body">
           <div class="d-flex flex-wrap justify-content-between gap-2">

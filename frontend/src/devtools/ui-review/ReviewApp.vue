@@ -82,7 +82,7 @@ function applyMode() {
 
 function refreshPreview() { refreshKey.value += 1 }
 
-const viewportOptions = [0, 375, 768, 1024, 1440]
+const viewportOptions = [0, 320, 375, 768, 1024, 1440]
 if (embedded) {
   const requestedMode = new URLSearchParams(window.location.search).get('mode') as ReviewMode | null
   if (requestedMode && modes.some((item) => item.value === requestedMode)) setReviewMode(requestedMode)

@@ -823,7 +823,8 @@ watch(sessionFormIsBackdated, (isBackdated) => {
     <div :class="viewMode === 'list' ? 'col-12' : 'col-12'">
       <div class="card border-0 shadow-sm">
         <div class="card-body">
-          <div v-if="viewMode === 'list'" class="session-list">
+          <Transition name="view-swap" mode="out-in">
+          <div v-if="viewMode === 'list'" key="list" class="session-list">
             <div v-if="loading" class="text-center text-secondary py-4" role="status">Đang tải buổi học…</div>
             <div v-else-if="!errorMessage && !visibleSessions.length" class="text-center text-secondary py-5">Chưa có buổi học.</div>
             <div class="table-responsive">
@@ -844,7 +845,7 @@ watch(sessionFormIsBackdated, (isBackdated) => {
             </div>
           </div>
 
-          <div v-else>
+          <div v-else key="calendar" class="session-calendar-view">
             <div class="calendar-scroll" :aria-label="viewMode === 'month' ? 'Lịch tháng' : 'Lịch tuần'">
               <div class="calendar-weekdays" aria-hidden="true">
                 <div v-for="day in weekdayLabels" :key="day" class="calendar-weekday">{{ day }}</div>
@@ -901,6 +902,7 @@ watch(sessionFormIsBackdated, (isBackdated) => {
               {{ visibleSessions.length ? 'Không có buổi học trong khoảng thời gian này.' : 'Chưa có buổi học.' }}
             </div>
           </div>
+          </Transition>
         </div>
       </div>
     </div>
