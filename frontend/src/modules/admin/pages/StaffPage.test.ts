@@ -60,7 +60,7 @@ describe('StaffPage account creation', () => {
   beforeEach(() => {
     mocks.getStaff.mockReset().mockResolvedValue([staff])
     mocks.adminCreateUser.mockReset().mockResolvedValue({ temporary_password: 'QA-generated-value' })
-    mocks.adminResetPassword.mockReset().mockResolvedValue({ temporary_password: 'QA-reset-value' })
+    mocks.adminResetPassword.mockReset().mockResolvedValue({ temporary_password: '12345678' })
     mocks.archiveStaff.mockReset().mockResolvedValue(undefined)
     mocks.setAccountStatus.mockReset().mockResolvedValue(undefined)
     mocks.updateStaff.mockReset().mockResolvedValue(undefined)
@@ -94,5 +94,18 @@ describe('StaffPage account creation', () => {
 
     expect(mocks.updateStaff).toHaveBeenCalledWith('qa-staff-1', expect.objectContaining({ full_name: 'QA Giáo viên cập nhật' }))
     expect(mocks.adminCreateUser).not.toHaveBeenCalled()
+  })
+
+  it('shows the fixed password after resetting a teacher account', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    const resetButton = allButtons(wrapper).find((button) => button.text() === 'Đặt lại mật khẩu')
+    await resetButton?.trigger('click')
+    const confirmButton = new DOMWrapper(document.body).findAll('.app-modal[aria-hidden="false"] button').find((button) => button.text() === 'Đặt lại mật khẩu')
+    await confirmButton?.trigger('click')
+    await flushPromises()
+
+    expect(mocks.adminResetPassword).toHaveBeenCalledWith('qa-user-1')
+    expect((new DOMWrapper(document.body).get('#staff-temporary-password').element as HTMLInputElement).value).toBe('12345678')
   })
 })

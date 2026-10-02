@@ -87,7 +87,7 @@ export async function adminCreateUser(input: any) {
   else teachers.unshift({ id: `qa-teacher-${Date.now()}`, user_id: `qa-user-${Date.now()}`, staff_code: input.staff?.staff_code || 'QA-T-NEW', full_name: input.staff.full_name, staff_type: 'TEACHER', phone: input.phone || null, status: 'ACTIVE' })
   return { temporary_password: 'QA-temp-pass-46' }
 }
-export async function adminResetPassword() { return { temporary_password: 'QA-reset-pass-64' } }
+export async function adminResetPassword() { return { temporary_password: '12345678' } }
 export async function archiveStudent(id: string) { const row = students.find((item) => item.id === id); if (row) row.status = 'ARCHIVED' }
 export async function archiveStaff(id: string) { const row = teachers.find((item) => item.id === id); if (row) row.status = 'ARCHIVED' }
 export async function setAccountStatus(userId: string, status: string) { const row = [...students, ...teachers].find((item) => item.user_id === userId); if (row) row.status = status }

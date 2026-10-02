@@ -20,6 +20,28 @@
 | docs/agent-context/product-and-workflows.md | Agent context | Markdown |
 | docs/agent-context/README.md | Agent context | Markdown |
 | docs/agent-context/repository-inventory.md | Agent context | Markdown |
+| docs/bug_deploy/logs_100134867151.zip | Tài liệu sản phẩm / lịch sử | ZIP |
+| docs/bug_deploy/logs_100134867151/0_secret-scan.txt | Tài liệu sản phẩm / lịch sử | TXT |
+| docs/bug_deploy/logs_100134867151/1_frontend.txt | Tài liệu sản phẩm / lịch sử | TXT |
+| docs/bug_deploy/logs_100134867151/frontend/1_Set up job.txt | Tài liệu sản phẩm / lịch sử | TXT |
+| docs/bug_deploy/logs_100134867151/frontend/13_Post Run actions_setup-node@v4.txt | Tài liệu sản phẩm / lịch sử | TXT |
+| docs/bug_deploy/logs_100134867151/frontend/14_Post Run actions_checkout@v4.txt | Tài liệu sản phẩm / lịch sử | TXT |
+| docs/bug_deploy/logs_100134867151/frontend/15_Complete job.txt | Tài liệu sản phẩm / lịch sử | TXT |
+| docs/bug_deploy/logs_100134867151/frontend/2_Run actions_checkout@v4.txt | Tài liệu sản phẩm / lịch sử | TXT |
+| docs/bug_deploy/logs_100134867151/frontend/3_Run actions_setup-node@v4.txt | Tài liệu sản phẩm / lịch sử | TXT |
+| docs/bug_deploy/logs_100134867151/frontend/4_Run npm ci.txt | Tài liệu sản phẩm / lịch sử | TXT |
+| docs/bug_deploy/logs_100134867151/frontend/5_Run npm run typecheck.txt | Tài liệu sản phẩm / lịch sử | TXT |
+| docs/bug_deploy/logs_100134867151/frontend/6_Run npm run testrun.txt | Tài liệu sản phẩm / lịch sử | TXT |
+| docs/bug_deploy/logs_100134867151/frontend/7_Run npm run build.txt | Tài liệu sản phẩm / lịch sử | TXT |
+| docs/bug_deploy/logs_100134867151/frontend/system.txt | Tài liệu sản phẩm / lịch sử | TXT |
+| docs/bug_deploy/logs_100134867151/runner-diagnostic-logs/110716738996-frontend.zip | Tài liệu sản phẩm / lịch sử | ZIP |
+| docs/bug_deploy/logs_100134867151/runner-diagnostic-logs/110716739187-secret-scan.zip | Tài liệu sản phẩm / lịch sử | ZIP |
+| docs/bug_deploy/logs_100134867151/secret-scan/1_Set up job.txt | Tài liệu sản phẩm / lịch sử | TXT |
+| docs/bug_deploy/logs_100134867151/secret-scan/2_Run actions_checkout@v4.txt | Tài liệu sản phẩm / lịch sử | TXT |
+| docs/bug_deploy/logs_100134867151/secret-scan/3_Check for common secret patterns.txt | Tài liệu sản phẩm / lịch sử | TXT |
+| docs/bug_deploy/logs_100134867151/secret-scan/6_Post Run actions_checkout@v4.txt | Tài liệu sản phẩm / lịch sử | TXT |
+| docs/bug_deploy/logs_100134867151/secret-scan/7_Complete job.txt | Tài liệu sản phẩm / lịch sử | TXT |
+| docs/bug_deploy/logs_100134867151/secret-scan/system.txt | Tài liệu sản phẩm / lịch sử | TXT |
 | docs/data_seed/t9/Diem_danh_6.xlsm | Dữ liệu nguồn được bảo vệ | Workbook nguồn; chỉ lập chỉ mục đường dẫn |
 | docs/data_seed/t9/Diem_danh_7.xlsm | Dữ liệu nguồn được bảo vệ | Workbook nguồn; chỉ lập chỉ mục đường dẫn |
 | docs/data_seed/t9/Diem_danh_8.xlsm | Dữ liệu nguồn được bảo vệ | Workbook nguồn; chỉ lập chỉ mục đường dẫn |
@@ -85,6 +107,9 @@
 | frontend/src/modules/auth/pages/ChangePasswordPage.vue | Frontend / Đăng nhập | Vue SFC |
 | frontend/src/modules/auth/pages/LoginPage.test.ts | Frontend / Đăng nhập | TypeScript |
 | frontend/src/modules/auth/pages/LoginPage.vue | Frontend / Đăng nhập | Vue SFC |
+| frontend/src/modules/staff/attendance.test.ts | Frontend / Giáo viên | TypeScript |
+| frontend/src/modules/staff/attendance.ts | Frontend / Giáo viên | TypeScript |
+| frontend/src/modules/staff/components/StaffAttendanceModal.vue | Frontend / Giáo viên | Vue SFC |
 | frontend/src/modules/staff/pages/SessionsPage.test.ts | Frontend / Giáo viên | TypeScript |
 | frontend/src/modules/staff/pages/SessionsPage.vue | Frontend / Giáo viên | Vue SFC |
 | frontend/src/modules/staff/pages/StaffProfilePage.vue | Frontend / Giáo viên | Vue SFC |
@@ -130,6 +155,8 @@
 | supabase/functions/_shared/response.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/admin-account-status/index.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/admin-create-user/index.ts | Supabase / Edge Functions | TypeScript |
+| supabase/functions/admin-reset-password/handler.test.ts | Supabase / Edge Functions | TypeScript |
+| supabase/functions/admin-reset-password/handler.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/admin-reset-password/index.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/bootstrap-root/config.toml | Supabase / Edge Functions | TOML/config |
 | supabase/functions/bootstrap-root/index.ts | Supabase / Edge Functions | TypeScript |
@@ -138,6 +165,9 @@
 | supabase/functions/session-complete/index.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/session-learning-update/index.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/session-start/index.ts | Supabase / Edge Functions | TypeScript |
+| supabase/functions/teacher-comment-optimize/handler.test.ts | Supabase / Edge Functions | TypeScript |
+| supabase/functions/teacher-comment-optimize/handler.ts | Supabase / Edge Functions | TypeScript |
+| supabase/functions/teacher-comment-optimize/index.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/timesheet-review/index.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/timesheet-submit/index.ts | Supabase / Edge Functions | TypeScript |
 | supabase/migrations/0001_extensions.sql | Supabase / migrations | SQL |
@@ -195,4 +225,4 @@
 | supabase/tests/session_learning_commands.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/timesheet_workflow.test.sql | Supabase / kiểm thử SQL | SQL |
 
-Tổng: 188 đường dẫn có trong inventory.
+Tổng: 218 đường dẫn có trong inventory.
