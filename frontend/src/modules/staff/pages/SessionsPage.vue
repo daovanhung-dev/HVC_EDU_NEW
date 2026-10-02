@@ -1,18 +1,20 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { nextTick, onMounted, ref } from 'vue'
 import { completeSession, startSession, updateSessionLearning } from '@/services/commands'
 import { getMySessions, getSessionStudents } from '@/services/data-queries'
+import type { SessionRow } from '@/shared/types/domain'
 import { formatDateTime } from '@/shared/utils/format'
 import { useAppErrorStore } from '@/stores/app-error.store'
 import { useToastStore } from '@/stores/toast.store'
 import AppPageHeader from '@/app/components/AppPageHeader.vue'
 import AppState from '@/app/components/AppState.vue'
+import SessionMonthCalendar from '@/app/components/SessionMonthCalendar.vue'
 
 const appErrors = useAppErrorStore()
 const toast = useToastStore()
-const sessions = ref<any[]>([])
+const sessions = ref<SessionRow[]>([])
 const students = ref<any[]>([])
-const selected = ref<any | null>(null)
+const selected = ref<SessionRow | null>(null)
 const sessionNote = ref('')
 const errorMessage = ref('')
 const saving = ref(false)
@@ -26,15 +28,19 @@ function showError(error: unknown, fallback: string) {
 async function load() {
   loading.value = true
   errorMessage.value = ''
-  try { sessions.value = await getMySessions() as any[] }
+  try { sessions.value = await getMySessions() }
   catch (error) { showError(error, 'Không thể tải danh sách buổi học.') }
   finally { loading.value = false }
 }
 
-async function openSession(session: any) {
+async function openSession(session: SessionRow) {
   selected.value = session
   sessionNote.value = session.session_note || ''
   errorMessage.value = ''
+  await nextTick()
+  if (window.matchMedia?.('(max-width: 1199.98px)').matches && sessionDetailElement.value) {
+    sessionDetailElement.value.scrollIntoView({ behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' })
+  }
   try {
     students.value = (await getSessionStudents(session.id) as any[]).map((row) => ({
       ...row,
@@ -49,6 +55,8 @@ async function openSession(session: any) {
     }))
   } catch (error) { showError(error, 'Không thể tải danh sách học sinh của buổi học.') }
 }
+
+const sessionDetailElement = ref<HTMLElement | null>(null)
 
 async function saveAttendance(row: any) {
   if (saving.value) return
@@ -106,20 +114,17 @@ onMounted(load)
 </script>
 
 <template>
-  <AppPageHeader title="Buổi học được phân công" eyebrow="Giảng dạy" description="Mở buổi học để điểm danh, ghi nhận kết quả và lưu nội dung giảng dạy.">
+  <AppPageHeader title="Lịch giảng dạy" eyebrow="Giảng dạy" description="Xem lịch theo tháng và mở buổi học để điểm danh, ghi nhận kết quả.">
     <template #actions><button class="btn btn-outline-primary" :disabled="loading" @click="load">Làm mới</button></template>
   </AppPageHeader>
-  <div v-if="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
+  <div v-if="errorMessage && sessions.length" class="alert alert-danger" role="alert">{{ errorMessage }}</div>
   <div class="row g-4">
-    <div class="col-12 col-xl-5"><div class="card border-0 shadow-sm"><div class="card-body">
-      <AppState v-if="loading" kind="loading" title="Đang tải buổi học" />
-      <AppState v-else-if="!sessions.length" kind="empty" title="Chưa có buổi học được phân công" />
-      <button v-for="session in sessions" :key="session.id" class="btn w-100 text-start border-bottom rounded-0 py-3 staff-session-motion-item" :class="selected?.id === session.id ? 'bg-primary-subtle' : ''" @click="openSession(session)">
-        <div class="d-flex justify-content-between"><span class="fw-semibold">{{ session.classes?.name || 'Lớp học' }}</span><span class="badge" :class="session.status === 'COMPLETED' ? 'text-bg-success' : session.status === 'IN_PROGRESS' ? 'text-bg-primary' : session.status === 'CANCELLED' ? 'text-bg-danger' : 'text-bg-secondary'">{{ session.status }}</span></div>
-        <small class="text-secondary">{{ formatDateTime(session.scheduled_start_at) }} · {{ session.room || session.class_schedules?.room || 'Chưa xếp phòng' }}</small>
-      </button>
-    </div></div></div>
-    <div class="col-12 col-xl-7"><div v-if="selected" class="card border-0 shadow-sm"><div class="card-body">
+    <div class="col-12" :class="selected ? 'col-xl-7' : ''">
+      <AppState v-if="loading && !sessions.length" kind="loading" title="Đang tải buổi học" />
+      <AppState v-else-if="errorMessage && !sessions.length" kind="error" title="Không thể tải lịch giảng dạy" :message="errorMessage" @retry="load" />
+      <SessionMonthCalendar v-else :sessions="sessions" :selected-session-id="selected?.id" @select="openSession" />
+    </div>
+    <div class="col-12 col-xl-5"><div v-if="selected" ref="sessionDetailElement" class="card border-0 shadow-sm staff-session-detail"><div class="card-body">
       <div class="d-flex flex-wrap justify-content-between gap-2 mb-3"><div><h2 class="h6 mb-1">Điểm danh và nhận xét</h2><small class="text-secondary">{{ formatDateTime(selected.scheduled_start_at) }} · {{ selected.classes?.name }}</small></div><div class="d-flex gap-2"><button v-if="selected.status === 'SCHEDULED'" class="btn btn-primary btn-sm" :disabled="saving" @click="start">Bắt đầu</button><button v-if="selected.status === 'IN_PROGRESS'" class="btn btn-success btn-sm" :disabled="saving" @click="complete">Hoàn thành</button></div></div>
       <div v-if="selected.status === 'IN_PROGRESS'" class="border rounded p-3 mb-3"><label class="form-label" for="session-note">Nội dung buổi học</label><textarea id="session-note" v-model="sessionNote" class="form-control mb-2" rows="2" placeholder="Nội dung đã học trong buổi này"></textarea><button class="btn btn-outline-primary btn-sm" :disabled="saving" @click="saveNote">Lưu nội dung</button></div>
       <Transition name="field-reveal"><div v-if="selected.status === 'SCHEDULED'" class="alert alert-info small">Bắt đầu buổi học để nhập điểm danh, điểm và nhận xét.</div></Transition>
@@ -142,6 +147,10 @@ onMounted(load)
         </Transition>
       </div>
       <div v-if="selected.status !== 'SCHEDULED' && !students.length" class="text-secondary small">Buổi học chưa có học sinh trong danh sách.</div>
-    </div></div><div v-else class="card border-0 shadow-sm"><div class="card-body text-center text-secondary py-5">Chọn một buổi học để thao tác.</div></div></div>
+    </div></div><div v-else class="card border-0 shadow-sm"><div class="card-body text-center text-secondary py-5">Chọn một buổi học trên lịch để thao tác.</div></div></div>
   </div>
 </template>
+
+<style scoped>
+.staff-session-detail { scroll-margin-top: 84px; }
+</style>
