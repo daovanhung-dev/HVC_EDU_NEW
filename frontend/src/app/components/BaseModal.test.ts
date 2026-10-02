@@ -1,4 +1,4 @@
-import { flushPromises, mount } from '@vue/test-utils'
+import { DOMWrapper, flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, nextTick, ref } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
 import BaseModal from './BaseModal.vue'
@@ -35,7 +35,30 @@ const ModalHost = defineComponent({
   template: `<button id="opener" @click="open = true">Mở</button><BaseModal v-model="open" title="Hộp thoại QA" :dirty="dirty"><button data-modal-autofocus>Nội dung</button></BaseModal>`,
 })
 
+const TeleportedModalHost = defineComponent({
+  components: { BaseModal },
+  setup() {
+    const open = ref(true)
+    return { open }
+  },
+  template: `<BaseModal v-model="open" title="Hộp thoại QA" class="qa-teleported-modal" teleport-to-body><button>Nội dung</button></BaseModal>`,
+})
+
 describe('BaseModal', () => {
+  it('teleports to body and forwards caller attributes to the modal element', async () => {
+    const wrapper = mount(TeleportedModalHost, { attachTo: document.body })
+    await flushPromises()
+    await nextTick()
+
+    const element = document.body.querySelector<HTMLElement>('.qa-teleported-modal')
+    expect(element?.parentElement).toBe(document.body)
+    expect(element).not.toBeNull()
+    expect(new DOMWrapper(element!).classes()).toContain('app-modal')
+    expect(new DOMWrapper(element!).classes()).toContain('show')
+
+    wrapper.unmount()
+  })
+
   it('moves focus into the dialog and restores it to the opener after closing', async () => {
     const wrapper = mount(ModalHost, { attachTo: document.body })
     const opener = wrapper.get('#opener')

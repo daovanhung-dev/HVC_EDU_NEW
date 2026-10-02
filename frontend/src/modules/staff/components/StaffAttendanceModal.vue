@@ -219,12 +219,12 @@ function studentName(row: AttendanceStudentRow) {
 .attendance-modal__summary strong { color: var(--color-text); }
 .attendance-modal__dirty-count { color: var(--color-accent); font-weight: 700; }
 .attendance-modal__save { min-width: 190px; }
-.staff-attendance-modal.app-modal :deep(.modal-dialog.modal-xl) { width: min(1500px, calc(100vw - 32px)); max-width: min(1500px, calc(100vw - 32px)); }
+:global(.staff-attendance-modal.app-modal .modal-dialog.modal-xl) { width: min(1500px, calc(100vw - 32px)); max-width: min(1500px, calc(100vw - 32px)); }
 
 @media (max-width: 767.98px) {
   .attendance-modal__toolbar { align-items: flex-start; flex-direction: column; gap: 4px; }
   .attendance-modal__keyboard-hint { font-size: 11px; }
-  .staff-attendance-modal.app-modal :deep(.modal-dialog.modal-xl) { width: 100%; max-width: 100%; }
+  :global(.staff-attendance-modal.app-modal .modal-dialog.modal-xl) { width: 100%; max-width: 100%; }
   .attendance-table-wrap { max-height: calc(100dvh - 275px); border: 0; overflow: visible !important; }
   .attendance-grid { width: 100%; min-width: 0; table-layout: auto; }
   .attendance-grid > tbody { gap: 12px !important; }

@@ -1,0 +1,22 @@
+﻿2026-10-02T05:18:02.5984045Z ##[debug]Evaluating condition for step: 'Run npm run typecheck'
+2026-10-02T05:18:02.5987783Z ##[debug]Evaluating: success()
+2026-10-02T05:18:02.5988211Z ##[debug]Evaluating success:
+2026-10-02T05:18:02.5988821Z ##[debug]=> true
+2026-10-02T05:18:02.5989203Z ##[debug]Result: true
+2026-10-02T05:18:02.5990004Z ##[debug]Starting: Run npm run typecheck
+2026-10-02T05:18:02.6004114Z ##[debug]Loading inputs
+2026-10-02T05:18:02.6005689Z ##[debug]Loading env
+2026-10-02T05:18:02.6010306Z ##[group]Run npm run typecheck
+2026-10-02T05:18:02.6010609Z [36;1mnpm run typecheck[0m
+2026-10-02T05:18:02.6077203Z shell: /usr/bin/bash -e {0}
+2026-10-02T05:18:02.6077500Z ##[endgroup]
+2026-10-02T05:18:02.6143006Z ##[debug]/usr/bin/bash -e /home/runner/work/_temp/3c5df943-5f0f-49aa-84ba-2b90764c8fc5.sh
+2026-10-02T05:18:02.7202773Z 
+2026-10-02T05:18:02.7203653Z > hung-cuong-management@0.1.0 typecheck
+2026-10-02T05:18:02.7204321Z > npm run typecheck --workspace frontend
+2026-10-02T05:18:02.7204614Z 
+2026-10-02T05:18:02.8380766Z 
+2026-10-02T05:18:02.8381594Z > hung-cuong-management-frontend@0.1.0 typecheck
+2026-10-02T05:18:02.8382566Z > vue-tsc --noEmit --pretty false
+2026-10-02T05:18:02.8383010Z 
+2026-10-02T05:18:03.2182945Z ##[debug]Finishing: Run npm run typecheck

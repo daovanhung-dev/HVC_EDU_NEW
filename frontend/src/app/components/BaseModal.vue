@@ -2,6 +2,8 @@
 import { Modal } from 'bootstrap'
 import { nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 
+defineOptions({ inheritAttrs: false })
+
 const props = withDefaults(defineProps<{
   modelValue: boolean
   title: string
@@ -125,7 +127,7 @@ onBeforeUnmount(() => {
 
 <template>
   <Teleport to="body" :disabled="!teleportToBody">
-    <div ref="element" class="modal fade app-modal" tabindex="-1" role="dialog" :aria-labelledby="titleId" :aria-describedby="description ? descriptionId : undefined" aria-hidden="true">
+    <div v-bind="$attrs" ref="element" class="modal fade app-modal" tabindex="-1" role="dialog" :aria-labelledby="titleId" :aria-describedby="description ? descriptionId : undefined" aria-hidden="true">
       <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" :class="[`modal-${size}`, { 'app-modal__sheet': true }]">
         <section class="modal-content">
           <header class="modal-header">

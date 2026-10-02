@@ -1,0 +1,64 @@
+﻿2026-10-02T05:18:18.2963893Z ##[debug]Evaluating condition for step: 'Post Run actions/checkout@v4'
+2026-10-02T05:18:18.2966152Z ##[debug]Evaluating: always()
+2026-10-02T05:18:18.2966532Z ##[debug]Evaluating always:
+2026-10-02T05:18:18.2967603Z ##[debug]=> true
+2026-10-02T05:18:18.2967985Z ##[debug]Result: true
+2026-10-02T05:18:18.2968571Z ##[debug]Starting: Post Run actions/checkout@v4
+2026-10-02T05:18:18.3028643Z ##[debug]Loading inputs
+2026-10-02T05:18:18.3030174Z ##[debug]Evaluating: github.repository
+2026-10-02T05:18:18.3030513Z ##[debug]Evaluating Index:
+2026-10-02T05:18:18.3030771Z ##[debug]..Evaluating github:
+2026-10-02T05:18:18.3031052Z ##[debug]..=> Object
+2026-10-02T05:18:18.3031305Z ##[debug]..Evaluating String:
+2026-10-02T05:18:18.3031584Z ##[debug]..=> 'repository'
+2026-10-02T05:18:18.3031913Z ##[debug]=> 'daovanhung-dev/HVC_EDU_NEW'
+2026-10-02T05:18:18.3032239Z ##[debug]Result: 'daovanhung-dev/HVC_EDU_NEW'
+2026-10-02T05:18:18.3034593Z ##[debug]Evaluating: github.token
+2026-10-02T05:18:18.3034896Z ##[debug]Evaluating Index:
+2026-10-02T05:18:18.3035190Z ##[debug]..Evaluating github:
+2026-10-02T05:18:18.3035461Z ##[debug]..=> Object
+2026-10-02T05:18:18.3035708Z ##[debug]..Evaluating String:
+2026-10-02T05:18:18.3035966Z ##[debug]..=> 'token'
+2026-10-02T05:18:18.3038713Z ##[debug]=> '***'
+2026-10-02T05:18:18.3041372Z ##[debug]Result: '***'
+2026-10-02T05:18:18.3056265Z ##[debug]Loading env
+2026-10-02T05:18:18.3060840Z Post job cleanup.
+2026-10-02T05:18:18.3909730Z ##[debug]Getting git version
+2026-10-02T05:18:18.3929619Z [command]/usr/bin/git version
+2026-10-02T05:18:18.3974820Z git version 2.55.0
+2026-10-02T05:18:18.3996824Z ##[debug]0
+2026-10-02T05:18:18.3997621Z ##[debug]git version 2.55.0
+2026-10-02T05:18:18.3997941Z ##[debug]
+2026-10-02T05:18:18.3998633Z ##[debug]Set git useragent to: git/2.55.0 (github-actions-checkout)
+2026-10-02T05:18:18.4001582Z ::add-mask::***
+2026-10-02T05:18:18.4019965Z Temporarily overriding HOME='/home/runner/work/_temp/d98e2e61-6d6b-4c6f-866a-b5e8ba94d3e3' before making global git config changes
+2026-10-02T05:18:18.4021529Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-02T05:18:18.4025876Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/HVC_EDU_NEW/HVC_EDU_NEW
+2026-10-02T05:18:18.4056828Z ##[debug]0
+2026-10-02T05:18:18.4057451Z ##[debug]
+2026-10-02T05:18:18.4065611Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-02T05:18:18.4094666Z ##[debug]1
+2026-10-02T05:18:18.4095489Z ##[debug]
+2026-10-02T05:18:18.4100923Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-02T05:18:18.4404514Z ##[debug]0
+2026-10-02T05:18:18.4410798Z ##[debug]
+2026-10-02T05:18:18.4412502Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-02T05:18:18.4447453Z http.https://github.com/.extraheader
+2026-10-02T05:18:18.4456272Z ##[debug]0
+2026-10-02T05:18:18.4457435Z ##[debug]http.https://github.com/.extraheader
+2026-10-02T05:18:18.4457975Z ##[debug]
+2026-10-02T05:18:18.4464000Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-10-02T05:18:18.4495910Z ##[debug]0
+2026-10-02T05:18:18.4496707Z ##[debug]
+2026-10-02T05:18:18.4502861Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-02T05:18:18.4804528Z ##[debug]0
+2026-10-02T05:18:18.4805212Z ##[debug]
+2026-10-02T05:18:18.4815109Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-02T05:18:18.4851063Z ##[debug]1
+2026-10-02T05:18:18.4851854Z ##[debug]
+2026-10-02T05:18:18.4859924Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-02T05:18:18.5137057Z ##[debug]0
+2026-10-02T05:18:18.5137725Z ##[debug]
+2026-10-02T05:18:18.5138425Z ##[debug]Unsetting HOME override
+2026-10-02T05:18:18.5232501Z ##[debug]Node Action run completed with exit code 0
+2026-10-02T05:18:18.5236232Z ##[debug]Finishing: Post Run actions/checkout@v4

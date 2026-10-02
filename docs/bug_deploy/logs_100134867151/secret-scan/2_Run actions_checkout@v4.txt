@@ -1,0 +1,186 @@
+﻿2026-10-02T05:17:57.3310791Z ##[debug]Evaluating condition for step: 'Run actions/checkout@v4'
+2026-10-02T05:17:57.3339111Z ##[debug]Evaluating: success()
+2026-10-02T05:17:57.3343046Z ##[debug]Evaluating success:
+2026-10-02T05:17:57.3354472Z ##[debug]=> true
+2026-10-02T05:17:57.3360256Z ##[debug]Result: true
+2026-10-02T05:17:57.3381712Z ##[debug]Starting: Run actions/checkout@v4
+2026-10-02T05:17:57.3440826Z ##[debug]Register post job cleanup for action: actions/checkout@v4
+2026-10-02T05:17:57.3512380Z ##[debug]Loading inputs
+2026-10-02T05:17:57.3521818Z ##[debug]Evaluating: github.repository
+2026-10-02T05:17:57.3522658Z ##[debug]Evaluating Index:
+2026-10-02T05:17:57.3524121Z ##[debug]..Evaluating github:
+2026-10-02T05:17:57.3524979Z ##[debug]..=> Object
+2026-10-02T05:17:57.3529631Z ##[debug]..Evaluating String:
+2026-10-02T05:17:57.3530368Z ##[debug]..=> 'repository'
+2026-10-02T05:17:57.3533178Z ##[debug]=> 'daovanhung-dev/HVC_EDU_NEW'
+2026-10-02T05:17:57.3534313Z ##[debug]Result: 'daovanhung-dev/HVC_EDU_NEW'
+2026-10-02T05:17:57.3537243Z ##[debug]Evaluating: github.token
+2026-10-02T05:17:57.3537899Z ##[debug]Evaluating Index:
+2026-10-02T05:17:57.3538325Z ##[debug]..Evaluating github:
+2026-10-02T05:17:57.3538743Z ##[debug]..=> Object
+2026-10-02T05:17:57.3539224Z ##[debug]..Evaluating String:
+2026-10-02T05:17:57.3539638Z ##[debug]..=> 'token'
+2026-10-02T05:17:57.3543028Z ##[debug]=> '***'
+2026-10-02T05:17:57.3546263Z ##[debug]Result: '***'
+2026-10-02T05:17:57.3564253Z ##[debug]Loading env
+2026-10-02T05:17:57.3617257Z ##[group]Run actions/checkout@v4
+2026-10-02T05:17:57.3618012Z with:
+2026-10-02T05:17:57.3618386Z   repository: daovanhung-dev/HVC_EDU_NEW
+2026-10-02T05:17:57.3621670Z   token: ***
+2026-10-02T05:17:57.3622024Z   ssh-strict: true
+2026-10-02T05:17:57.3622373Z   ssh-user: git
+2026-10-02T05:17:57.3622729Z   persist-credentials: true
+2026-10-02T05:17:57.3623116Z   clean: true
+2026-10-02T05:17:57.3623476Z   sparse-checkout-cone-mode: true
+2026-10-02T05:17:57.3623887Z   fetch-depth: 1
+2026-10-02T05:17:57.3624228Z   fetch-tags: false
+2026-10-02T05:17:57.3624596Z   show-progress: true
+2026-10-02T05:17:57.3624948Z   lfs: false
+2026-10-02T05:17:57.3625281Z   submodules: false
+2026-10-02T05:17:57.3625635Z   set-safe-directory: true
+2026-10-02T05:17:57.3626038Z   allow-unsafe-pr-checkout: false
+2026-10-02T05:17:57.3626569Z ##[endgroup]
+2026-10-02T05:17:57.4351145Z ##[debug]GITHUB_WORKSPACE = '/home/runner/work/HVC_EDU_NEW/HVC_EDU_NEW'
+2026-10-02T05:17:57.4352415Z ##[debug]qualified repository = 'daovanhung-dev/HVC_EDU_NEW'
+2026-10-02T05:17:57.4353175Z ##[debug]ref = 'refs/heads/main'
+2026-10-02T05:17:57.4353868Z ##[debug]commit = 'e043ebfcdc86dec32d6df1751370e234ad89293a'
+2026-10-02T05:17:57.4354572Z ##[debug]clean = true
+2026-10-02T05:17:57.4355190Z ##[debug]filter = undefined
+2026-10-02T05:17:57.4355934Z ##[debug]fetch depth = 1
+2026-10-02T05:17:57.4356520Z ##[debug]fetch tags = false
+2026-10-02T05:17:57.4357121Z ##[debug]show progress = true
+2026-10-02T05:17:57.4358381Z ##[debug]lfs = false
+2026-10-02T05:17:57.4359443Z ##[debug]submodules = false
+2026-10-02T05:17:57.4360606Z ##[debug]recursive submodules = false
+2026-10-02T05:17:57.4361703Z ##[debug]GitHub Host URL = 
+2026-10-02T05:17:57.4362641Z ##[debug]allow unsafe PR checkout = false
+2026-10-02T05:17:57.4364368Z ::add-matcher::/home/runner/work/_actions/actions/checkout/v4/dist/problem-matcher.json
+2026-10-02T05:17:57.4438333Z ##[debug]Added matchers: 'checkout-git'. Problem matchers scan action output for known warning or error strings and report these inline.
+2026-10-02T05:17:57.4444041Z Syncing repository: daovanhung-dev/HVC_EDU_NEW
+2026-10-02T05:17:57.4445722Z ::group::Getting Git version info
+2026-10-02T05:17:57.4447062Z ##[group]Getting Git version info
+2026-10-02T05:17:57.4447900Z Working directory is '/home/runner/work/HVC_EDU_NEW/HVC_EDU_NEW'
+2026-10-02T05:17:57.4448778Z ##[debug]Getting git version
+2026-10-02T05:17:57.4449194Z [command]/usr/bin/git version
+2026-10-02T05:17:57.4534529Z git version 2.55.0
+2026-10-02T05:17:57.4549603Z ##[debug]0
+2026-10-02T05:17:57.4550796Z ##[debug]git version 2.55.0
+2026-10-02T05:17:57.4551806Z ##[debug]
+2026-10-02T05:17:57.4553077Z ##[debug]Set git useragent to: git/2.55.0 (github-actions-checkout)
+2026-10-02T05:17:57.4554725Z ::endgroup::
+2026-10-02T05:17:57.4555457Z ##[endgroup]
+2026-10-02T05:17:57.4560910Z ::add-mask::***
+2026-10-02T05:17:57.4565581Z Temporarily overriding HOME='/home/runner/work/_temp/7bb4f1a6-1fbd-4a10-bf13-abb36caa11ce' before making global git config changes
+2026-10-02T05:17:57.4567656Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-02T05:17:57.4570994Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/HVC_EDU_NEW/HVC_EDU_NEW
+2026-10-02T05:17:57.4611269Z ##[debug]0
+2026-10-02T05:17:57.4612053Z ##[debug]
+2026-10-02T05:17:57.4616523Z Deleting the contents of '/home/runner/work/HVC_EDU_NEW/HVC_EDU_NEW'
+2026-10-02T05:17:57.4619883Z ::group::Initializing the repository
+2026-10-02T05:17:57.4620385Z ##[group]Initializing the repository
+2026-10-02T05:17:57.4623985Z [command]/usr/bin/git init /home/runner/work/HVC_EDU_NEW/HVC_EDU_NEW
+2026-10-02T05:17:57.4766341Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-10-02T05:17:57.4767898Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-10-02T05:17:57.4769092Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-10-02T05:17:57.4769997Z hint: call:
+2026-10-02T05:17:57.4770514Z hint:
+2026-10-02T05:17:57.4771116Z hint: 	git config --global init.defaultBranch <name>
+2026-10-02T05:17:57.4771860Z hint:
+2026-10-02T05:17:57.4773392Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-10-02T05:17:57.4774555Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-10-02T05:17:57.4775459Z hint:
+2026-10-02T05:17:57.4775955Z hint: 	git branch -m <name>
+2026-10-02T05:17:57.4776524Z hint:
+2026-10-02T05:17:57.4777443Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-10-02T05:17:57.4778779Z Initialized empty Git repository in /home/runner/work/HVC_EDU_NEW/HVC_EDU_NEW/.git/
+2026-10-02T05:17:57.4780171Z ##[debug]0
+2026-10-02T05:17:57.4781377Z ##[debug]Initialized empty Git repository in /home/runner/work/HVC_EDU_NEW/HVC_EDU_NEW/.git/
+2026-10-02T05:17:57.4782409Z ##[debug]
+2026-10-02T05:17:57.4784618Z [command]/usr/bin/git remote add origin https://github.com/daovanhung-dev/HVC_EDU_NEW
+2026-10-02T05:17:57.4828333Z ##[debug]0
+2026-10-02T05:17:57.4829292Z ##[debug]
+2026-10-02T05:17:57.4830299Z ::endgroup::
+2026-10-02T05:17:57.4830810Z ##[endgroup]
+2026-10-02T05:17:57.4831803Z ::group::Disabling automatic garbage collection
+2026-10-02T05:17:57.4832663Z ##[group]Disabling automatic garbage collection
+2026-10-02T05:17:57.4833957Z [command]/usr/bin/git config --local gc.auto 0
+2026-10-02T05:17:57.4864253Z ##[debug]0
+2026-10-02T05:17:57.4865221Z ##[debug]
+2026-10-02T05:17:57.4866091Z ::endgroup::
+2026-10-02T05:17:57.4866603Z ##[endgroup]
+2026-10-02T05:17:57.4867695Z ::group::Setting up auth
+2026-10-02T05:17:57.4868308Z ##[group]Setting up auth
+2026-10-02T05:17:57.4870601Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-02T05:17:57.4896395Z ##[debug]1
+2026-10-02T05:17:57.4897488Z ##[debug]
+2026-10-02T05:17:57.4901521Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-02T05:17:57.5226550Z ##[debug]0
+2026-10-02T05:17:57.5227264Z ##[debug]
+2026-10-02T05:17:57.5239615Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-02T05:17:57.5262188Z ##[debug]1
+2026-10-02T05:17:57.5263152Z ##[debug]
+2026-10-02T05:17:57.5268275Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-02T05:17:57.5449576Z ##[debug]0
+2026-10-02T05:17:57.5450171Z ##[debug]
+2026-10-02T05:17:57.5456021Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-02T05:17:57.5482144Z ##[debug]1
+2026-10-02T05:17:57.5483139Z ##[debug]
+2026-10-02T05:17:57.5487754Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-02T05:17:57.5664530Z ##[debug]0
+2026-10-02T05:17:57.5671981Z ##[debug]
+2026-10-02T05:17:57.5673125Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-10-02T05:17:57.5699050Z ##[debug]0
+2026-10-02T05:17:57.5699879Z ##[debug]
+2026-10-02T05:17:57.5706494Z ::endgroup::
+2026-10-02T05:17:57.5706996Z ##[endgroup]
+2026-10-02T05:17:57.5707773Z ::group::Fetching the repository
+2026-10-02T05:17:57.5708219Z ##[group]Fetching the repository
+2026-10-02T05:17:57.5713994Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +e043ebfcdc86dec32d6df1751370e234ad89293a:refs/remotes/origin/main
+2026-10-02T05:17:58.2911342Z From https://github.com/daovanhung-dev/HVC_EDU_NEW
+2026-10-02T05:17:58.2912606Z  * [new ref]         e043ebfcdc86dec32d6df1751370e234ad89293a -> origin/main
+2026-10-02T05:17:58.2914095Z ##[debug]0
+2026-10-02T05:17:58.2914716Z ##[debug]
+2026-10-02T05:17:58.2915278Z ::endgroup::
+2026-10-02T05:17:58.2915615Z ##[endgroup]
+2026-10-02T05:17:58.2916215Z ::group::Determining the checkout info
+2026-10-02T05:17:58.2916687Z ##[group]Determining the checkout info
+2026-10-02T05:17:58.2917520Z ::endgroup::
+2026-10-02T05:17:58.2917955Z ##[endgroup]
+2026-10-02T05:17:58.2918360Z [command]/usr/bin/git sparse-checkout disable
+2026-10-02T05:17:58.2945109Z ##[debug]0
+2026-10-02T05:17:58.2945828Z ##[debug]
+2026-10-02T05:17:58.2949247Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-10-02T05:17:58.2977204Z ##[debug]0
+2026-10-02T05:17:58.2978427Z ##[debug]
+2026-10-02T05:17:58.2979385Z ::group::Checking out the ref
+2026-10-02T05:17:58.2980110Z ##[group]Checking out the ref
+2026-10-02T05:17:58.2982532Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2026-10-02T05:17:58.3173505Z Switched to a new branch 'main'
+2026-10-02T05:17:58.3178146Z branch 'main' set up to track 'origin/main'.
+2026-10-02T05:17:58.3182789Z ##[debug]0
+2026-10-02T05:17:58.3183864Z ##[debug]branch 'main' set up to track 'origin/main'.
+2026-10-02T05:17:58.3184674Z ##[debug]
+2026-10-02T05:17:58.3185542Z ::endgroup::
+2026-10-02T05:17:58.3186040Z ##[endgroup]
+2026-10-02T05:17:58.3217813Z ##[debug]0
+2026-10-02T05:17:58.3218953Z ##[debug]commit e043ebfcdc86dec32d6df1751370e234ad89293a
+2026-10-02T05:17:58.3219917Z ##[debug]Author: DaoVanHung <daohungmt2005@gmail.com>
+2026-10-02T05:17:58.3220849Z ##[debug]Date:   Fri Oct 2 12:15:29 2026 +0700
+2026-10-02T05:17:58.3221653Z ##[debug]
+2026-10-02T05:17:58.3222640Z ##[debug]    feat: add teleportToBody prop to BaseModal and update StaffAttendanceModal to utilize it
+2026-10-02T05:17:58.3223897Z ##[debug]
+2026-10-02T05:17:58.3224533Z [command]/usr/bin/git log -1 --format=%H
+2026-10-02T05:17:58.3244316Z e043ebfcdc86dec32d6df1751370e234ad89293a
+2026-10-02T05:17:58.3247549Z ##[debug]0
+2026-10-02T05:17:58.3248337Z ##[debug]e043ebfcdc86dec32d6df1751370e234ad89293a
+2026-10-02T05:17:58.3248852Z ##[debug]
+2026-10-02T05:17:58.3252757Z ##[debug]Unsetting HOME override
+2026-10-02T05:17:58.3259278Z ::remove-matcher owner=checkout-git::
+2026-10-02T05:17:58.3269497Z ##[debug]Removed matchers: 'checkout-git'
+2026-10-02T05:17:58.3329158Z ##[debug]Node Action run completed with exit code 0
+2026-10-02T05:17:58.3357743Z ##[debug]Save intra-action state isPost = true
+2026-10-02T05:17:58.3358480Z ##[debug]Save intra-action state setSafeDirectory = true
+2026-10-02T05:17:58.3359342Z ##[debug]Save intra-action state repositoryPath = /home/runner/work/HVC_EDU_NEW/HVC_EDU_NEW
+2026-10-02T05:17:58.3363452Z ##[debug]Set output commit = e043ebfcdc86dec32d6df1751370e234ad89293a
+2026-10-02T05:17:58.3364633Z ##[debug]Set output ref = refs/heads/main
+2026-10-02T05:17:58.3378819Z ##[debug]Finishing: Run actions/checkout@v4

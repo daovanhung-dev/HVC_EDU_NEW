@@ -1,0 +1,57 @@
+﻿2026-10-02T05:17:56.4786763Z ##[debug]Starting: Set up job
+2026-10-02T05:17:56.4788428Z Current runner version: '2.337.0'
+2026-10-02T05:17:56.4811428Z ##[group]Runner Image Provisioner
+2026-10-02T05:17:56.4812379Z Hosted Compute Agent
+2026-10-02T05:17:56.4813099Z Version: 20260901.588
+2026-10-02T05:17:56.4814276Z Commit: f88ec8081b781fac6c440065ac7ff9e710ce3d0b
+2026-10-02T05:17:56.4815058Z Build Date: 2026-09-01T19:56:44Z
+2026-10-02T05:17:56.4815812Z Worker ID: {5ed8bb43-e8ba-4e4e-b07d-31eea75e70be}
+2026-10-02T05:17:56.4816577Z Azure Region: eastus
+2026-10-02T05:17:56.4817197Z ##[endgroup]
+2026-10-02T05:17:56.4819091Z ##[group]Operating System
+2026-10-02T05:17:56.4819913Z Ubuntu
+2026-10-02T05:17:56.4820438Z 24.04.5
+2026-10-02T05:17:56.4821098Z LTS
+2026-10-02T05:17:56.4821701Z ##[endgroup]
+2026-10-02T05:17:56.4822341Z ##[group]Runner Image
+2026-10-02T05:17:56.4822970Z Image: ubuntu-24.04
+2026-10-02T05:17:56.4824153Z Version: 20260927.320.1
+2026-10-02T05:17:56.4825663Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260927.320/images/ubuntu/Ubuntu2404-Readme.md
+2026-10-02T05:17:56.4827422Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260927.320
+2026-10-02T05:17:56.4828407Z ##[endgroup]
+2026-10-02T05:17:56.4829624Z ##[group]GITHUB_TOKEN Permissions
+2026-10-02T05:17:56.4831547Z Contents: read
+2026-10-02T05:17:56.4832362Z Metadata: read
+2026-10-02T05:17:56.4832973Z ##[endgroup]
+2026-10-02T05:17:56.4835610Z Secret source: Actions
+2026-10-02T05:17:56.4836735Z Cache mode: write
+2026-10-02T05:17:56.4838020Z ##[debug]Primary repository: daovanhung-dev/HVC_EDU_NEW
+2026-10-02T05:17:56.4838882Z Prepare workflow directory
+2026-10-02T05:17:56.4906783Z ##[debug]Creating pipeline directory: '/home/runner/work/HVC_EDU_NEW'
+2026-10-02T05:17:56.4910600Z ##[debug]Creating workspace directory: '/home/runner/work/HVC_EDU_NEW/HVC_EDU_NEW'
+2026-10-02T05:17:56.4912449Z ##[debug]Update context data
+2026-10-02T05:17:56.4916851Z ##[debug]Evaluating job-level environment variables
+2026-10-02T05:17:56.5152684Z ##[debug]Evaluating job container
+2026-10-02T05:17:56.5156566Z ##[debug]Evaluating job service containers
+2026-10-02T05:17:56.5159807Z ##[debug]Evaluating job defaults
+2026-10-02T05:17:56.5190878Z Prepare all required actions
+2026-10-02T05:17:56.5239541Z Getting action download info
+2026-10-02T05:17:56.7371980Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-10-02T05:17:56.7404550Z ##[debug]Copied action archive '/opt/actionarchivecache/actions_checkout/11d5960a326750d5838078e36cf38b85af677262.tar.gz' to '/home/runner/work/_actions/_temp_58872f25-62a0-41f6-a9a0-14995ac78593/09abb146-a1d9-46c1-8443-6fbc0fb9ab5d.tar.gz'
+2026-10-02T05:17:56.8204945Z ##[debug]Unwrap 'actions-checkout-11d5960' to '/home/runner/work/_actions/actions/checkout/v4'
+2026-10-02T05:17:56.8334877Z ##[debug]Archive '/home/runner/work/_actions/_temp_58872f25-62a0-41f6-a9a0-14995ac78593/09abb146-a1d9-46c1-8443-6fbc0fb9ab5d.tar.gz' has been unzipped into '/home/runner/work/_actions/actions/checkout/v4'.
+2026-10-02T05:17:56.8438464Z Download action repository 'actions/setup-node@v4' (SHA:49933ea5288caeca8642d1e84afbd3f7d6820020)
+2026-10-02T05:17:56.8474404Z ##[debug]Copied action archive '/opt/actionarchivecache/actions_setup-node/49933ea5288caeca8642d1e84afbd3f7d6820020.tar.gz' to '/home/runner/work/_actions/_temp_b5d00240-e1cb-4c7c-aea9-d8a63502dcba/c00d554a-41be-4511-afb7-6511520dd1b6.tar.gz'
+2026-10-02T05:17:56.9017640Z ##[debug]Unwrap 'actions-setup-node-49933ea' to '/home/runner/work/_actions/actions/setup-node/v4'
+2026-10-02T05:17:56.9219749Z ##[debug]Archive '/home/runner/work/_actions/_temp_b5d00240-e1cb-4c7c-aea9-d8a63502dcba/c00d554a-41be-4511-afb7-6511520dd1b6.tar.gz' has been unzipped into '/home/runner/work/_actions/actions/setup-node/v4'.
+2026-10-02T05:17:56.9287866Z ##[debug]action.yml for action: '/home/runner/work/_actions/actions/checkout/v4/action.yml'.
+2026-10-02T05:17:57.0265583Z ##[debug]action.yml for action: '/home/runner/work/_actions/actions/setup-node/v4/action.yml'.
+2026-10-02T05:17:57.0405267Z ##[debug]Set step '__actions_checkout' display name to: 'Run actions/checkout@v4'
+2026-10-02T05:17:57.0409290Z ##[debug]Set step '__actions_setup-node' display name to: 'Run actions/setup-node@v4'
+2026-10-02T05:17:57.0413655Z ##[debug]Set step '__run' display name to: 'Run npm ci'
+2026-10-02T05:17:57.0416043Z ##[debug]Set step '__run_2' display name to: 'Run npm run typecheck'
+2026-10-02T05:17:57.0418229Z ##[debug]Set step '__run_3' display name to: 'Run npm run test:run'
+2026-10-02T05:17:57.0420412Z ##[debug]Set step '__run_4' display name to: 'Run npm run build'
+2026-10-02T05:17:57.0421172Z Complete job name: frontend
+2026-10-02T05:17:57.0454917Z ##[debug]Collect running processes for tracking orphan processes.
+2026-10-02T05:17:57.0683077Z ##[debug]Finishing: Set up job

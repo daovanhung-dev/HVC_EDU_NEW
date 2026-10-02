@@ -1,0 +1,48 @@
+﻿2026-10-02T05:17:56.8154974Z ##[debug]Starting: Set up job
+2026-10-02T05:17:56.8155907Z Current runner version: '2.337.0'
+2026-10-02T05:17:56.8173786Z ##[group]Runner Image Provisioner
+2026-10-02T05:17:56.8174433Z Hosted Compute Agent
+2026-10-02T05:17:56.8174998Z Version: 20260901.588
+2026-10-02T05:17:56.8175507Z Commit: f88ec8081b781fac6c440065ac7ff9e710ce3d0b
+2026-10-02T05:17:56.8176073Z Build Date: 2026-09-01T19:56:44Z
+2026-10-02T05:17:56.8176677Z Worker ID: {f2d76631-737c-46a2-938e-da9e596f5fa2}
+2026-10-02T05:17:56.8177454Z Azure Region: westcentralus
+2026-10-02T05:17:56.8177977Z ##[endgroup]
+2026-10-02T05:17:56.8179005Z ##[group]Operating System
+2026-10-02T05:17:56.8179528Z Ubuntu
+2026-10-02T05:17:56.8180056Z 24.04.5
+2026-10-02T05:17:56.8180476Z LTS
+2026-10-02T05:17:56.8180924Z ##[endgroup]
+2026-10-02T05:17:56.8181395Z ##[group]Runner Image
+2026-10-02T05:17:56.8181890Z Image: ubuntu-24.04
+2026-10-02T05:17:56.8182594Z Version: 20260927.320.1
+2026-10-02T05:17:56.8183459Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260927.320/images/ubuntu/Ubuntu2404-Readme.md
+2026-10-02T05:17:56.8184731Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260927.320
+2026-10-02T05:17:56.8185522Z ##[endgroup]
+2026-10-02T05:17:56.8186517Z ##[group]GITHUB_TOKEN Permissions
+2026-10-02T05:17:56.8188126Z Contents: read
+2026-10-02T05:17:56.8188700Z Metadata: read
+2026-10-02T05:17:56.8189162Z ##[endgroup]
+2026-10-02T05:17:56.8191163Z Secret source: Actions
+2026-10-02T05:17:56.8191945Z Cache mode: write
+2026-10-02T05:17:56.8192640Z ##[debug]Primary repository: daovanhung-dev/HVC_EDU_NEW
+2026-10-02T05:17:56.8193353Z Prepare workflow directory
+2026-10-02T05:17:56.8247896Z ##[debug]Creating pipeline directory: '/home/runner/work/HVC_EDU_NEW'
+2026-10-02T05:17:56.8251070Z ##[debug]Creating workspace directory: '/home/runner/work/HVC_EDU_NEW/HVC_EDU_NEW'
+2026-10-02T05:17:56.8252467Z ##[debug]Update context data
+2026-10-02T05:17:56.8255212Z ##[debug]Evaluating job-level environment variables
+2026-10-02T05:17:56.8455426Z ##[debug]Evaluating job container
+2026-10-02T05:17:56.8459098Z ##[debug]Evaluating job service containers
+2026-10-02T05:17:56.8462924Z ##[debug]Evaluating job defaults
+2026-10-02T05:17:56.8495931Z Prepare all required actions
+2026-10-02T05:17:56.8534973Z Getting action download info
+2026-10-02T05:17:57.1110116Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-10-02T05:17:57.1139837Z ##[debug]Copied action archive '/opt/actionarchivecache/actions_checkout/11d5960a326750d5838078e36cf38b85af677262.tar.gz' to '/home/runner/work/_actions/_temp_7a6734d5-ff21-408a-a665-52c38e0630bf/e1d398c8-0e1e-4579-aabf-aec1ce11758c.tar.gz'
+2026-10-02T05:17:57.1978623Z ##[debug]Unwrap 'actions-checkout-11d5960' to '/home/runner/work/_actions/actions/checkout/v4'
+2026-10-02T05:17:57.2132358Z ##[debug]Archive '/home/runner/work/_actions/_temp_7a6734d5-ff21-408a-a665-52c38e0630bf/e1d398c8-0e1e-4579-aabf-aec1ce11758c.tar.gz' has been unzipped into '/home/runner/work/_actions/actions/checkout/v4'.
+2026-10-02T05:17:57.2215966Z ##[debug]action.yml for action: '/home/runner/work/_actions/actions/checkout/v4/action.yml'.
+2026-10-02T05:17:57.2874050Z ##[debug]Set step '__actions_checkout' display name to: 'Run actions/checkout@v4'
+2026-10-02T05:17:57.2877865Z ##[debug]Set step '__run' display name to: 'Check for common secret patterns'
+2026-10-02T05:17:57.2878669Z Complete job name: secret-scan
+2026-10-02T05:17:57.2892530Z ##[debug]Collect running processes for tracking orphan processes.
+2026-10-02T05:17:57.3198499Z ##[debug]Finishing: Set up job

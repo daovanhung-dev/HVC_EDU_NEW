@@ -1,4 +1,4 @@
-import { flushPromises, mount } from '@vue/test-utils'
+import { DOMWrapper, flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import SessionsPage from './SessionsPage.vue'
@@ -42,6 +42,26 @@ vi.mock('@/services/commands', () => ({
 }))
 vi.mock('@/services/data-queries', () => ({ getMySessions: mocks.getMySessions, getSessionStudents: mocks.getSessionStudents }))
 
+const mountedWrappers: Array<{ unmount: () => void }> = []
+
+function mountSessionsPage() {
+  const wrapper = mount(SessionsPage, { global: { plugins: [createPinia()] } })
+  mountedWrappers.push(wrapper)
+  return wrapper
+}
+
+function unmountSessionsPage(wrapper: { unmount: () => void }) {
+  wrapper.unmount()
+  const index = mountedWrappers.indexOf(wrapper)
+  if (index >= 0) mountedWrappers.splice(index, 1)
+}
+
+function attendanceModal() {
+  const element = document.body.querySelector<HTMLElement>('.staff-attendance-modal.app-modal')
+  if (!element) throw new Error('Không tìm thấy popup điểm danh đã Teleport tới body.')
+  return new DOMWrapper(element)
+}
+
 function makeSession(status: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' = 'IN_PROGRESS') {
   return {
     id: 'qa-teacher-session',
@@ -80,7 +100,7 @@ function makeStudent(status: 'PRESENT' | null = 'PRESENT') {
 
 async function openAttendance(status: 'IN_PROGRESS' | 'COMPLETED' = 'IN_PROGRESS') {
   mocks.getMySessions.mockResolvedValue([makeSession(status)])
-  const wrapper = mount(SessionsPage, { global: { plugins: [createPinia()] } })
+  const wrapper = mountSessionsPage()
   await flushPromises()
   await wrapper.get('.session-month__session-card').trigger('click')
   await flushPromises()
@@ -102,11 +122,14 @@ describe('Staff SessionsPage', () => {
     mocks.updateSessionLearning.mockReset().mockResolvedValue(undefined)
   })
 
-  afterEach(() => vi.useRealTimers())
+  afterEach(() => {
+    mountedWrappers.splice(0).forEach((wrapper) => wrapper.unmount())
+    vi.useRealTimers()
+  })
 
   it('opens the attendance popup automatically after starting a session', async () => {
     mocks.getMySessions.mockResolvedValueOnce([makeSession('SCHEDULED')]).mockResolvedValueOnce([makeSession('IN_PROGRESS')])
-    const wrapper = mount(SessionsPage, { global: { plugins: [createPinia()] } })
+    const wrapper = mountSessionsPage()
     await flushPromises()
 
     expect(wrapper.find('.session-month__grid').exists()).toBe(true)
@@ -116,80 +139,80 @@ describe('Staff SessionsPage', () => {
     await flushPromises()
 
     expect(mocks.startSession).toHaveBeenCalledWith('qa-teacher-session')
-    expect(wrapper.find('.app-modal.show').exists()).toBe(true)
-    expect(wrapper.text()).toContain('Điểm danh và kết quả học tập')
-    wrapper.unmount()
+    expect(attendanceModal().classes()).toContain('show')
+    expect(attendanceModal().text()).toContain('Điểm danh và kết quả học tập')
+    unmountSessionsPage(wrapper)
   })
 
   it('shows Vietnamese statuses and saves only changed student rows', async () => {
     const wrapper = await openAttendance()
-    expect(wrapper.text()).toContain('Có mặt')
-    expect(wrapper.text()).not.toContain('PRESENT')
+    expect(attendanceModal().text()).toContain('Có mặt')
+    expect(attendanceModal().text()).not.toContain('PRESENT')
 
-    await wrapper.get('[aria-label="Điểm bài tập về nhà của QA Học sinh"]').setValue('0')
-    expect(wrapper.text()).toContain('1 dòng chưa lưu')
-    await wrapper.findAll('button').find((button) => button.text().includes('Lưu 1 dòng đã đổi'))?.trigger('click')
+    await attendanceModal().get('[aria-label="Điểm bài tập về nhà của QA Học sinh"]').setValue('0')
+    expect(attendanceModal().text()).toContain('1 dòng chưa lưu')
+    await attendanceModal().findAll('button').find((button) => button.text().includes('Lưu 1 dòng đã đổi'))?.trigger('click')
     await flushPromises()
 
     expect(mocks.updateSessionLearning).toHaveBeenCalledWith(expect.objectContaining({
       session_id: 'qa-teacher-session',
       students: [expect.objectContaining({ student_id: 'qa-student-1', status: 'PRESENT', homework_score: 0 })],
     }))
-    wrapper.unmount()
+    unmountSessionsPage(wrapper)
   })
 
   it('keeps completed session results read-only', async () => {
     const wrapper = await openAttendance('COMPLETED')
-    expect(wrapper.text()).toContain('Chế độ xem kết quả')
-    expect((wrapper.get('[aria-label="Trạng thái điểm danh của QA Học sinh"]').element as HTMLSelectElement).disabled).toBe(true)
-    expect(wrapper.findAll('button').some((button) => button.text().includes('Tối ưu nhận xét'))).toBe(false)
-    wrapper.unmount()
+    expect(attendanceModal().text()).toContain('Chế độ xem kết quả')
+    expect((attendanceModal().get('[aria-label="Trạng thái điểm danh của QA Học sinh"]').element as HTMLSelectElement).disabled).toBe(true)
+    expect(attendanceModal().findAll('button').some((button) => button.text().includes('Tối ưu nhận xét'))).toBe(false)
+    unmountSessionsPage(wrapper)
   })
 
   it('shows a Gemini draft and does not persist until the teacher saves', async () => {
     const wrapper = await openAttendance()
-    await wrapper.get('[aria-label="Nhận xét dành cho phụ huynh của QA Học sinh"]').setValue('Em có tiến bộ trong buổi học.')
-    await wrapper.findAll('button').find((button) => button.text().includes('Tối ưu nhận xét'))?.trigger('click')
+    await attendanceModal().get('[aria-label="Nhận xét dành cho phụ huynh của QA Học sinh"]').setValue('Em có tiến bộ trong buổi học.')
+    await attendanceModal().findAll('button').find((button) => button.text().includes('Tối ưu nhận xét'))?.trigger('click')
     await flushPromises()
 
     expect(mocks.optimizeTeacherComment).toHaveBeenCalledWith('Em có tiến bộ trong buổi học.')
-    expect(wrapper.text()).toContain('Em đã chủ động hơn và tiến bộ tốt.')
-    await wrapper.findAll('button').find((button) => button.text().includes('Dùng nhận xét này'))?.trigger('click')
+    expect(attendanceModal().text()).toContain('Em đã chủ động hơn và tiến bộ tốt.')
+    await attendanceModal().findAll('button').find((button) => button.text().includes('Dùng nhận xét này'))?.trigger('click')
     await flushPromises()
     expect(mocks.updateSessionLearning).not.toHaveBeenCalled()
 
-    await wrapper.findAll('button').find((button) => button.text().includes('Lưu 1 dòng đã đổi'))?.trigger('click')
+    await attendanceModal().findAll('button').find((button) => button.text().includes('Lưu 1 dòng đã đổi'))?.trigger('click')
     await flushPromises()
     expect(mocks.updateSessionLearning).toHaveBeenCalledWith(expect.objectContaining({
       students: [expect.objectContaining({ comment: 'Em đã chủ động hơn và tiến bộ tốt.' })],
     }))
-    wrapper.unmount()
+    unmountSessionsPage(wrapper)
   })
 
   it('requires attendance status on changed rows before saving', async () => {
     mocks.getSessionStudents.mockResolvedValueOnce([makeStudent(null)])
     const wrapper = await openAttendance()
-    await wrapper.get('[aria-label="Điểm bài tập về nhà của QA Học sinh"]').setValue('8')
-    await wrapper.findAll('button').find((button) => button.text().includes('Lưu 1 dòng đã đổi'))?.trigger('click')
+    await attendanceModal().get('[aria-label="Điểm bài tập về nhà của QA Học sinh"]').setValue('8')
+    await attendanceModal().findAll('button').find((button) => button.text().includes('Lưu 1 dòng đã đổi'))?.trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Chọn trạng thái điểm danh.')
+    expect(attendanceModal().text()).toContain('Chọn trạng thái điểm danh.')
     expect(mocks.updateSessionLearning).not.toHaveBeenCalled()
-    wrapper.unmount()
+    unmountSessionsPage(wrapper)
   })
 
   it('shows an empty calendar state and reports session loading errors', async () => {
     mocks.getMySessions.mockResolvedValueOnce([])
-    const empty = mount(SessionsPage, { global: { plugins: [createPinia()] } })
+    const empty = mountSessionsPage()
     await flushPromises()
     expect(empty.text()).toContain('Không có buổi học trong ngày này.')
-    empty.unmount()
+    unmountSessionsPage(empty)
 
     mocks.getMySessions.mockRejectedValueOnce(new Error('QA teacher load failure'))
-    const failed = mount(SessionsPage, { global: { plugins: [createPinia()] } })
+    const failed = mountSessionsPage()
     await flushPromises()
     expect(failed.find('.app-state--error').text()).toContain('Không thể tải lịch giảng dạy')
     expect(failed.find('.session-month__grid').exists()).toBe(false)
-    failed.unmount()
+    unmountSessionsPage(failed)
   })
 })
