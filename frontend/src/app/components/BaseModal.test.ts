@@ -85,6 +85,26 @@ describe('BaseModal', () => {
     await wrapper.get('.app-modal').trigger('keydown', { key: 'Escape' })
     await flushPromises()
     expect(wrapper.get('.app-modal').classes()).not.toContain('show')
+    expect(confirm).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+    confirm.mockRestore()
+  })
+
+  it('asks once before dismissing a dirty form through the backdrop event', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const wrapper = mount(ModalHost, { attachTo: document.body })
+    await wrapper.get('#opener').trigger('click')
+    await flushPromises()
+    ;(wrapper.vm as unknown as { dirty: boolean }).dirty = true
+    await nextTick()
+
+    const hideEvent = new Event('hide.bs.modal', { cancelable: true })
+    wrapper.get('.app-modal').element.dispatchEvent(hideEvent)
+    await flushPromises()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(confirm).toHaveBeenCalledTimes(1)
+    expect(wrapper.get('.app-modal').classes()).not.toContain('show')
     wrapper.unmount()
     confirm.mockRestore()
   })

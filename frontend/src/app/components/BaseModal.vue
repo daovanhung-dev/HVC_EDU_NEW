@@ -35,7 +35,6 @@ function onHide(event: Event) {
     if (window.confirm('Bạn đã thay đổi nội dung. Bỏ các thay đổi này?')) {
       allowHide = true
       emit('update:modelValue', false)
-      window.setTimeout(() => instance?.hide(), 0)
     }
     return
   }
@@ -103,7 +102,7 @@ watch(() => props.modelValue, async (open) => {
       emit('update:modelValue', true)
       return
     }
-    if (props.dirty && !window.confirm('Bạn đã thay đổi nội dung. Bỏ các thay đổi này?')) {
+    if (props.dirty && !allowHide && !window.confirm('Bạn đã thay đổi nội dung. Bỏ các thay đổi này?')) {
       emit('dismiss-blocked')
       emit('update:modelValue', true)
       return

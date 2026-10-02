@@ -56,6 +56,13 @@ export function updateSessionLearning(input: {
   return invokeFunction<typeof input, { session_id: string; students_updated: number }>('session-learning-update', input)
 }
 
+export function optimizeTeacherComment(comment: string) {
+  return invokeFunction<{ comment: string }, { optimized_comment: string }>(
+    'teacher-comment-optimize',
+    { comment },
+  )
+}
+
 export async function setAccountStatus(user_id: string, status: 'ACTIVE' | 'INACTIVE' | 'LOCKED') {
   const result = await invokeFunction<{ user_id: string; status: string }, unknown>('admin-account-status', { user_id, status })
   await generateUpcomingSessions()

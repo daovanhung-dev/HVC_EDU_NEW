@@ -109,7 +109,18 @@ export async function applyWeekToMonth() { return { created: 3 } }
 export async function updateSessionTeachers(input: any) { const row = sessions.find((item) => item.id === input.session_id); if (row) row.session_staff = input.staff_ids.map((id: string) => ({ staff_id: id, assignment_role: 'TEACHER', staff: teachers.find((item) => item.id === id) })); return {} }
 export async function startSession(id: string) { const row = sessions.find((item) => item.id === id); if (row) row.status = 'IN_PROGRESS' }
 export async function completeSession(id: string) { const row = sessions.find((item) => item.id === id); if (row) row.status = 'COMPLETED' }
-export async function updateSessionLearning(input: any) { const row = sessions.find((item) => item.id === input.session_id); if (row) row.session_note = input.session_note }
+export async function updateSessionLearning(input: any) {
+  const session = sessions.find((item) => item.id === input.session_id)
+  if (session) session.session_note = input.session_note
+  for (const change of input.students || []) {
+    const existing = attendance.find((item) => item.session_id === input.session_id && item.student_id === change.student_id)
+    if (existing) Object.assign(existing, change)
+    else attendance.push({ id: `qa-attendance-${Date.now()}-${change.student_id}`, session_id: input.session_id, ...change })
+  }
+}
+export async function optimizeTeacherComment(comment: string) {
+  return { optimized_comment: `QA- Gợi ý diễn đạt: ${comment.trim().replace(/[.!?]+$/u, '')} với lời nhận xét rõ ràng và tích cực hơn.` }
+}
 export async function submitTimesheet(input: any) { const row = { id: `qa-timesheet-${Date.now()}`, session_id: input.session_id, staff_id: 'qa-teacher-1', status: 'PENDING', submitted_at: new Date().toISOString(), approved_at: null, approved_by: null, rejection_reason: null, notes: input.notes, sessions: sessions.find((item) => item.id === input.session_id), staff: teachers[0] }; timesheets.unshift(row); return row }
 export async function reviewTimesheet(input: any) { const row = timesheets.find((item) => item.id === input.timesheet_id); if (row) { row.status = input.approve ? 'APPROVED' : 'REJECTED'; row.rejection_reason = input.reason || null }; return row }
 export async function updateMyStaffProfile(input: any) { Object.assign(teachers[0], input) }

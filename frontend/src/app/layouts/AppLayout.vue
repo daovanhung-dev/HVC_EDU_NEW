@@ -15,7 +15,7 @@ const links = computed(() => {
     { to: '/student/attendance', label: 'Kết quả', icon: 'results' },
   ]
   if (auth.isTeacher) return [
-    { to: '/staff/sessions', label: 'Buổi học', icon: 'sessions' },
+    { to: '/staff/sessions', label: 'Lịch dạy', icon: 'sessions' },
     { to: '/staff/timesheets', label: 'Chấm công', icon: 'timesheets' },
     { to: '/staff/profile', label: 'Hồ sơ', icon: 'profile' },
   ]
@@ -41,7 +41,7 @@ async function signOut() {
 </script>
 
 <template>
-  <div class="app-shell">
+  <div class="app-shell" :class="{ 'app-shell--teacher': auth.isTeacher }">
     <a class="skip-link" href="#main-content">Bỏ qua điều hướng</a>
     <aside class="app-sidebar" aria-label="Điều hướng chính">
       <RouterLink class="app-brand" :to="links[0]?.to || '/'" aria-label="Hùng Cường Education — trang chính">

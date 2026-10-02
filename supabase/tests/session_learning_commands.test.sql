@@ -1,6 +1,6 @@
 begin;
 
-select plan(20);
+select plan(21);
 
 -- Fixtures are synthetic, and the transaction is rolled back after these checks.
 insert into auth.users (
@@ -36,9 +36,14 @@ insert into public.sessions (id, class_id, scheduled_start_at, scheduled_end_at,
 values (
   'f0460000-0000-0000-0000-000000000501',
   'f0460000-0000-0000-0000-000000000401',
-  (((now() at time zone 'Asia/Ho_Chi_Minh')::date + 2) + time '17:30') at time zone 'Asia/Ho_Chi_Minh',
-  (((now() at time zone 'Asia/Ho_Chi_Minh')::date + 2) + time '19:30') at time zone 'Asia/Ho_Chi_Minh',
+  (((now() at time zone 'Asia/Ho_Chi_Minh')::date - 1) + time '17:30') at time zone 'Asia/Ho_Chi_Minh',
+  (((now() at time zone 'Asia/Ho_Chi_Minh')::date - 1) + time '19:30') at time zone 'Asia/Ho_Chi_Minh',
   'SCHEDULED', 'QA-SESSION-COMMAND-ROOM'
+);
+select ok(
+  (select scheduled_start_at < now() and status = 'SCHEDULED'
+   from public.sessions where id = 'f0460000-0000-0000-0000-000000000501'),
+  'fixture is a scheduled session in the past'
 );
 insert into public.session_students (session_id, student_id) values
   ('f0460000-0000-0000-0000-000000000501', 'f0460000-0000-0000-0000-000000000201'),
@@ -75,7 +80,7 @@ select lives_ok($$
     'f0460000-0000-0000-0000-000000000501',
     'f0460000-0000-0000-0000-000000000001'
   )
-$$, 'assigned teacher can start a session without a JWT role claim');
+$$, 'assigned teacher can start a past session without a JWT role claim');
 select is((select status::text from public.sessions where id = 'f0460000-0000-0000-0000-000000000501'), 'IN_PROGRESS'::text, 'starting changes the session status');
 select is((select started_by from public.sessions where id = 'f0460000-0000-0000-0000-000000000501'), 'f0460000-0000-0000-0000-000000000001'::uuid, 'starting records the assigned teacher');
 
