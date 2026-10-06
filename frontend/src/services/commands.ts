@@ -20,6 +20,10 @@ export function adminResetPassword(user_id: string) {
   return invokeFunction<{ user_id: string }, { profile: unknown; temporary_password: string }>('admin-reset-password', { user_id })
 }
 
+export function changeRequiredStudentPassword(new_password: string) {
+  return invokeFunction<{ new_password: string }, { changed: boolean }>('student-required-password-change', { new_password })
+}
+
 export function completeSession(session_id: string) {
   return invokeFunction<{ session_id: string }, unknown>('session-complete', { session_id })
 }

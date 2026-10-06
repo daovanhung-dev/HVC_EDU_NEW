@@ -12,12 +12,12 @@ insert into auth.users (
   ('f0450000-0000-0000-0000-000000000004', 'authenticated', 'authenticated', 'qa-backdate-inactive-student@example.invalid', '', now(), now(), now(), '{}'::jsonb, '{}'::jsonb),
   ('f0450000-0000-0000-0000-000000000005', 'authenticated', 'authenticated', 'qa-backdate-archived-class-student@example.invalid', '', now(), now(), now(), '{}'::jsonb, '{}'::jsonb);
 
-insert into public.profiles (user_id, role, username, display_name, status) values
-  ('f0450000-0000-0000-0000-000000000001', 'ADMIN', 'QA-BACKDATE-ADMIN', 'QA Backdate Admin', 'ACTIVE'),
-  ('f0450000-0000-0000-0000-000000000002', 'TEACHER', 'QA-BACKDATE-TEACHER', 'QA Backdate Teacher', 'ACTIVE'),
-  ('f0450000-0000-0000-0000-000000000003', 'STUDENT', 'QA-BACKDATE-STUDENT-1', 'QA Backdate Student 1', 'ACTIVE'),
-  ('f0450000-0000-0000-0000-000000000004', 'STUDENT', 'QA-BACKDATE-STUDENT-2', 'QA Backdate Student 2', 'ACTIVE'),
-  ('f0450000-0000-0000-0000-000000000005', 'STUDENT', 'QA-BACKDATE-STUDENT-3', 'QA Backdate Student 3', 'ACTIVE');
+insert into public.profiles (user_id, role, username, display_name, status, force_password_change) values
+  ('f0450000-0000-0000-0000-000000000001', 'ADMIN', 'QA-BACKDATE-ADMIN', 'QA Backdate Admin', 'ACTIVE', false),
+  ('f0450000-0000-0000-0000-000000000002', 'TEACHER', 'QA-BACKDATE-TEACHER', 'QA Backdate Teacher', 'ACTIVE', false),
+  ('f0450000-0000-0000-0000-000000000003', 'STUDENT', 'QA-BACKDATE-STUDENT-1', 'QA Backdate Student 1', 'ACTIVE', false),
+  ('f0450000-0000-0000-0000-000000000004', 'STUDENT', 'QA-BACKDATE-STUDENT-2', 'QA Backdate Student 2', 'ACTIVE', false),
+  ('f0450000-0000-0000-0000-000000000005', 'STUDENT', 'QA-BACKDATE-STUDENT-3', 'QA Backdate Student 3', 'ACTIVE', false);
 
 insert into public.staff (id, user_id, staff_code, staff_type, full_name, status)
 values ('f0450000-0000-0000-0000-000000000101', 'f0450000-0000-0000-0000-000000000002', 'QA-T-BACKDATE', 'TEACHER', 'QA Backdate Teacher', 'ACTIVE');

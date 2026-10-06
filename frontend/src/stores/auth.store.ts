@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 import type { Session, User } from '@supabase/supabase-js'
 import { isSupabaseConfigured, supabase } from '@/services/supabase'
 import { invokeFunction } from '@/services/edge-functions'
+import { changeRequiredStudentPassword } from '@/services/commands'
 import type { Profile } from '@/shared/types/domain'
 import type { Role } from '@/shared/constants/roles'
 
@@ -74,6 +75,12 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function updatePassword(password: string) {
+    if (isStudent.value && forcePasswordChange.value) {
+      await changeRequiredStudentPassword(password)
+      await hydrate(session.value)
+      return
+    }
+
     const { error } = await supabase.auth.updateUser({ password })
     if (error) throw error
     const { error: profileError } = await supabase.rpc('clear_force_password_change')

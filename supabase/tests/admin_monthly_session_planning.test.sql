@@ -12,12 +12,12 @@ insert into auth.users (
   ('f0410000-0000-0000-0000-000000000004', 'authenticated', 'authenticated', 'qa-schedule-student-a@example.invalid', '', now(), now(), now(), '{}'::jsonb, '{}'::jsonb),
   ('f0410000-0000-0000-0000-000000000005', 'authenticated', 'authenticated', 'qa-schedule-student-b@example.invalid', '', now(), now(), now(), '{}'::jsonb, '{}'::jsonb);
 
-insert into public.profiles (user_id, role, username, display_name, status) values
-  ('f0410000-0000-0000-0000-000000000001', 'ADMIN', 'QA-SCHEDULE-ADMIN', 'QA Schedule Admin', 'ACTIVE'),
-  ('f0410000-0000-0000-0000-000000000002', 'TEACHER', 'QA-SCHEDULE-TEACHER-A', 'QA Schedule Teacher A', 'ACTIVE'),
-  ('f0410000-0000-0000-0000-000000000003', 'TEACHER', 'QA-SCHEDULE-TEACHER-B', 'QA Schedule Teacher B', 'ACTIVE'),
-  ('f0410000-0000-0000-0000-000000000004', 'STUDENT', 'QA-SCHEDULE-STUDENT-A', 'QA Schedule Student A', 'ACTIVE'),
-  ('f0410000-0000-0000-0000-000000000005', 'STUDENT', 'QA-SCHEDULE-STUDENT-B', 'QA Schedule Student B', 'ACTIVE');
+insert into public.profiles (user_id, role, username, display_name, status, force_password_change) values
+  ('f0410000-0000-0000-0000-000000000001', 'ADMIN', 'QA-SCHEDULE-ADMIN', 'QA Schedule Admin', 'ACTIVE', false),
+  ('f0410000-0000-0000-0000-000000000002', 'TEACHER', 'QA-SCHEDULE-TEACHER-A', 'QA Schedule Teacher A', 'ACTIVE', false),
+  ('f0410000-0000-0000-0000-000000000003', 'TEACHER', 'QA-SCHEDULE-TEACHER-B', 'QA Schedule Teacher B', 'ACTIVE', false),
+  ('f0410000-0000-0000-0000-000000000004', 'STUDENT', 'QA-SCHEDULE-STUDENT-A', 'QA Schedule Student A', 'ACTIVE', false),
+  ('f0410000-0000-0000-0000-000000000005', 'STUDENT', 'QA-SCHEDULE-STUDENT-B', 'QA Schedule Student B', 'ACTIVE', false);
 
 insert into public.staff (id, user_id, staff_code, staff_type, full_name, status) values
   ('f0410000-0000-0000-0000-000000000101', 'f0410000-0000-0000-0000-000000000002', 'QA-SCHEDULE-T-1', 'TEACHER', 'QA Schedule Teacher A', 'ACTIVE'),

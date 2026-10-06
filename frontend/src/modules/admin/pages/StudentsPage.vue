@@ -102,7 +102,7 @@ function askFor(row: Student, action: 'archive' | 'toggle' | 'reset') {
     confirmDetails.value = { title: locking ? 'Khóa tài khoản?' : 'Mở khóa tài khoản?', message: locking ? 'Người dùng sẽ không thể đăng nhập cho đến khi tài khoản được mở lại.' : 'Người dùng sẽ có thể đăng nhập lại.', itemName: `${row.full_name} · ${row.student_code}`, warning: '', confirmLabel: locking ? 'Khóa tài khoản' : 'Mở khóa', destructive: locking }
     pendingAction.value = async () => { await setAccountStatus(row.user_id, locking ? 'LOCKED' : 'ACTIVE'); toast.success(locking ? 'Đã khóa tài khoản học sinh.' : 'Đã mở khóa tài khoản học sinh.'); await load() }
   } else {
-    confirmDetails.value = { title: 'Đặt lại mật khẩu?', message: 'Mật khẩu hiện tại sẽ được thay bằng mật khẩu tạm mới. Sau khi thành công, mật khẩu chỉ hiện một lần.', itemName: `${row.full_name} · ${row.student_code}`, warning: 'Hãy bàn giao mật khẩu qua kênh bảo mật.', confirmLabel: 'Đặt lại mật khẩu', destructive: false }
+    confirmDetails.value = { title: 'Đặt lại mật khẩu?', message: 'Mật khẩu sẽ được đặt lại thành 12345678. Học sinh cần đổi mật khẩu này trước khi sử dụng cổng học tập.', itemName: `${row.full_name} · ${row.student_code}`, warning: 'Mật khẩu chỉ hiển thị một lần sau khi đặt lại thành công. Hãy bàn giao qua kênh bảo mật.', confirmLabel: 'Đặt lại mật khẩu', destructive: false }
     temporaryPassword.value = ''
     pendingAction.value = async () => { const result = await adminResetPassword(row.user_id); temporaryPassword.value = result.temporary_password }
   }
@@ -159,7 +159,7 @@ onMounted(load)
     <div v-if="errorMessage" class="alert alert-danger mt-3 mb-0" role="alert">{{ errorMessage }}</div>
   </FormModal>
   <ConfirmModal v-model="confirmOpen" v-bind="confirmDetails" :busy="confirmBusy" @confirm="confirmAction" @hidden="onConfirmHidden" />
-  <DetailModal v-model="showPassword" title="Mật khẩu tạm thời" description="Mật khẩu chỉ hiển thị trong phiên này. Hãy ghi lại và bàn giao qua kênh bảo mật." size="sm">
+  <DetailModal v-model="showPassword" title="Mật khẩu tạm thời" description="Mật khẩu là 12345678. Học sinh sẽ cần đổi mật khẩu ở lần đăng nhập kế tiếp. Mật khẩu chỉ hiển thị trong phiên này; hãy bàn giao qua kênh bảo mật." size="sm">
     <label class="form-label" for="temporary-password">Mật khẩu tạm</label><input id="temporary-password" class="form-control fw-semibold" :value="temporaryPassword" readonly data-modal-autofocus @focus="($event.target as HTMLInputElement).select()" />
     <template #footer><button class="btn btn-primary" type="button" @click="closePassword">Đã ghi lại</button></template>
   </DetailModal>

@@ -6,6 +6,7 @@ import { useAuthStore } from './auth.store'
 const mocks = vi.hoisted(() => {
   let authStateCallback: ((event: string, session: Session | null) => void) | undefined
   const profileRows: unknown[] = []
+  const invokeFunction = vi.fn()
   const supabase = {
     auth: {
       getSession: vi.fn(),
@@ -29,6 +30,7 @@ const mocks = vi.hoisted(() => {
   return {
     supabase,
     profileRows,
+    invokeFunction,
     emitAuthState(session: Session | null) {
       authStateCallback?.('USER_UPDATED', session)
     },
@@ -40,8 +42,9 @@ vi.mock('@/services/supabase', () => ({
   supabase: mocks.supabase,
 }))
 
-vi.mock('@/services/edge-functions', () => ({
-  invokeFunction: vi.fn(),
+vi.mock('@/services/edge-functions', () => ({ invokeFunction: mocks.invokeFunction }))
+vi.mock('@/services/commands', () => ({
+  changeRequiredStudentPassword: vi.fn((password: string) => mocks.invokeFunction('student-required-password-change', { new_password: password })),
 }))
 
 const session = {
@@ -50,13 +53,13 @@ const session = {
   user: { id: 'user-1', email: 'admin@local.vn' },
 } as unknown as Session
 
-function profile(forcePasswordChange: boolean) {
+function profile(forcePasswordChange: boolean, role = 'ADMIN') {
   return {
     id: 'profile-1',
     user_id: 'user-1',
-    role: 'ADMIN',
-    username: 'admin_local',
-    display_name: 'Administrator',
+    role,
+    username: 'qa_user',
+    display_name: 'QA Account',
     phone: null,
     email: 'admin@local.vn',
     status: 'ACTIVE',
@@ -72,6 +75,7 @@ describe('auth store password-change flow', () => {
     mocks.supabase.auth.getSession.mockResolvedValue({ data: { session: null } })
     mocks.supabase.auth.updateUser.mockResolvedValue({ error: null })
     mocks.supabase.rpc.mockResolvedValue({ error: null })
+    mocks.invokeFunction.mockResolvedValue({ changed: true })
   })
 
   it('hydrates the profile force-password flag without changing its value', async () => {
@@ -95,6 +99,20 @@ describe('auth store password-change flow', () => {
 
     expect(mocks.supabase.auth.updateUser).toHaveBeenCalledWith({ password: 'NewPassword123!' })
     expect(mocks.supabase.rpc).toHaveBeenCalledWith('clear_force_password_change')
+    expect(auth.forcePasswordChange).toBe(false)
+  })
+
+  it('uses the protected Edge Function for a forced student password change', async () => {
+    mocks.profileRows.push(profile(true, 'STUDENT'), profile(false, 'STUDENT'))
+    mocks.supabase.auth.getSession.mockResolvedValue({ data: { session } })
+    const auth = useAuthStore()
+    await auth.initialize()
+
+    await auth.updatePassword('QA-NewPassword-123')
+
+    expect(mocks.invokeFunction).toHaveBeenCalledWith('student-required-password-change', { new_password: 'QA-NewPassword-123' })
+    expect(mocks.supabase.auth.updateUser).not.toHaveBeenCalled()
+    expect(mocks.supabase.rpc).not.toHaveBeenCalled()
     expect(auth.forcePasswordChange).toBe(false)
   })
 

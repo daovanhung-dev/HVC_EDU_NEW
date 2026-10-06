@@ -15,15 +15,15 @@ insert into auth.users (
   ('f0440000-0000-0000-0000-000000000007', 'authenticated', 'authenticated', 'qa-room-student-d@example.invalid', '', now(), now(), now(), '{}'::jsonb, '{}'::jsonb),
   ('f0440000-0000-0000-0000-000000000008', 'authenticated', 'authenticated', 'qa-room-student-e@example.invalid', '', now(), now(), now(), '{}'::jsonb, '{}'::jsonb);
 
-insert into public.profiles (user_id, role, username, display_name, status) values
-  ('f0440000-0000-0000-0000-000000000001', 'ADMIN', 'QA-ROOM-ADMIN', 'QA Room Admin', 'ACTIVE'),
-  ('f0440000-0000-0000-0000-000000000002', 'TEACHER', 'QA-ROOM-TEACHER-A', 'QA Room Teacher A', 'ACTIVE'),
-  ('f0440000-0000-0000-0000-000000000003', 'TEACHER', 'QA-ROOM-TEACHER-B', 'QA Room Teacher B', 'ACTIVE'),
-  ('f0440000-0000-0000-0000-000000000004', 'STUDENT', 'QA-ROOM-STUDENT-A', 'QA Room Student A', 'ACTIVE'),
-  ('f0440000-0000-0000-0000-000000000005', 'STUDENT', 'QA-ROOM-STUDENT-B', 'QA Room Student B', 'ACTIVE'),
-  ('f0440000-0000-0000-0000-000000000006', 'STUDENT', 'QA-ROOM-STUDENT-C', 'QA Room Student C', 'ACTIVE'),
-  ('f0440000-0000-0000-0000-000000000007', 'STUDENT', 'QA-ROOM-STUDENT-D', 'QA Room Student D', 'ACTIVE'),
-  ('f0440000-0000-0000-0000-000000000008', 'STUDENT', 'QA-ROOM-STUDENT-E', 'QA Room Student E', 'ACTIVE');
+insert into public.profiles (user_id, role, username, display_name, status, force_password_change) values
+  ('f0440000-0000-0000-0000-000000000001', 'ADMIN', 'QA-ROOM-ADMIN', 'QA Room Admin', 'ACTIVE', false),
+  ('f0440000-0000-0000-0000-000000000002', 'TEACHER', 'QA-ROOM-TEACHER-A', 'QA Room Teacher A', 'ACTIVE', false),
+  ('f0440000-0000-0000-0000-000000000003', 'TEACHER', 'QA-ROOM-TEACHER-B', 'QA Room Teacher B', 'ACTIVE', false),
+  ('f0440000-0000-0000-0000-000000000004', 'STUDENT', 'QA-ROOM-STUDENT-A', 'QA Room Student A', 'ACTIVE', false),
+  ('f0440000-0000-0000-0000-000000000005', 'STUDENT', 'QA-ROOM-STUDENT-B', 'QA Room Student B', 'ACTIVE', false),
+  ('f0440000-0000-0000-0000-000000000006', 'STUDENT', 'QA-ROOM-STUDENT-C', 'QA Room Student C', 'ACTIVE', false),
+  ('f0440000-0000-0000-0000-000000000007', 'STUDENT', 'QA-ROOM-STUDENT-D', 'QA Room Student D', 'ACTIVE', false),
+  ('f0440000-0000-0000-0000-000000000008', 'STUDENT', 'QA-ROOM-STUDENT-E', 'QA Room Student E', 'ACTIVE', false);
 
 insert into public.staff (id, user_id, staff_code, staff_type, full_name, status) values
   ('f0440000-0000-0000-0000-000000000101', 'f0440000-0000-0000-0000-000000000002', 'QA-ROOM-T-1', 'TEACHER', 'QA Room Teacher A', 'ACTIVE'),

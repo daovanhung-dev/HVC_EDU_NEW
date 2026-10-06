@@ -105,6 +105,7 @@
 | frontend/src/modules/admin/pages/StudentDetailPage.vue | Frontend / Admin | Vue SFC |
 | frontend/src/modules/admin/pages/StudentsPage.test.ts | Frontend / Admin | TypeScript |
 | frontend/src/modules/admin/pages/StudentsPage.vue | Frontend / Admin | Vue SFC |
+| frontend/src/modules/auth/pages/ChangePasswordPage.test.ts | Frontend / Đăng nhập | TypeScript |
 | frontend/src/modules/auth/pages/ChangePasswordPage.vue | Frontend / Đăng nhập | Vue SFC |
 | frontend/src/modules/auth/pages/LoginPage.test.ts | Frontend / Đăng nhập | TypeScript |
 | frontend/src/modules/auth/pages/LoginPage.vue | Frontend / Đăng nhập | Vue SFC |
@@ -177,6 +178,9 @@
 | supabase/functions/student-ai-tutor/handler.test.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/student-ai-tutor/handler.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/student-ai-tutor/index.ts | Supabase / Edge Functions | TypeScript |
+| supabase/functions/student-required-password-change/handler.test.ts | Supabase / Edge Functions | TypeScript |
+| supabase/functions/student-required-password-change/handler.ts | Supabase / Edge Functions | TypeScript |
+| supabase/functions/student-required-password-change/index.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/teacher-comment-optimize/handler.test.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/teacher-comment-optimize/handler.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/teacher-comment-optimize/index.ts | Supabase / Edge Functions | TypeScript |
@@ -229,6 +233,7 @@
 | supabase/migrations/0045_backdated_attendance_sessions.sql | Supabase / migrations | SQL |
 | supabase/migrations/0046_allow_secret_key_session_rpcs.sql | Supabase / migrations | SQL |
 | supabase/migrations/0047_lesson_videos_and_ai_tutor.sql | Supabase / migrations | SQL |
+| supabase/migrations/0048_force_student_password_change.sql | Supabase / migrations | SQL |
 | supabase/seed.sql | Supabase / cấu hình và seed | SQL |
 | supabase/tests/admin_monthly_session_planning.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/backdated_session_creation.test.sql | Supabase / kiểm thử SQL | SQL |
@@ -238,4 +243,4 @@
 | supabase/tests/session_learning_commands.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/timesheet_workflow.test.sql | Supabase / kiểm thử SQL | SQL |
 
-Tổng: 231 đường dẫn có trong inventory.
+Tổng: 236 đường dẫn có trong inventory.

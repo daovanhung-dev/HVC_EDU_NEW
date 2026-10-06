@@ -26,8 +26,8 @@ const session = {
   user: { id: 'user-1', email: 'test@local.vn' },
 } as unknown as Session
 
-function profile(role: string) {
-  return { id: 'profile-1', user_id: 'user-1', role, username: 'user', display_name: 'Test', status: 'ACTIVE', force_password_change: false }
+function profile(role: string, forcePasswordChange = false) {
+  return { id: 'profile-1', user_id: 'user-1', role, username: 'user', display_name: 'Test', status: 'ACTIVE', force_password_change: forcePasswordChange }
 }
 
 describe('authentication route guard', () => {
@@ -62,6 +62,18 @@ describe('authentication route guard', () => {
     expect(router.currentRoute.value.path).toBe('/student/schedule')
     await router.push('/admin/classes?case=student')
     expect(router.currentRoute.value.path).toBe('/student/schedule')
+  })
+
+  it('limits forced-change students to the password change route', async () => {
+    mocks.profileRows.push(profile('STUDENT', true))
+    await router.push('/student/schedule?case=forced-password')
+    expect(router.currentRoute.value.path).toBe('/auth/change-password')
+
+    await router.push('/student/review?case=forced-password-direct')
+    expect(router.currentRoute.value.path).toBe('/auth/change-password')
+
+    await router.push('/auth/change-password?case=forced-password')
+    expect(router.currentRoute.value.path).toBe('/auth/change-password')
   })
 
   it.each(['PARENT', 'ASSISTANT'])('blocks retired %s accounts', async (role) => {

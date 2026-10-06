@@ -1,6 +1,6 @@
 begin;
 
-select plan(41);
+select plan(50);
 
 -- All fixtures are synthetic and the transaction is rolled back at the end.
 insert into auth.users (
@@ -14,13 +14,13 @@ insert into auth.users (
   ('f0400000-0000-0000-0000-000000000005', 'authenticated', 'authenticated', 'qa-rls-student-a@example.invalid', '', now(), now(), now(), '{}'::jsonb, '{}'::jsonb),
   ('f0400000-0000-0000-0000-000000000006', 'authenticated', 'authenticated', 'qa-rls-student-b@example.invalid', '', now(), now(), now(), '{}'::jsonb, '{}'::jsonb);
 
-insert into public.profiles (user_id, role, username, display_name, status) values
-  ('f0400000-0000-0000-0000-000000000001', 'ROOT_ADMIN', 'QA-RLS-ROOT', 'QA RLS ROOT', 'ACTIVE'),
-  ('f0400000-0000-0000-0000-000000000002', 'ADMIN', 'QA-RLS-ADMIN', 'QA RLS ADMIN', 'ACTIVE'),
-  ('f0400000-0000-0000-0000-000000000003', 'TEACHER', 'QA-RLS-TEACHER', 'QA RLS TEACHER', 'ACTIVE'),
-  ('f0400000-0000-0000-0000-000000000004', 'TEACHER', 'QA-RLS-UNASSIGNED', 'QA RLS UNASSIGNED', 'ACTIVE'),
-  ('f0400000-0000-0000-0000-000000000005', 'STUDENT', 'QA-RLS-STUDENT-A', 'QA RLS STUDENT A', 'ACTIVE'),
-  ('f0400000-0000-0000-0000-000000000006', 'STUDENT', 'QA-RLS-STUDENT-B', 'QA RLS STUDENT B', 'ACTIVE');
+insert into public.profiles (user_id, role, username, display_name, status, force_password_change) values
+  ('f0400000-0000-0000-0000-000000000001', 'ROOT_ADMIN', 'QA-RLS-ROOT', 'QA RLS ROOT', 'ACTIVE', false),
+  ('f0400000-0000-0000-0000-000000000002', 'ADMIN', 'QA-RLS-ADMIN', 'QA RLS ADMIN', 'ACTIVE', false),
+  ('f0400000-0000-0000-0000-000000000003', 'TEACHER', 'QA-RLS-TEACHER', 'QA RLS TEACHER', 'ACTIVE', false),
+  ('f0400000-0000-0000-0000-000000000004', 'TEACHER', 'QA-RLS-UNASSIGNED', 'QA RLS UNASSIGNED', 'ACTIVE', false),
+  ('f0400000-0000-0000-0000-000000000005', 'STUDENT', 'QA-RLS-STUDENT-A', 'QA RLS STUDENT A', 'ACTIVE', false),
+  ('f0400000-0000-0000-0000-000000000006', 'STUDENT', 'QA-RLS-STUDENT-B', 'QA RLS STUDENT B', 'ACTIVE', false);
 
 insert into public.staff (id, user_id, staff_code, staff_type, full_name, status) values
   ('f0400000-0000-0000-0000-000000000101', 'f0400000-0000-0000-0000-000000000003', 'QA-RLS-T-1', 'TEACHER', 'QA RLS TEACHER', 'ACTIVE'),
@@ -112,6 +112,25 @@ select is((select count(*)::integer from public.class_memberships), 1, 'STUDENT 
 select is((select count(*)::integer from public.class_schedules), 1, 'STUDENT A can read own class schedule');
 select is((select count(*)::integer from public.sessions), 2, 'STUDENT A can read own scheduled and completed sessions');
 select is((select count(*)::integer from public.student_attendances), 1, 'STUDENT A sees only own completed-session attendance');
+
+reset role;
+update public.profiles set force_password_change = true where user_id = 'f0400000-0000-0000-0000-000000000005';
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'f0400000-0000-0000-0000-000000000005', true);
+select is((select count(*)::integer from public.profiles where user_id = auth.uid()), 1, 'forced-change STUDENT can still read own profile');
+select is((select count(*)::integer from public.students), 0, 'forced-change STUDENT cannot read student data');
+select is((select count(*)::integer from public.classes), 0, 'forced-change STUDENT cannot read classes');
+select is((select count(*)::integer from public.class_memberships), 0, 'forced-change STUDENT cannot read memberships');
+select is((select count(*)::integer from public.sessions), 0, 'forced-change STUDENT cannot read sessions');
+select is((select count(*)::integer from public.session_students), 0, 'forced-change STUDENT cannot read session rosters');
+select is((select count(*)::integer from public.student_attendances), 0, 'forced-change STUDENT cannot read attendance');
+select throws_ok($$select public.clear_force_password_change()$$, 'P0001', 'PASSWORD_CHANGE_REQUIRED', 'forced-change STUDENT cannot clear the gate through the RPC');
+
+reset role;
+update public.profiles set force_password_change = false where user_id = 'f0400000-0000-0000-0000-000000000005';
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'f0400000-0000-0000-0000-000000000005', true);
+select is((select count(*)::integer from public.sessions), 2, 'STUDENT regains session access after password change clears the flag');
 
 reset role;
 set local role authenticated;

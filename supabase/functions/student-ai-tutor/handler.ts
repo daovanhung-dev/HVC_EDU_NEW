@@ -17,7 +17,7 @@ const systemInstruction = [
 
 export interface StudentCaller {
   user: { id: string };
-  profile: { role: string; status: string };
+  profile: { role: string; status: string; force_password_change?: boolean };
 }
 
 export interface LessonContext {
@@ -50,7 +50,7 @@ export function createStudentAiTutorHandler(dependencies: StudentAiDependencies)
     let caller: StudentCaller;
     try { caller = await dependencies.getCaller(request) }
     catch (error) { return fromError(error) }
-    if (caller.profile.role !== "STUDENT" || caller.profile.status !== "ACTIVE" || !await dependencies.isActiveStudent(caller.user.id)) {
+    if (caller.profile.role !== "STUDENT" || caller.profile.status !== "ACTIVE" || caller.profile.force_password_change || !await dependencies.isActiveStudent(caller.user.id)) {
       return fail("FORBIDDEN", "Chỉ học sinh đang hoạt động mới dùng được chức năng Hỏi AI.", 403);
     }
 

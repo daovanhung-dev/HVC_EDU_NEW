@@ -22,6 +22,7 @@ import StaffTimesheetsPage from '../src/modules/staff/pages/StaffTimesheetsPage.
 import StudentPage from '../src/modules/student/pages/StudentPage.vue'
 import StudentReviewPage from '../src/modules/student/pages/StudentReviewPage.vue'
 import StudentAiChatPage from '../src/modules/student/pages/StudentAiChatPage.vue'
+import { useAuthStore } from '../src/devtools/ui-review/mock-auth.store'
 
 const routes = [
   { path: '/login', component: AuthLayout, children: [{ path: '', component: LoginPage }] },
@@ -43,4 +44,11 @@ const routes = [
 ]
 
 const router = createRouter({ history: createWebHashHistory(), routes })
+router.beforeEach((to) => {
+  const auth = useAuthStore()
+  if (auth.isStudent && auth.forcePasswordChange && to.path !== '/auth/change-password') {
+    return '/auth/change-password'
+  }
+  return true
+})
 createApp(ReviewApp).use(createPinia()).use(router).mount('#app')

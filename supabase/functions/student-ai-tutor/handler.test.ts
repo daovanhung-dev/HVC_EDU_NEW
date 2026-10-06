@@ -1,6 +1,6 @@
 import { createStudentAiTutorHandler, type LessonContext } from "./handler.ts";
 
-const student = { user: { id: "qa-student" }, profile: { role: "STUDENT", status: "ACTIVE" } };
+const student = { user: { id: "qa-student" }, profile: { role: "STUDENT", status: "ACTIVE", force_password_change: false } };
 const lesson: LessonContext = { class_name: "QA- Toán 8", subject_name: "QA- Toán", scheduled_start_at: "2026-10-01T10:00:00+07:00", session_note: "QA- Phương trình bậc nhất" };
 const request = (body: unknown) => new Request("https://local.test/student-ai-tutor", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 const deps = (overrides: Partial<Parameters<typeof createStudentAiTutorHandler>[0]> = {}) => ({
@@ -19,6 +19,8 @@ Deno.test("allows only active students", async () => {
   assert(response.status === 403, "non-students should be forbidden");
   const inactiveStudent = createStudentAiTutorHandler(deps({ isActiveStudent: async () => false }));
   assert((await inactiveStudent(request({ question: "QA hỏi" }))).status === 403, "inactive student record should be forbidden");
+  const forcedStudent = createStudentAiTutorHandler(deps({ getCaller: async () => ({ user: { id: "qa-student" }, profile: { role: "STUDENT", status: "ACTIVE", force_password_change: true } }) }));
+  assert((await forcedStudent(request({ question: "QA hỏi" }))).status === 403, "forced-change student must not use the AI endpoint");
 });
 
 Deno.test("requires the selected completed session to belong to the student", async () => {

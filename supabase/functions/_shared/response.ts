@@ -49,6 +49,7 @@ interface ErrorLike {
 }
 
 const knownCodes = [
+  "UNAUTHENTICATED",
   "FORBIDDEN",
   "SESSION_NOT_COMPLETEABLE",
   "SESSION_NOT_FOUND",
@@ -71,6 +72,7 @@ const knownCodes = [
   "STAFF_NOT_FOUND",
   "ACCOUNT_NOT_FOUND",
   "ACCOUNT_INACTIVE",
+  "PASSWORD_CHANGE_REQUIRED",
   "PARENT_LOGIN_DISABLED",
   "CANNOT_LOCK_SELF",
   "ACCOUNTING_CATEGORY_MISMATCH",
@@ -108,6 +110,7 @@ const knownCodes = [
 ];
 
 const publicMessages: Record<string, string> = {
+  UNAUTHENTICATED: "Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.",
   INVALID_INPUT: "Dữ liệu tạo tài khoản không hợp lệ.",
   INVALID_EMAIL: "Email không hợp lệ.",
   USERNAME_ALREADY_EXISTS: "Username đã tồn tại.",
@@ -123,6 +126,7 @@ const publicMessages: Record<string, string> = {
   ACCOUNT_ROLLBACK_FAILED:
     "Tạo tài khoản thất bại và cần được kiểm tra để hoàn tất khôi phục dữ liệu.",
   ACCOUNT_INACTIVE: "Tài khoản không ở trạng thái ACTIVE.",
+  PASSWORD_CHANGE_REQUIRED: "Hãy đổi mật khẩu trước khi tiếp tục sử dụng ứng dụng.",
   PARENT_LOGIN_DISABLED: "Đăng nhập phụ huynh đã ngừng hỗ trợ. Vui lòng dùng tài khoản học sinh của con.",
   SESSION_NOT_COMPLETED: "Chỉ có thể gửi chấm công sau khi buổi học hoàn thành.",
   SESSION_STAFF_REQUIRED: "Bạn không được phân công cho buổi học này.",
@@ -263,8 +267,11 @@ export function fromError(
     status: classified.status || undefined,
     message: classified.message,
   }));
-  const status = classified.code === "FORBIDDEN" ||
-      classified.code === "PARENT_LOGIN_DISABLED"
+  const status = classified.code === "UNAUTHENTICATED"
+    ? 401
+    : classified.code === "FORBIDDEN" ||
+      classified.code === "PARENT_LOGIN_DISABLED" ||
+      classified.code === "PASSWORD_CHANGE_REQUIRED"
     ? 403
     : classified.code === "INTERNAL_ERROR" ||
         classified.code === "ACCOUNT_ROLLBACK_FAILED"

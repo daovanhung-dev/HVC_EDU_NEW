@@ -13,12 +13,12 @@ insert into auth.users (
   ('f0420000-0000-0000-0000-000000000004', 'authenticated', 'authenticated', 'qa-time-other@example.invalid', '', now(), now(), now(), '{}'::jsonb, '{}'::jsonb),
   ('f0420000-0000-0000-0000-000000000005', 'authenticated', 'authenticated', 'qa-time-student@example.invalid', '', now(), now(), now(), '{}'::jsonb, '{}'::jsonb);
 
-insert into public.profiles (user_id, role, username, display_name, status) values
-  ('f0420000-0000-0000-0000-000000000001', 'ROOT_ADMIN', 'QA-TIME-ROOT', 'QA Time Root', 'ACTIVE'),
-  ('f0420000-0000-0000-0000-000000000002', 'ADMIN', 'QA-TIME-ADMIN', 'QA Time Admin', 'ACTIVE'),
-  ('f0420000-0000-0000-0000-000000000003', 'TEACHER', 'QA-TIME-TEACHER', 'QA Time Teacher', 'ACTIVE'),
-  ('f0420000-0000-0000-0000-000000000004', 'TEACHER', 'QA-TIME-OTHER', 'QA Time Other', 'ACTIVE'),
-  ('f0420000-0000-0000-0000-000000000005', 'STUDENT', 'QA-TIME-STUDENT', 'QA Time Student', 'ACTIVE');
+insert into public.profiles (user_id, role, username, display_name, status, force_password_change) values
+  ('f0420000-0000-0000-0000-000000000001', 'ROOT_ADMIN', 'QA-TIME-ROOT', 'QA Time Root', 'ACTIVE', false),
+  ('f0420000-0000-0000-0000-000000000002', 'ADMIN', 'QA-TIME-ADMIN', 'QA Time Admin', 'ACTIVE', false),
+  ('f0420000-0000-0000-0000-000000000003', 'TEACHER', 'QA-TIME-TEACHER', 'QA Time Teacher', 'ACTIVE', false),
+  ('f0420000-0000-0000-0000-000000000004', 'TEACHER', 'QA-TIME-OTHER', 'QA Time Other', 'ACTIVE', false),
+  ('f0420000-0000-0000-0000-000000000005', 'STUDENT', 'QA-TIME-STUDENT', 'QA Time Student', 'ACTIVE', false);
 
 insert into public.staff (id, user_id, staff_code, staff_type, full_name, status) values
   ('f0420000-0000-0000-0000-000000000101', 'f0420000-0000-0000-0000-000000000003', 'QA-TIME-T-1', 'TEACHER', 'QA Time Teacher', 'ACTIVE'),

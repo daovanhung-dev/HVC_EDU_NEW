@@ -22,7 +22,7 @@ const pages: Array<{ label: string; path: string; role: ReviewRole }> = [
   { label: 'Học sinh · Xem lại bài cũ', path: '/student/review', role: 'STUDENT' },
   { label: 'Học sinh · Hỏi AI', path: '/student/ai', role: 'STUDENT' },
   { label: 'Đăng nhập', path: '/login', role: 'ADMIN' },
-  { label: 'Đổi mật khẩu', path: '/auth/change-password', role: 'ADMIN' },
+  { label: 'Đổi mật khẩu', path: '/auth/change-password', role: 'STUDENT' },
 ]
 const modes: Array<{ value: ReviewMode; label: string }> = [
   { value: 'normal', label: 'Dữ liệu QA' },

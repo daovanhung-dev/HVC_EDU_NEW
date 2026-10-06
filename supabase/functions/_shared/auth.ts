@@ -2,7 +2,11 @@ import { createClient, type SupabaseClient, type User } from 'npm:@supabase/supa
 
 export interface Caller {
   user: User
-  profile: { id: string; user_id: string; role: string; status: string; username: string | null }
+  profile: { id: string; user_id: string; role: string; status: string; username: string | null; force_password_change: boolean }
+}
+
+export interface RequireCallerOptions {
+  allowForcedStudentPasswordChange?: boolean
 }
 
 function projectUrl(): string {
@@ -39,15 +43,22 @@ export function callerClient(req: Request): SupabaseClient {
   return createClient(projectUrl(), publishableKey(), { global: { headers: { Authorization: authHeader } }, auth: { autoRefreshToken: false, persistSession: false } })
 }
 
-export async function requireCaller(req: Request): Promise<Caller> {
+export async function requireCaller(
+  req: Request,
+  options: RequireCallerOptions = {},
+): Promise<Caller> {
   const authHeader = req.headers.get('Authorization') || ''
   if (!authHeader.toLowerCase().startsWith('bearer ')) throw new Error('UNAUTHENTICATED')
   const client = callerClient(req)
   const { data: userData, error: userError } = await client.auth.getUser()
   if (userError || !userData.user) throw new Error('UNAUTHENTICATED')
-  const { data: profile, error: profileError } = await adminClient().from('profiles').select('id,user_id,role,status,username').eq('user_id', userData.user.id).single()
+  const { data: profile, error: profileError } = await adminClient().from('profiles').select('id,user_id,role,status,username,force_password_change').eq('user_id', userData.user.id).single()
   if (profileError || !profile || profile.status !== 'ACTIVE') throw new Error('ACCOUNT_INACTIVE')
   if (profile.role === 'PARENT') throw new Error('PARENT_LOGIN_DISABLED')
+  if (
+    profile.role === 'STUDENT' && profile.force_password_change &&
+    !options.allowForcedStudentPasswordChange
+  ) throw new Error('PASSWORD_CHANGE_REQUIRED')
   return { user: userData.user, profile }
 }
 

@@ -15,14 +15,14 @@ insert into auth.users (
   ('f0430000-0000-0000-0000-000000000006', 'authenticated', 'authenticated', 'qa-teacher-limit-5@example.invalid', '', now(), now(), now(), '{}'::jsonb, '{}'::jsonb),
   ('f0430000-0000-0000-0000-000000000007', 'authenticated', 'authenticated', 'qa-teacher-limit-6@example.invalid', '', now(), now(), now(), '{}'::jsonb, '{}'::jsonb);
 
-insert into public.profiles (user_id, role, username, display_name, status) values
-  ('f0430000-0000-0000-0000-000000000001', 'ADMIN', 'QA-TEACHER-LIMIT-ADMIN', 'QA Teacher Limit Admin', 'ACTIVE'),
-  ('f0430000-0000-0000-0000-000000000002', 'TEACHER', 'QA-TEACHER-LIMIT-1', 'QA Teacher Limit 1', 'ACTIVE'),
-  ('f0430000-0000-0000-0000-000000000003', 'TEACHER', 'QA-TEACHER-LIMIT-2', 'QA Teacher Limit 2', 'ACTIVE'),
-  ('f0430000-0000-0000-0000-000000000004', 'TEACHER', 'QA-TEACHER-LIMIT-3', 'QA Teacher Limit 3', 'ACTIVE'),
-  ('f0430000-0000-0000-0000-000000000005', 'TEACHER', 'QA-TEACHER-LIMIT-4', 'QA Teacher Limit 4', 'ACTIVE'),
-  ('f0430000-0000-0000-0000-000000000006', 'TEACHER', 'QA-TEACHER-LIMIT-5', 'QA Teacher Limit 5', 'ACTIVE'),
-  ('f0430000-0000-0000-0000-000000000007', 'TEACHER', 'QA-TEACHER-LIMIT-6', 'QA Teacher Limit 6', 'ACTIVE');
+insert into public.profiles (user_id, role, username, display_name, status, force_password_change) values
+  ('f0430000-0000-0000-0000-000000000001', 'ADMIN', 'QA-TEACHER-LIMIT-ADMIN', 'QA Teacher Limit Admin', 'ACTIVE', false),
+  ('f0430000-0000-0000-0000-000000000002', 'TEACHER', 'QA-TEACHER-LIMIT-1', 'QA Teacher Limit 1', 'ACTIVE', false),
+  ('f0430000-0000-0000-0000-000000000003', 'TEACHER', 'QA-TEACHER-LIMIT-2', 'QA Teacher Limit 2', 'ACTIVE', false),
+  ('f0430000-0000-0000-0000-000000000004', 'TEACHER', 'QA-TEACHER-LIMIT-3', 'QA Teacher Limit 3', 'ACTIVE', false),
+  ('f0430000-0000-0000-0000-000000000005', 'TEACHER', 'QA-TEACHER-LIMIT-4', 'QA Teacher Limit 4', 'ACTIVE', false),
+  ('f0430000-0000-0000-0000-000000000006', 'TEACHER', 'QA-TEACHER-LIMIT-5', 'QA Teacher Limit 5', 'ACTIVE', false),
+  ('f0430000-0000-0000-0000-000000000007', 'TEACHER', 'QA-TEACHER-LIMIT-6', 'QA Teacher Limit 6', 'ACTIVE', false);
 
 insert into public.staff (id, user_id, staff_code, staff_type, full_name, status) values
   ('f0430000-0000-0000-0000-000000000101', 'f0430000-0000-0000-0000-000000000002', 'QA-LIMIT-T-1', 'TEACHER', 'QA Teacher 1', 'ACTIVE'),

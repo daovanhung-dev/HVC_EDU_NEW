@@ -12,11 +12,11 @@ insert into auth.users (
   ('f0460000-0000-0000-0000-000000000003', 'authenticated', 'authenticated', 'qa-session-command-student-a@example.invalid', '', now(), now(), now(), '{}'::jsonb, '{}'::jsonb),
   ('f0460000-0000-0000-0000-000000000004', 'authenticated', 'authenticated', 'qa-session-command-student-b@example.invalid', '', now(), now(), now(), '{}'::jsonb, '{}'::jsonb);
 
-insert into public.profiles (user_id, role, username, display_name, status) values
-  ('f0460000-0000-0000-0000-000000000001', 'TEACHER', 'QA-SESSION-COMMAND-TEACHER', 'QA Session Command Teacher', 'ACTIVE'),
-  ('f0460000-0000-0000-0000-000000000002', 'TEACHER', 'QA-SESSION-COMMAND-UNASSIGNED', 'QA Session Command Unassigned', 'ACTIVE'),
-  ('f0460000-0000-0000-0000-000000000003', 'STUDENT', 'QA-SESSION-COMMAND-STUDENT-A', 'QA Session Command Student A', 'ACTIVE'),
-  ('f0460000-0000-0000-0000-000000000004', 'STUDENT', 'QA-SESSION-COMMAND-STUDENT-B', 'QA Session Command Student B', 'ACTIVE');
+insert into public.profiles (user_id, role, username, display_name, status, force_password_change) values
+  ('f0460000-0000-0000-0000-000000000001', 'TEACHER', 'QA-SESSION-COMMAND-TEACHER', 'QA Session Command Teacher', 'ACTIVE', false),
+  ('f0460000-0000-0000-0000-000000000002', 'TEACHER', 'QA-SESSION-COMMAND-UNASSIGNED', 'QA Session Command Unassigned', 'ACTIVE', false),
+  ('f0460000-0000-0000-0000-000000000003', 'STUDENT', 'QA-SESSION-COMMAND-STUDENT-A', 'QA Session Command Student A', 'ACTIVE', false),
+  ('f0460000-0000-0000-0000-000000000004', 'STUDENT', 'QA-SESSION-COMMAND-STUDENT-B', 'QA Session Command Student B', 'ACTIVE', false);
 
 insert into public.staff (id, user_id, staff_code, staff_type, full_name, status) values
   ('f0460000-0000-0000-0000-000000000101', 'f0460000-0000-0000-0000-000000000001', 'QA-SESSION-COMMAND-T1', 'TEACHER', 'QA Session Command Teacher', 'ACTIVE'),
