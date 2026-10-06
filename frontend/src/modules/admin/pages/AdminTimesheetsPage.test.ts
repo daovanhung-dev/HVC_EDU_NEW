@@ -86,4 +86,16 @@ describe('AdminTimesheetsPage', () => {
     expect(mocks.reviewTimesheet).toHaveBeenCalledWith({ timesheet_id: 'qa-timesheet', approve: false, reason: 'QA: cần bổ sung ghi chú' })
     expect(useToastStore(pinia).items.map((item) => item.message)).toContain('Đã từ chối chấm công.')
   })
+
+  it('shows a retryable error instead of an empty review queue when loading fails', async () => {
+    mocks.getTimesheets.mockRejectedValueOnce(new Error('QA timesheet failure'))
+    const wrapper = track(mount(AdminTimesheetsPage, { global: { plugins: [createPinia()] } }))
+    await flushPromises()
+
+    expect(wrapper.find('.app-state--error').text()).toContain('Không thể tải danh sách chấm công.')
+    expect(wrapper.text()).not.toContain('Chưa có yêu cầu chấm công')
+    await wrapper.find('.app-state--error button').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('QA class')
+  })
 })

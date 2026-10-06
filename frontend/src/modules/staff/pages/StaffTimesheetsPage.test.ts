@@ -87,4 +87,17 @@ describe('StaffTimesheetsPage', () => {
     expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe('QA: ghi chú giữ lại')
     wrapper.unmount()
   })
+
+  it('shows a retryable load error instead of an empty completed-session state', async () => {
+    mocks.getMySessions.mockRejectedValueOnce(new Error('QA session load failure'))
+    const wrapper = mount(StaffTimesheetsPage, { global: { plugins: [createPinia()] } })
+    await flushPromises()
+
+    expect(wrapper.find('.app-state--error').text()).toContain('Không thể tải dữ liệu chấm công.')
+    expect(wrapper.text()).not.toContain('Chưa có buổi học hoàn tất')
+    await wrapper.find('.app-state--error button').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('QA class')
+    wrapper.unmount()
+  })
 })

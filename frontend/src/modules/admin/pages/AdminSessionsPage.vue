@@ -29,6 +29,7 @@ import FormModal from '@/app/components/FormModal.vue'
 import ConfirmModal from '@/app/components/ConfirmModal.vue'
 import AppField from '@/app/components/AppField.vue'
 import AppPageHeader from '@/app/components/AppPageHeader.vue'
+import AppState from '@/app/components/AppState.vue'
 import DetailModal from '@/app/components/DetailModal.vue'
 import YouTubePlayer from '@/app/components/YouTubePlayer.vue'
 import TeacherPicker from '../components/TeacherPicker.vue'
@@ -717,7 +718,7 @@ watch(sessionFormIsBackdated, (isBackdated) => {
       <button class="btn btn-outline-primary" :disabled="loading" @click="load">Làm mới</button>
     </template>
   </AppPageHeader>
-  <div v-if="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
+  <div v-if="errorMessage && sessionsLoaded" class="alert alert-danger" role="alert">{{ errorMessage }} <button class="btn btn-sm btn-outline-danger ms-2" type="button" :disabled="loading" @click="load">Thử lại</button></div>
 
   <div class="card border-0 shadow-sm mb-4">
     <div class="card-body d-flex flex-wrap align-items-end justify-content-between gap-3">
@@ -826,10 +827,12 @@ watch(sessionFormIsBackdated, (isBackdated) => {
     </div>
   </div>
 
-  <div class="row g-4 mb-4">
+  <div class="row g-4 mb-4 admin-session-layout-row">
     <div :class="viewMode === 'list' ? 'col-12' : 'col-12'">
       <div class="card border-0 shadow-sm">
         <div class="card-body">
+          <AppState v-if="!loading && errorMessage && !sessionsLoaded" kind="error" title="Không thể tải lịch buổi học" :message="errorMessage" @retry="load" />
+          <template v-else>
           <Transition name="view-swap" mode="out-in">
           <div v-if="viewMode === 'list'" key="list" class="session-list">
             <div v-if="loading" class="text-center text-secondary py-4" role="status">Đang tải buổi học…</div>
@@ -910,6 +913,7 @@ watch(sessionFormIsBackdated, (isBackdated) => {
             </div>
           </div>
           </Transition>
+          </template>
         </div>
       </div>
     </div>

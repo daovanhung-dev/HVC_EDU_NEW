@@ -72,6 +72,19 @@ describe('StudentsPage dialogs', () => {
     mocks.updateStudent.mockReset().mockResolvedValue(undefined)
   })
 
+  it('shows a retryable load error instead of a misleading empty list', async () => {
+    mocks.getStudents.mockRejectedValueOnce(new Error('QA roster failure'))
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.find('.app-state--error').text()).toContain('QA roster failure')
+    expect(wrapper.text()).not.toContain('Chưa có học sinh phù hợp')
+    await wrapper.find('.app-state--error button').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain(student.full_name)
+    wrapper.unmount()
+  })
+
   it('shows the temporary password only in its result dialog after account creation succeeds', async () => {
     const pinia = createPinia()
     const wrapper = track(mount(StudentsPage, { global: { plugins: [pinia], stubs: { RouterLink: { template: '<a><slot /></a>' } } } }))

@@ -83,9 +83,10 @@ onMounted(load)
   <AppPageHeader title="Lớp học" eyebrow="Tổ chức giảng dạy" description="Quản lý lớp, môn học, khối và chính sách sĩ số.">
     <template #actions><button class="btn btn-primary" type="button" @click="openCreate">Thêm lớp</button></template>
   </AppPageHeader>
-  <div v-if="errorMessage" class="alert alert-danger" role="alert">{{ errorMessage }} <button class="btn btn-sm btn-outline-danger ms-2" type="button" @click="load">Thử tải lại</button></div>
+  <div v-if="errorMessage && rows.length" class="alert alert-danger" role="alert">{{ errorMessage }} <button class="btn btn-sm btn-outline-danger ms-2" type="button" @click="load">Thử tải lại</button></div>
   <section class="card"><div class="card-body">
     <AppState v-if="loading" kind="loading" title="Đang tải danh sách lớp" />
+    <AppState v-else-if="errorMessage && !rows.length" kind="error" title="Không thể tải danh sách lớp" :message="errorMessage" @retry="load" />
     <AppState v-else-if="!rows.length" kind="empty" title="Chưa có lớp học" message="Tạo lớp để bắt đầu quản lý thành viên và lịch học." />
     <div v-else class="table-responsive"><table class="table align-middle"><thead><tr><th>Mã</th><th>Tên lớp</th><th>Môn</th><th>Khối</th><th>Sĩ số</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>
       <tr v-for="row in rows" :key="row.id"><td><code>{{ row.code }}</code></td><td class="fw-semibold">{{ row.name }}</td><td>{{ row.subjects?.name || '—' }}</td><td>{{ row.grades?.name || '—' }}</td><td>{{ row.capacity_policy === 'UNLIMITED' ? 'Không giới hạn' : row.max_students }}</td><td><span class="badge" :class="row.status === 'ACTIVE' ? 'text-bg-success' : 'text-bg-secondary'">{{ row.status === 'ACTIVE' ? 'Đang hoạt động' : row.status }}</span></td><td><div class="d-flex flex-wrap gap-1"><RouterLink class="btn btn-sm btn-outline-primary" :to="`/admin/classes/${row.id}`">Chi tiết</RouterLink><button class="btn btn-sm btn-outline-secondary" type="button" @click="beginEdit(row)">Sửa</button><button v-if="row.status !== 'ARCHIVED'" class="btn btn-sm btn-outline-danger" type="button" @click="askArchive(row)">Lưu trữ</button></div></td></tr>

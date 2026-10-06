@@ -77,8 +77,9 @@ onMounted(load)
       <template #actions><button class="btn btn-outline-primary" type="button" :disabled="loading" @click="load">{{ loading ? 'Đang làm mới…' : 'Làm mới' }}</button></template>
     </AppPageHeader>
     <div class="teacher-workspace__intro"><span class="teacher-workspace__eyebrow">Theo dõi chấm công</span><p>Yêu cầu được gửi theo từng buổi dạy; yêu cầu bị từ chối có thể được cập nhật và gửi lại.</p></div>
-    <div v-if="errorMessage" class="alert alert-danger teacher-alert" role="alert">{{ errorMessage }}</div>
+    <div v-if="errorMessage && completedSessions.length" class="alert alert-danger teacher-alert" role="alert">{{ errorMessage }} <button class="btn btn-sm btn-outline-danger ms-2" type="button" :disabled="loading" @click="load">Thử lại</button></div>
     <AppState v-if="loading" kind="loading" title="Đang tải buổi học" />
+    <AppState v-else-if="errorMessage && !completedSessions.length" kind="error" title="Không thể tải dữ liệu chấm công" :message="errorMessage" @retry="load" />
     <div v-else-if="!completedSessions.length" class="teacher-empty-card"><AppState kind="empty" title="Chưa có buổi học hoàn tất" message="Buổi học sẽ xuất hiện tại đây sau khi được hoàn thành." /></div>
     <template v-else>
       <div class="teacher-timesheet-summary" aria-label="Tổng quan yêu cầu chấm công">

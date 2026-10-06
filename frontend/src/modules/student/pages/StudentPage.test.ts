@@ -68,4 +68,19 @@ describe('StudentPage', () => {
     expect(wrapper.text()).not.toContain('Không có buổi học trong ngày này.')
     wrapper.unmount()
   })
+
+  it('shows a retryable error instead of an empty results table when results fail to load', async () => {
+    mocks.moduleName = 'attendance'
+    mocks.getMyAttendance.mockRejectedValueOnce(new Error('QA attendance failure'))
+    const wrapper = mount(StudentPage)
+    await flushPromises()
+
+    expect(wrapper.find('.app-state--error').text()).toContain('QA attendance failure')
+    expect(wrapper.text()).not.toContain('Chưa có kết quả học tập.')
+    await wrapper.find('.app-state--error button').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.app-state--error').exists()).toBe(false)
+    expect(wrapper.find('.table').exists()).toBe(true)
+    wrapper.unmount()
+  })
 })

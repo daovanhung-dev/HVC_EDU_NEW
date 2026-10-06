@@ -6,6 +6,7 @@ import type { TimesheetRow } from '@/shared/types/domain'
 import { formatDateTime } from '@/shared/utils/format'
 import { userErrorMessage } from '@/shared/utils/errors'
 import { useToastStore } from '@/stores/toast.store'
+import AppPageHeader from '@/app/components/AppPageHeader.vue'
 import FormModal from '@/app/components/FormModal.vue'
 import ConfirmModal from '@/app/components/ConfirmModal.vue'
 import AppField from '@/app/components/AppField.vue'
@@ -63,13 +64,13 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
-    <div><div class="small text-secondary">Nhân sự</div><h1 class="h3 mb-0">Duyệt công</h1></div>
-    <button class="btn btn-outline-primary" :disabled="loading" @click="load">Làm mới</button>
-  </div>
-  <div v-if="errorMessage" class="alert alert-danger" role="alert">{{ errorMessage }}</div>
+  <AppPageHeader title="Duyệt công" eyebrow="Nhân sự" description="Kiểm tra yêu cầu chấm công theo buổi và phản hồi cho giáo viên.">
+    <template #actions><button class="btn btn-outline-primary" :disabled="loading" @click="load">{{ loading ? 'Đang làm mới…' : 'Làm mới' }}</button></template>
+  </AppPageHeader>
+  <div v-if="errorMessage && rows.length" class="alert alert-danger" role="alert">{{ errorMessage }} <button class="btn btn-sm btn-outline-danger ms-2" type="button" @click="load">Thử lại</button></div>
   <div class="card border-0 shadow-sm"><div class="card-body">
     <AppState v-if="loading" kind="loading" title="Đang tải chấm công" />
+    <AppState v-else-if="errorMessage && !rows.length" kind="error" title="Không thể tải danh sách chấm công" :message="errorMessage" @retry="load" />
     <AppState v-else-if="!rows.length" kind="empty" title="Chưa có yêu cầu chấm công" message="Các yêu cầu mới sẽ xuất hiện tại đây." />
     <div v-else class="table-responsive">
       <table class="table align-middle mb-0">

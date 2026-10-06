@@ -251,7 +251,7 @@ describe('AdminSessionsPage calendar', () => {
     })
   })
 
-  it('shows the empty state and reports load errors without claiming there are no sessions', async () => {
+  it('shows separate empty and error states with a retry action', async () => {
     mockState.getMySessions.mockResolvedValue([])
     const emptyPage = mountPage()
     await flushPromises()
@@ -265,7 +265,9 @@ describe('AdminSessionsPage calendar', () => {
     expect(failedPage.text()).toContain('Không thể kết nối.')
     expect(failedPage.text()).not.toContain('Chưa có buổi học.')
     await clickButtonWithText(failedPage, 'Danh sách')
-    expect(failedPage.find('.session-list').text()).not.toContain('Chưa có buổi học.')
+    expect(failedPage.find('.app-state--error').text()).toContain('Không thể kết nối.')
+    expect(failedPage.find('.session-list').exists()).toBe(false)
+    expect(failedPage.find('.app-state--error button').text()).toBe('Thử lại')
   })
 
   it('keeps class choices available when the sessions request fails', async () => {
