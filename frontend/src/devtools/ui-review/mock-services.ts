@@ -129,6 +129,19 @@ export async function updateClassMembership(id: string, input: any) { const row 
 export async function createClassSchedule(input: any) { const row = { ...input, id: `qa-schedule-${Date.now()}`, status: 'PENDING_REVIEW', reviewed_at: null, class_schedule_staff: [] }; schedules.push(row); return row }
 export async function updateClassSchedule(id: string, input: any) { const row = schedules.find((item) => item.id === id); if (row) Object.assign(row, input); return {} }
 export async function setClassScheduleStatus(id: string, status: string) { const row = schedules.find((item) => item.id === id); if (row) row.status = status; return {} }
+export async function previewAllSchedulesReset() {
+  return query({
+    schedule_count: schedules.filter((item) => item.status !== 'ARCHIVED').length,
+    session_count: sessions.filter((item) => item.status === 'SCHEDULED').length,
+  })
+}
+export async function resetAllSchedules() {
+  const archived_schedules = schedules.filter((item) => item.status !== 'ARCHIVED').length
+  const cancelled_sessions = sessions.filter((item) => item.status === 'SCHEDULED').length
+  schedules.forEach((item) => { item.status = 'ARCHIVED' })
+  sessions.forEach((item) => { if (item.status === 'SCHEDULED') item.status = 'CANCELLED' })
+  return { archived_schedules, cancelled_sessions }
+}
 export async function addTeacherToClassSchedule(id: string, staffId: string) { const row = schedules.find((item) => item.id === id); const staff = teachers.find((item) => item.id === staffId); if (row && staff) row.class_schedule_staff.push({ staff_id: staffId, staff }); return {} }
 export async function removeTeacherFromClassSchedule(id: string, staffId: string) { const row = schedules.find((item) => item.id === id); if (row) row.class_schedule_staff = row.class_schedule_staff.filter((item: any) => item.staff_id !== staffId); return {} }
 export async function createManualSession(input: any) { const row = { id: `qa-session-${Date.now()}`, class_id: input.class_id, scheduled_start_at: input.start, scheduled_end_at: input.end, room: input.room, status: 'SCHEDULED', session_note: null, classes: classes.find((item) => item.id === input.class_id), session_staff: input.staff_ids.map((id: string) => ({ staff_id: id, assignment_role: 'TEACHER', staff: teachers.find((item) => item.id === id) })) }; sessions.unshift(row); return { session_id: row.id } }

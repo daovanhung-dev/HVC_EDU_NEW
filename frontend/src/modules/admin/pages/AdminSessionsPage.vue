@@ -7,6 +7,8 @@ import {
   createClassSchedule,
   createManualSession,
   removeTeacherFromClassSchedule,
+  previewAllSchedulesReset,
+  resetAllSchedules,
   setClassScheduleStatus,
   updateClassSchedule,
   updateSessionOccurrence,
@@ -81,8 +83,10 @@ const scheduleFormBusy = ref(false)
 const scheduleFormDirty = ref(false)
 const confirmOpen = ref(false)
 const confirmBusy = ref(false)
+const resetPreviewBusy = ref(false)
+const showHistory = ref(false)
 const confirmDetails = ref({ title: '', message: '', itemName: '', warning: '', confirmLabel: 'Xác nhận', destructive: false })
-const confirmActionType = ref<'copy-week' | 'archive-schedule' | 'cancel-session' | ''>('')
+const confirmActionType = ref<'copy-week' | 'archive-schedule' | 'cancel-session' | 'reset-all-schedules' | ''>('')
 const pendingSchedule = ref<ClassScheduleRow | null>(null)
 const editingScheduleId = ref('')
 const teacherSelections = ref<Record<string, string>>({})
@@ -132,9 +136,14 @@ function fromLocalInput(value: string) {
   return new Date(`${value}:00+07:00`).toISOString()
 }
 
-const visibleSessions = computed(() => selectedClassId.value
-  ? sessions.value.filter((session) => session.class_id === selectedClassId.value)
-  : sessions.value)
+const visibleSessions = computed(() => {
+  const classSessions = selectedClassId.value
+    ? sessions.value.filter((session) => session.class_id === selectedClassId.value)
+    : sessions.value
+  if (showHistory.value) return classSessions
+  return classSessions.filter((session) => session.status !== 'CANCELLED'
+    && getBusinessDateKey(session.scheduled_start_at) >= todayDateKey.value)
+})
 const visibleSessionsByDate = computed(() => groupSessionsByBusinessDate(visibleSessions.value))
 const monthDateKeys = computed(() => getMonthGridDateKeys(calendarAnchorDate.value))
 const weekDateKeys = computed(() => getWeekDateKeys(calendarAnchorDate.value))
@@ -192,6 +201,7 @@ function goToToday() {
 
 async function load() {
   loading.value = true
+  refreshTodayDateKey()
   errorMessage.value = ''
   try {
     const [sessionResult, classResult, staffResult] = await Promise.allSettled([
@@ -358,6 +368,15 @@ function changeClassFilter() {
   selectedTeacherIds.value = []
   void loadSchedules()
 }
+
+watch(visibleSessions, (rows) => {
+  if (selected.value && !rows.some((session) => session.id === selected.value?.id)) {
+    selected.value = null
+    selectedDetailOpen.value = false
+    students.value = []
+    selectedTeacherIds.value = []
+  }
+})
 
 async function selectSession(session: SessionRow) {
   selected.value = session
@@ -632,6 +651,54 @@ async function archiveSchedule(row: ClassScheduleRow) {
   confirmOpen.value = true
 }
 
+async function previewAndConfirmAllSchedulesReset() {
+  if (resetPreviewBusy.value || loading.value) return
+  resetPreviewBusy.value = true
+  errorMessage.value = ''
+  try {
+    const preview = await previewAllSchedulesReset()
+    const scheduleCount = Math.max(0, Number(preview.schedule_count) || 0)
+    const sessionCount = Math.max(0, Number(preview.session_count) || 0)
+    if (scheduleCount === 0 && sessionCount === 0) {
+      toast.info('Không có khung lịch lặp hoặc buổi SCHEDULED nào cần đặt lại.')
+      return
+    }
+    confirmActionType.value = 'reset-all-schedules'
+    confirmDetails.value = {
+      title: 'Đặt lại toàn bộ lịch?',
+      message: 'Thao tác áp dụng cho toàn trung tâm, không phụ thuộc lớp đang lọc. Các buổi SCHEDULED, kể cả buổi đã qua giờ và buổi tạo riêng, sẽ được đánh dấu đã hủy.',
+      itemName: `${scheduleCount} khung lịch lặp · ${sessionCount} buổi học`,
+      warning: 'Lịch sử và điểm danh được giữ nguyên. Buổi đang diễn ra hoặc đã hoàn tất không bị thay đổi. Admin có thể tạo lại khung lịch bằng trình chỉnh sửa lịch.',
+      confirmLabel: 'Đặt lại tất cả lịch',
+      destructive: true,
+    }
+    confirmOpen.value = true
+  } catch (error) {
+    errorMessage.value = userErrorMessage(error, 'Không thể xem trước thao tác đặt lại lịch.')
+    toast.error(errorMessage.value)
+  } finally {
+    resetPreviewBusy.value = false
+  }
+}
+
+async function resetSchedulesNow() {
+  try {
+    const result = await resetAllSchedules()
+    confirmBusy.value = false
+    confirmOpen.value = false
+    selected.value = null
+    selectedDetailOpen.value = false
+    students.value = []
+    selectedTeacherIds.value = []
+    showHistory.value = false
+    toast.success(`Đã lưu trữ ${result.archived_schedules || 0} khung lịch lặp và hủy ${result.cancelled_sessions || 0} buổi học. Lịch sử vẫn được giữ.`)
+    await load()
+  } catch (error) {
+    errorMessage.value = userErrorMessage(error, 'Không thể đặt lại lịch toàn trung tâm.')
+    toast.error(errorMessage.value)
+  }
+}
+
 async function archiveScheduleNow() {
   if (!pendingSchedule.value) return
   try {
@@ -690,6 +757,7 @@ async function runConfirmation() {
     if (confirmActionType.value === 'copy-week') await applyWeekNow()
     else if (confirmActionType.value === 'archive-schedule') await archiveScheduleNow()
     else if (confirmActionType.value === 'cancel-session') await cancelSessionNow()
+    else if (confirmActionType.value === 'reset-all-schedules') await resetSchedulesNow()
   } finally { confirmBusy.value = false }
 }
 
@@ -714,6 +782,9 @@ watch(sessionFormIsBackdated, (isBackdated) => {
   <AppPageHeader title="Buổi học" eyebrow="Lịch giảng dạy" description="Xem lịch tháng, tuần hoặc danh sách; quản lý buổi riêng và khung lịch lặp.">
     <template #actions>
       <button class="btn btn-primary" @click="scheduleEditorOpen = !scheduleEditorOpen">Chỉnh sửa lịch</button>
+      <button class="btn btn-outline-danger" :disabled="loading || resetPreviewBusy" :aria-busy="resetPreviewBusy || undefined" @click="previewAndConfirmAllSchedulesReset">
+        <span v-if="resetPreviewBusy" class="app-button__spinner" aria-hidden="true"></span>{{ resetPreviewBusy ? 'Đang kiểm tra…' : 'Đặt lại tất cả lịch' }}
+      </button>
       <button class="btn btn-outline-primary" @click="openSessionForm()">Thêm buổi</button>
       <button class="btn btn-outline-primary" :disabled="loading" @click="load">Làm mới</button>
     </template>
@@ -812,10 +883,15 @@ watch(sessionFormIsBackdated, (isBackdated) => {
   <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
       <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
-        <div class="btn-group" role="group" aria-label="Chế độ hiển thị buổi học">
-          <button class="btn" :class="viewMode === 'month' ? 'btn-primary' : 'btn-outline-primary'" :aria-pressed="viewMode === 'month'" @click="viewMode = 'month'">Tháng</button>
-          <button class="btn" :class="viewMode === 'week' ? 'btn-primary' : 'btn-outline-primary'" :aria-pressed="viewMode === 'week'" @click="viewMode = 'week'">Tuần</button>
-          <button class="btn" :class="viewMode === 'list' ? 'btn-primary' : 'btn-outline-primary'" :aria-pressed="viewMode === 'list'" @click="viewMode = 'list'">Danh sách</button>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+          <div class="btn-group" role="group" aria-label="Chế độ hiển thị buổi học">
+            <button class="btn" :class="viewMode === 'month' ? 'btn-primary' : 'btn-outline-primary'" :aria-pressed="viewMode === 'month'" @click="viewMode = 'month'">Tháng</button>
+            <button class="btn" :class="viewMode === 'week' ? 'btn-primary' : 'btn-outline-primary'" :aria-pressed="viewMode === 'week'" @click="viewMode = 'week'">Tuần</button>
+            <button class="btn" :class="viewMode === 'list' ? 'btn-primary' : 'btn-outline-primary'" :aria-pressed="viewMode === 'list'" @click="viewMode = 'list'">Danh sách</button>
+          </div>
+          <button class="btn btn-sm" :class="showHistory ? 'btn-primary' : 'btn-outline-secondary'" :aria-pressed="showHistory" @click="showHistory = !showHistory">
+            {{ showHistory ? 'Ẩn lịch sử' : 'Hiện lịch sử' }}
+          </button>
         </div>
         <div v-if="viewMode !== 'list'" class="d-flex flex-wrap align-items-center gap-2">
           <button class="btn btn-outline-secondary btn-sm" aria-label="Kỳ trước" @click="changePeriod(-1)">‹ Trước</button>

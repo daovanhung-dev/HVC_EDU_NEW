@@ -224,6 +224,18 @@ export async function generateUpcomingSessions(): Promise<{ room_conflicts?: num
   return data as { room_conflicts?: number; missing_room_conflicts?: number; [key: string]: unknown }
 }
 
+export async function previewAllSchedulesReset(): Promise<{ schedule_count: number; session_count: number }> {
+  const { data, error } = await supabase.rpc('admin_preview_all_schedules_reset')
+  if (error) throw error
+  return data as { schedule_count: number; session_count: number }
+}
+
+export async function resetAllSchedules(): Promise<{ archived_schedules: number; cancelled_sessions: number }> {
+  const { data, error } = await supabase.rpc('admin_reset_all_schedules')
+  if (error) throw error
+  return data as { archived_schedules: number; cancelled_sessions: number }
+}
+
 export async function updateSessionOccurrence(input: { session_id: string; start?: string; end?: string; cancel?: boolean; room?: string | null }) {
   const { data, error } = await supabase.rpc('admin_update_session_occurrence', {
     p_session_id: input.session_id,

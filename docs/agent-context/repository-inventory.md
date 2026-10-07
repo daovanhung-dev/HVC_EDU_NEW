@@ -248,13 +248,15 @@
 | supabase/migrations/0047_lesson_videos_and_ai_tutor.sql | Supabase / migrations | SQL |
 | supabase/migrations/0048_force_student_password_change.sql | Supabase / migrations | SQL |
 | supabase/migrations/0049_force_teacher_password_change.sql | Supabase / migrations | SQL |
+| supabase/migrations/0050_reset_all_schedules.sql | Supabase / migrations | SQL |
 | supabase/seed.sql | Supabase / cấu hình và seed | SQL |
 | supabase/tests/admin_monthly_session_planning.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/backdated_session_creation.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/class_teacher_limit.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/continuous_learning_rls.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/parallel_session_rooms.test.sql | Supabase / kiểm thử SQL | SQL |
+| supabase/tests/schedule_reset.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/session_learning_commands.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/timesheet_workflow.test.sql | Supabase / kiểm thử SQL | SQL |
 
-Tổng: 250 đường dẫn có trong inventory.
+Tổng: 252 đường dẫn có trong inventory.

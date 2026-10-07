@@ -22,6 +22,11 @@ const mockState = vi.hoisted(() => ({
   removeTeacherFromClassSchedule: vi.fn(),
   setClassScheduleStatus: vi.fn(),
   updateClassSchedule: vi.fn(),
+  previewAllSchedulesReset: vi.fn(),
+  resetAllSchedules: vi.fn(),
+  toastSuccess: vi.fn(),
+  toastInfo: vi.fn(),
+  toastError: vi.fn(),
 }))
 
 vi.mock('@/services/data-queries', () => ({
@@ -43,6 +48,8 @@ vi.mock('@/services/commands', () => ({
   removeTeacherFromClassSchedule: mockState.removeTeacherFromClassSchedule,
   setClassScheduleStatus: mockState.setClassScheduleStatus,
   updateClassSchedule: mockState.updateClassSchedule,
+  previewAllSchedulesReset: mockState.previewAllSchedulesReset,
+  resetAllSchedules: mockState.resetAllSchedules,
 }))
 
 vi.mock('bootstrap', () => ({
@@ -55,6 +62,9 @@ vi.mock('bootstrap', () => ({
 }))
 
 vi.mock('vue-router', () => ({ useRoute: () => mockState.route }))
+vi.mock('@/stores/toast.store', () => ({
+  useToastStore: () => ({ success: mockState.toastSuccess, info: mockState.toastInfo, error: mockState.toastError }),
+}))
 
 function makeSession(
   id = 'qa-session-1',
@@ -67,6 +77,8 @@ function makeSession(
   return {
     id,
     class_id: 'qa-class-1',
+    recurrence_schedule_id: null,
+    recurrence_occurrence_date: null,
     scheduled_start_at: `${date}T${start}:00+07:00`,
     scheduled_end_at: `${date}T${end}:00+07:00`,
     status: 'SCHEDULED',
@@ -152,6 +164,11 @@ describe('AdminSessionsPage calendar', () => {
     mockState.removeTeacherFromClassSchedule.mockReset().mockResolvedValue(undefined)
     mockState.setClassScheduleStatus.mockReset().mockResolvedValue({})
     mockState.updateClassSchedule.mockReset().mockResolvedValue({})
+    mockState.previewAllSchedulesReset.mockReset().mockResolvedValue({ schedule_count: 2, session_count: 4 })
+    mockState.resetAllSchedules.mockReset().mockResolvedValue({ archived_schedules: 2, cancelled_sessions: 4 })
+    mockState.toastSuccess.mockReset()
+    mockState.toastInfo.mockReset()
+    mockState.toastError.mockReset()
   })
 
   it('defaults to month view and supports month, week, and list modes', async () => {
@@ -183,6 +200,57 @@ describe('AdminSessionsPage calendar', () => {
     expect(wrapper.find('thead').text()).toContain('Thời gian')
     expect(wrapper.find('.calendar-grid').exists()).toBe(false)
     expect(previousMonth).toMatch(/^\d{4}-\d{2}-01$/)
+  })
+
+  it('hides past and cancelled sessions by default and restores them in every view with history enabled', async () => {
+    const today = getBusinessDateKey(new Date())
+    const past = makeSession('qa-session-past', 'Buổi cũ QA', '10:00', '12:00', addCalendarDays(today, -1))
+    const cancelled = { ...makeSession('qa-session-cancelled', 'Buổi đã hủy QA', '10:00', '12:00', addCalendarDays(today, 1)), status: 'CANCELLED' as const }
+    const current = makeSession('qa-session-current', 'Buổi hiện tại QA')
+    mockState.getMySessions.mockResolvedValue([past, cancelled, current])
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.findAll('.calendar-event-name').map((event) => event.text())).toEqual(['Buổi hiện tại QA'])
+    await clickButtonWithText(wrapper, 'Hiện lịch sử')
+    expect(wrapper.findAll('.calendar-event-name').map((event) => event.text())).toHaveLength(3)
+
+    await clickButtonWithText(wrapper, 'Tuần')
+    expect(wrapper.findAll('.session-agenda__item')).toHaveLength(3)
+    await clickButtonWithText(wrapper, 'Danh sách')
+    expect(wrapper.findAll('tbody tr')).toHaveLength(3)
+    expect(wrapper.find('.session-list').text()).toContain('Buổi đã hủy QA')
+
+    await clickButtonWithText(wrapper, 'Ẩn lịch sử')
+    expect(wrapper.findAll('tbody tr')).toHaveLength(1)
+    expect(wrapper.find('.session-list').text()).not.toContain('Buổi cũ QA')
+    expect(wrapper.find('.session-list').text()).not.toContain('Buổi đã hủy QA')
+  })
+
+  it('previews a global reset, supports cancel, and reports the actual counts after confirmation', async () => {
+    mockState.route.query.class_id = 'qa-class-1'
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await clickButtonWithText(wrapper, 'Đặt lại tất cả lịch')
+    expect(mockState.previewAllSchedulesReset).toHaveBeenCalledOnce()
+    const confirmation = findAllPageOrBody(wrapper, '.app-modal').find((modal) => modal.text().includes('không phụ thuộc lớp đang lọc'))
+    if (!confirmation) throw new Error('Global reset confirmation dialog not found')
+    expect(confirmation.text()).toContain('2 khung lịch lặp · 4 buổi học')
+    expect(confirmation.text()).toContain('Buổi đang diễn ra hoặc đã hoàn tất không bị thay đổi')
+    await confirmation.get('.btn-outline-secondary').trigger('click')
+    await flushPromises()
+    expect(mockState.resetAllSchedules).not.toHaveBeenCalled()
+
+    await clickButtonWithText(wrapper, 'Đặt lại tất cả lịch')
+    const secondConfirmation = findAllPageOrBody(wrapper, '.app-modal').find((modal) => modal.text().includes('không phụ thuộc lớp đang lọc'))
+    if (!secondConfirmation) throw new Error('Global reset confirmation dialog not found after reopening')
+    await secondConfirmation.get('.btn-danger').trigger('click')
+    await flushPromises()
+
+    expect(mockState.resetAllSchedules).toHaveBeenCalledOnce()
+    expect(mockState.getMySessions).toHaveBeenCalledTimes(2)
+    expect(mockState.toastSuccess).toHaveBeenCalledWith('Đã lưu trữ 2 khung lịch lặp và hủy 4 buổi học. Lịch sử vẫn được giữ.')
   })
 
   it('opens the selected session details and displays the class name', async () => {
