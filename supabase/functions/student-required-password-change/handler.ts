@@ -1,7 +1,7 @@
 import { handleOptions } from "../_shared/cors.ts";
 import { fail, fromError, ok } from "../_shared/response.ts";
 
-export interface ForcedStudentPasswordChangeCaller {
+export interface ForcedPasswordChangeCaller {
   user: { id: string };
   profile: {
     role: string;
@@ -10,14 +10,14 @@ export interface ForcedStudentPasswordChangeCaller {
   };
 }
 
-export interface ForcedStudentPasswordChangeDependencies {
-  getCaller: (request: Request) => Promise<ForcedStudentPasswordChangeCaller>;
+export interface ForcedPasswordChangeDependencies {
+  getCaller: (request: Request) => Promise<ForcedPasswordChangeCaller>;
   updatePassword: (userId: string, password: string) => Promise<void>;
   clearForcePasswordChange: (userId: string) => Promise<void>;
 }
 
-export function createForcedStudentPasswordChangeHandler(
-  dependencies: ForcedStudentPasswordChangeDependencies,
+export function createForcedPasswordChangeHandler(
+  dependencies: ForcedPasswordChangeDependencies,
 ) {
   return async (request: Request): Promise<Response> => {
     const options = handleOptions(request);
@@ -29,13 +29,13 @@ export function createForcedStudentPasswordChangeHandler(
     try {
       const caller = await dependencies.getCaller(request);
       if (
-        caller.profile.role !== "STUDENT" ||
+        !["STUDENT", "TEACHER"].includes(caller.profile.role) ||
         caller.profile.status !== "ACTIVE" ||
         !caller.profile.force_password_change
       ) {
         return fail(
           "FORBIDDEN",
-          "Chức năng này chỉ dành cho học sinh đang được yêu cầu đổi mật khẩu.",
+          "Chức năng này chỉ dành cho học sinh hoặc giáo viên đang được yêu cầu đổi mật khẩu.",
           403,
         );
       }

@@ -1,8 +1,8 @@
 import { adminClient, requireCaller } from "../_shared/auth.ts";
-import { createForcedStudentPasswordChangeHandler } from "./handler.ts";
+import { createForcedPasswordChangeHandler } from "./handler.ts";
 
-const handler = createForcedStudentPasswordChangeHandler({
-  getCaller: (request) => requireCaller(request, { allowForcedStudentPasswordChange: true }),
+const handler = createForcedPasswordChangeHandler({
+  getCaller: (request) => requireCaller(request, { allowForcedPasswordChange: true }),
   updatePassword: async (userId, password) => {
     const { error } = await adminClient().auth.admin.updateUserById(userId, {
       password,
@@ -14,7 +14,8 @@ const handler = createForcedStudentPasswordChangeHandler({
       .from("profiles")
       .update({ force_password_change: false })
       .eq("user_id", userId)
-      .eq("role", "STUDENT")
+      .eq("status", "ACTIVE")
+      .in("role", ["STUDENT", "TEACHER"])
       .eq("force_password_change", true)
       .select("id")
       .maybeSingle();

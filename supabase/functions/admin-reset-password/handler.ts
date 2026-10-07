@@ -1,7 +1,6 @@
 import { handleOptions } from "../_shared/cors.ts";
+import { ADMIN_RESET_PASSWORD } from "../_shared/password-reset.ts";
 import { fail, fromError, ok } from "../_shared/response.ts";
-
-const RESET_PASSWORD = "12345678";
 
 export interface ResetPasswordCaller {
   user: { id: string };
@@ -39,14 +38,14 @@ export function createAdminResetPasswordHandler(
         return fail("FORBIDDEN", "Bạn không có quyền reset mật khẩu.", 403);
       }
 
-      await dependencies.updatePassword(body.user_id, RESET_PASSWORD);
+      await dependencies.updatePassword(body.user_id, ADMIN_RESET_PASSWORD);
       const profile = await dependencies.setForcePasswordChange(body.user_id);
       await dependencies.writeAudit({
         actorUserId: caller.user.id,
         profileId: profile.id,
       });
 
-      return ok({ profile, temporary_password: RESET_PASSWORD });
+      return ok({ profile, temporary_password: ADMIN_RESET_PASSWORD });
     } catch (error) {
       return fromError(error);
     }

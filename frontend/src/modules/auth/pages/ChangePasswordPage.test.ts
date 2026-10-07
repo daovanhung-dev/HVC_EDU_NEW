@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ChangePasswordPage from './ChangePasswordPage.vue'
 
 const mocks = vi.hoisted(() => ({
-  auth: { isStudent: true, forcePasswordChange: true, loading: false, updatePassword: vi.fn() },
+  auth: { isStudent: true, isTeacher: false, forcePasswordChange: true, loading: false, updatePassword: vi.fn() },
   push: vi.fn(),
   report: vi.fn(),
 }))
@@ -15,13 +15,23 @@ vi.mock('vue-router', () => ({ useRouter: () => ({ push: mocks.push }) }))
 describe('ChangePasswordPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.auth.isStudent = true
+    mocks.auth.isTeacher = false
+    mocks.auth.forcePasswordChange = true
     mocks.auth.updatePassword.mockResolvedValue(undefined)
     mocks.report.mockImplementation((error: unknown) => ({ message: error instanceof Error ? error.message : 'QA password failure' }))
   })
 
   it('explains the mandatory change for a student using the reset password', () => {
     const wrapper = mount(ChangePasswordPage)
-    expect(wrapper.text()).toContain('Hãy đổi mật khẩu tạm để tiếp tục sử dụng cổng học tập.')
+    expect(wrapper.text()).toContain('Hãy đổi mật khẩu tạm để tiếp tục sử dụng ứng dụng.')
+  })
+
+  it('explains the mandatory change for a teacher using the reset password', () => {
+    mocks.auth.isStudent = false
+    mocks.auth.isTeacher = true
+    const wrapper = mount(ChangePasswordPage)
+    expect(wrapper.text()).toContain('Hãy đổi mật khẩu tạm để tiếp tục sử dụng ứng dụng.')
   })
 
   it('requires a matching password of at least eight characters before submission', async () => {

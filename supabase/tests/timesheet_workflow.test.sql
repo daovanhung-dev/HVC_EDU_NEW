@@ -1,6 +1,6 @@
 begin;
 
-select plan(23);
+select plan(26);
 
 -- Fixtures are synthetic and the entire test rolls back.
 insert into auth.users (
@@ -61,6 +61,19 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub', 'f0420000-0000-0000-0000-000000000003', true);
 select is((select count(*)::integer from public.timesheets), 1, 'teacher can read their own timesheet');
 select throws_ok($$select public.submit_timesheet('f0420000-0000-0000-0000-000000000401', 'f0420000-0000-0000-0000-000000000102', 'f0420000-0000-0000-0000-000000000004', null)$$, '42501', 'permission denied for function submit_timesheet', 'authenticated teacher cannot invoke submit RPC directly');
+
+reset role;
+update public.profiles set force_password_change = true where user_id = 'f0420000-0000-0000-0000-000000000003';
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'f0420000-0000-0000-0000-000000000003', true);
+select is((select count(*)::integer from public.timesheets), 0, 'forced-change TEACHER cannot read timesheets');
+select throws_ok($$select public.clear_force_password_change()$$, 'P0001', 'PASSWORD_CHANGE_REQUIRED', 'forced-change TEACHER cannot clear the flag directly');
+
+reset role;
+update public.profiles set force_password_change = false where user_id = 'f0420000-0000-0000-0000-000000000003';
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'f0420000-0000-0000-0000-000000000003', true);
+select is((select count(*)::integer from public.timesheets), 1, 'TEACHER regains timesheet access after password change clears the flag');
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'f0420000-0000-0000-0000-000000000004', true);

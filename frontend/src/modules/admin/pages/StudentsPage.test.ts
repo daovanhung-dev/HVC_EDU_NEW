@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   getStudents: vi.fn(),
   adminCreateUser: vi.fn(),
   adminResetPassword: vi.fn(),
+  adminResetPasswordBulk: vi.fn(),
   archiveStudent: vi.fn(),
   setAccountStatus: vi.fn(),
   updateStudent: vi.fn(),
@@ -25,12 +26,15 @@ vi.mock('@/services/data-queries', () => ({ getStudents: mocks.getStudents }))
 vi.mock('@/services/commands', () => ({
   adminCreateUser: mocks.adminCreateUser,
   adminResetPassword: mocks.adminResetPassword,
+  adminResetPasswordBulk: mocks.adminResetPasswordBulk,
   archiveStudent: mocks.archiveStudent,
   setAccountStatus: mocks.setAccountStatus,
   updateStudent: mocks.updateStudent,
 }))
 
 const student = { id: 'qa-student-1', user_id: 'qa-user-1', student_code: 'QA-S-1', full_name: 'Học sinh QA', phone: null, parent_name: null, parent_phone: null, status: 'ACTIVE', created_at: '2026-09-30T08:00:00Z' }
+const secondActiveStudent = { id: 'qa-student-3', user_id: 'qa-user-3', student_code: 'QA-S-3', full_name: 'Học sinh QA hai', phone: null, parent_name: null, parent_phone: null, status: 'ACTIVE', created_at: '2026-09-30T08:00:00Z' }
+const inactiveStudent = { id: 'qa-student-2', user_id: 'qa-user-2', student_code: 'QA-S-2', full_name: 'Học sinh QA nghỉ', phone: null, parent_name: null, parent_phone: null, status: 'INACTIVE', created_at: '2026-09-30T08:00:00Z' }
 
 const mountedWrappers: Array<{ unmount: () => void }> = []
 
@@ -67,6 +71,7 @@ describe('StudentsPage dialogs', () => {
     mocks.getStudents.mockReset().mockResolvedValue([student])
     mocks.adminCreateUser.mockReset().mockResolvedValue({ temporary_password: 'QA-temp-pass-42' })
     mocks.adminResetPassword.mockReset().mockResolvedValue({ temporary_password: '12345678' })
+    mocks.adminResetPasswordBulk.mockReset().mockResolvedValue({ temporary_password: null, results: [] })
     mocks.archiveStudent.mockReset().mockResolvedValue(undefined)
     mocks.setAccountStatus.mockReset().mockResolvedValue(undefined)
     mocks.updateStudent.mockReset().mockResolvedValue(undefined)
@@ -100,6 +105,68 @@ describe('StudentsPage dialogs', () => {
     expect(findAllPageOrBody(wrapper, '.app-modal[aria-hidden="false"]')).toHaveLength(1)
     expect((passwordDialog!.get('#temporary-password').element as HTMLInputElement).value).toBe('QA-temp-pass-42')
     expect(useToastStore(pinia).items.some((item) => item.message.includes('QA-temp-pass-42'))).toBe(false)
+  })
+
+  it('selects only active filtered students and cancels bulk reset without calling the endpoint', async () => {
+    mocks.getStudents.mockResolvedValue([student, inactiveStudent])
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await getPageOrBody(wrapper, '[data-testid="select-all-active-students"]').setValue(true)
+    expect(getPageOrBody(wrapper, '[data-testid="select-all-active-students"]').element).toHaveProperty('checked', true)
+    expect(getPageOrBody(wrapper, '[aria-label="Chọn Học sinh QA nghỉ"]').element).toHaveProperty('disabled', true)
+    expect(wrapper.text()).toContain('1/100 đã chọn')
+
+    await getPageOrBody(wrapper, '[data-testid="bulk-reset-students"]').trigger('click')
+    expect(new DOMWrapper(document.body).text()).toContain('1 tài khoản đang hoạt động được chọn')
+    expect(new DOMWrapper(document.body).text()).toContain('Học sinh QA')
+    expect(new DOMWrapper(document.body).text()).not.toContain('Học sinh QA nghỉ')
+    await allButtons(wrapper).find((button) => button.text() === 'Hủy')?.trigger('click')
+    await flushPromises()
+
+    expect(mocks.adminResetPasswordBulk).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('calls bulk reset once and shows per-student outcomes and the shared password', async () => {
+    mocks.getStudents.mockResolvedValue([student, secondActiveStudent, inactiveStudent])
+    mocks.adminResetPasswordBulk.mockResolvedValue({
+      temporary_password: '12345678',
+      results: [
+        { user_id: student.user_id, status: 'SUCCESS', password_reset: true, reason_codes: [] },
+        { user_id: secondActiveStudent.user_id, status: 'SKIPPED', password_reset: false, reason_codes: ['ACCOUNT_INACTIVE'] },
+      ],
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+    await getPageOrBody(wrapper, '[data-testid="select-all-active-students"]').setValue(true)
+    await getPageOrBody(wrapper, '[data-testid="bulk-reset-students"]').trigger('click')
+    await getPageOrBody(wrapper, '[data-testid="confirm-bulk-reset"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.adminResetPasswordBulk).toHaveBeenCalledTimes(1)
+    expect(mocks.adminResetPasswordBulk).toHaveBeenCalledWith([student.user_id, secondActiveStudent.user_id])
+    const resultDialog = new DOMWrapper(document.body).findAll('.app-modal[aria-hidden="false"]').find((modal) => modal.text().includes('Kết quả đặt lại mật khẩu'))
+    expect(resultDialog).toBeTruthy()
+    expect(resultDialog!.text()).toContain('Thành công: 1')
+    expect(resultDialog!.text()).toContain('Đã bỏ qua: 1')
+    expect(resultDialog!.text()).toContain('Học sinh QA hai')
+    expect((resultDialog!.get('#bulk-reset-temporary-password').element as HTMLInputElement).value).toBe('12345678')
+    expect(resultDialog!.text()).not.toContain('Học sinh QA nghỉ')
+    wrapper.unmount()
+  })
+
+  it('clears student selection as soon as the search filter changes', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    await getPageOrBody(wrapper, '[aria-label="Chọn Học sinh QA"]').setValue(true)
+    expect(wrapper.text()).toContain('1/100 đã chọn')
+
+    await getPageOrBody(wrapper, '#student-search').setValue('QA-S-2')
+    await flushPromises()
+    expect(wrapper.text()).toContain('0/100 đã chọn')
+    expect(getPageOrBody(wrapper, '[data-testid="bulk-reset-students"]').element).toHaveProperty('disabled', true)
+    wrapper.unmount()
   })
 
   it('sends an optional initial password without showing it as a generated password', async () => {

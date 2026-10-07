@@ -1,6 +1,6 @@
 begin;
 
-select plan(50);
+select plan(63);
 
 -- All fixtures are synthetic and the transaction is rolled back at the end.
 insert into auth.users (
@@ -133,6 +133,29 @@ select set_config('request.jwt.claim.sub', 'f0400000-0000-0000-0000-000000000005
 select is((select count(*)::integer from public.sessions), 2, 'STUDENT regains session access after password change clears the flag');
 
 reset role;
+update public.profiles set force_password_change = true where user_id = 'f0400000-0000-0000-0000-000000000003';
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'f0400000-0000-0000-0000-000000000003', true);
+select is((select count(*)::integer from public.profiles where user_id = auth.uid()), 1, 'forced-change TEACHER can still read own profile');
+select is((select count(*)::integer from public.staff), 0, 'forced-change TEACHER cannot read staff data');
+select is((select count(*)::integer from public.classes), 0, 'forced-change TEACHER cannot read classes');
+select is((select count(*)::integer from public.class_memberships), 0, 'forced-change TEACHER cannot read class memberships');
+select is((select count(*)::integer from public.class_schedules), 0, 'forced-change TEACHER cannot read class schedules');
+select is((select count(*)::integer from public.class_schedule_staff), 0, 'forced-change TEACHER cannot read schedule assignments');
+select is((select count(*)::integer from public.sessions), 0, 'forced-change TEACHER cannot read sessions');
+select is((select count(*)::integer from public.session_students), 0, 'forced-change TEACHER cannot read session rosters');
+select is((select count(*)::integer from public.session_staff), 0, 'forced-change TEACHER cannot read session staff');
+select is((select count(*)::integer from public.student_attendances), 0, 'forced-change TEACHER cannot read attendance');
+select throws_ok($$select public.clear_force_password_change()$$, 'P0001', 'PASSWORD_CHANGE_REQUIRED', 'forced-change TEACHER cannot clear the gate through the RPC');
+
+reset role;
+update public.profiles set force_password_change = false where user_id = 'f0400000-0000-0000-0000-000000000003';
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'f0400000-0000-0000-0000-000000000003', true);
+select is((select count(*)::integer from public.staff), 1, 'TEACHER regains own staff profile after password change clears the flag');
+select is((select count(*)::integer from public.sessions), 2, 'TEACHER regains assigned sessions after password change clears the flag');
+
+reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'f0400000-0000-0000-0000-000000000006', true);
 select is((select count(*)::integer from public.students), 1, 'STUDENT B can read only own student profile');
@@ -153,7 +176,9 @@ select ok(
   and not has_function_privilege('anon', 'public.can_view_class_schedule_staff(uuid,uuid)', 'EXECUTE')
   and not has_function_privilege('anon', 'public.can_view_session_staff(uuid,uuid)', 'EXECUTE')
   and not has_function_privilege('anon', 'public.can_view_student_attendance(uuid,uuid)', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.is_active_teacher()', 'EXECUTE')
   and has_function_privilege('authenticated', 'public.can_view_class(uuid)', 'EXECUTE')
+  and has_function_privilege('authenticated', 'public.is_active_teacher()', 'EXECUTE')
   and has_function_privilege('service_role', 'public.can_view_class(uuid)', 'EXECUTE'),
   'anonymous access is revoked and required roles can execute access helpers'
 );

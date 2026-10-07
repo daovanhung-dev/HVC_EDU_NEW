@@ -44,7 +44,7 @@ const router = createRouter({
 })
 
 function landingPath(auth: ReturnType<typeof useAuthStore>) {
-  if (auth.isStudent && auth.forcePasswordChange) return '/auth/change-password'
+  if ((auth.isStudent || auth.isTeacher) && auth.forcePasswordChange) return '/auth/change-password'
   if (auth.isAdmin) return '/admin/students'
   if (auth.isTeacher) return '/staff/sessions'
   if (auth.isLearner) return '/student/schedule'
@@ -64,7 +64,7 @@ router.beforeEach(async (to) => {
   }
   if ((to.path === '/' || to.path === '/dashboard') && auth.isAuthenticated) return landingPath(auth)
   if (to.meta.requiresAuth && !auth.isAuthenticated) return '/login'
-  if (auth.isStudent && auth.forcePasswordChange && to.name !== 'change-password') return '/auth/change-password'
+  if ((auth.isStudent || auth.isTeacher) && auth.forcePasswordChange && to.name !== 'change-password') return '/auth/change-password'
   if (to.name === 'login' && auth.isAuthenticated) return landingPath(auth)
   if (to.meta.adminOnly && !auth.isAdmin) return landingPath(auth)
   if (to.meta.staffOnly && !auth.isStaff) return landingPath(auth)

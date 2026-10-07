@@ -1,15 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mockState = vi.hoisted(() => ({ rpc: vi.fn() }))
+const mockState = vi.hoisted(() => ({ rpc: vi.fn(), invokeFunction: vi.fn() }))
 
 vi.mock('./supabase', () => ({ supabase: { rpc: mockState.rpc } }))
-vi.mock('./edge-functions', () => ({ invokeFunction: vi.fn() }))
+vi.mock('./edge-functions', () => ({ invokeFunction: mockState.invokeFunction }))
 
-import { createManualSession, updateSessionOccurrence } from './commands'
+import { adminResetPasswordBulk, createManualSession, updateSessionOccurrence } from './commands'
 
 describe('session room scheduling commands', () => {
   beforeEach(() => {
     mockState.rpc.mockReset().mockResolvedValue({ data: { session_id: 'qa-session' }, error: null })
+    mockState.invokeFunction.mockReset().mockResolvedValue({ temporary_password: '12345678', results: [] })
+  })
+
+  it('sends a bulk password reset to the dedicated server function once', async () => {
+    await adminResetPasswordBulk(['qa-user-1', 'qa-user-2'])
+
+    expect(mockState.invokeFunction).toHaveBeenCalledTimes(1)
+    expect(mockState.invokeFunction).toHaveBeenCalledWith('admin-reset-password-bulk', {
+      user_ids: ['qa-user-1', 'qa-user-2'],
+    })
   })
 
   it('sends the room when creating a manual session', async () => {

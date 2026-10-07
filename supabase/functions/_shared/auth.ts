@@ -6,7 +6,7 @@ export interface Caller {
 }
 
 export interface RequireCallerOptions {
-  allowForcedStudentPasswordChange?: boolean
+  allowForcedPasswordChange?: boolean
 }
 
 function projectUrl(): string {
@@ -56,8 +56,8 @@ export async function requireCaller(
   if (profileError || !profile || profile.status !== 'ACTIVE') throw new Error('ACCOUNT_INACTIVE')
   if (profile.role === 'PARENT') throw new Error('PARENT_LOGIN_DISABLED')
   if (
-    profile.role === 'STUDENT' && profile.force_password_change &&
-    !options.allowForcedStudentPasswordChange
+    ['STUDENT', 'TEACHER'].includes(profile.role) &&
+    profile.force_password_change && !options.allowForcedPasswordChange
   ) throw new Error('PASSWORD_CHANGE_REQUIRED')
   return { user: userData.user, profile }
 }

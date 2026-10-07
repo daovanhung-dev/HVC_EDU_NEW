@@ -1,10 +1,10 @@
-import { createForcedStudentPasswordChangeHandler } from "./handler.ts";
+import { createForcedPasswordChangeHandler } from "./handler.ts";
 import type {
-  ForcedStudentPasswordChangeCaller,
-  ForcedStudentPasswordChangeDependencies,
+  ForcedPasswordChangeCaller,
+  ForcedPasswordChangeDependencies,
 } from "./handler.ts";
 
-const forcedStudent: ForcedStudentPasswordChangeCaller = {
+const forcedStudent: ForcedPasswordChangeCaller = {
   user: { id: "qa-student-user" },
   profile: { role: "STUDENT", status: "ACTIVE", force_password_change: true },
 };
@@ -18,14 +18,14 @@ function makeRequest(body: unknown) {
 }
 
 function makeDependencies(
-  overrides: Partial<ForcedStudentPasswordChangeDependencies> = {},
+  overrides: Partial<ForcedPasswordChangeDependencies> = {},
 ) {
   const calls = {
     updates: [] as Array<{ userId: string; password: string }>,
     clears: [] as string[],
     order: [] as string[],
   };
-  const dependencies: ForcedStudentPasswordChangeDependencies = {
+  const dependencies: ForcedPasswordChangeDependencies = {
     getCaller: async () => forcedStudent,
     updatePassword: async (userId, password) => {
       calls.order.push("password");
@@ -42,16 +42,16 @@ function makeDependencies(
 
 Deno.test("changes only the caller password and clears the flag after password update", async () => {
   const { calls, dependencies } = makeDependencies();
-  const handler = createForcedStudentPasswordChangeHandler(dependencies);
+  const handler = createForcedPasswordChangeHandler(dependencies);
   const response = await handler(makeRequest({
     new_password: "QA-NewPassword-123",
     user_id: "qa-other-user",
   }));
   const body = await response.json();
 
-  if (response.status !== 200) throw new Error("forced student password change should succeed");
+  if (response.status !== 200) throw new Error("forced password change should succeed");
   if (calls.updates.length !== 1 || calls.updates[0].userId !== "qa-student-user") {
-    throw new Error("the authenticated student must be the only account updated");
+    throw new Error("the authenticated caller must be the only account updated");
   }
   if (calls.updates[0].password !== "QA-NewPassword-123") {
     throw new Error("the submitted password should be applied as entered");
@@ -63,8 +63,28 @@ Deno.test("changes only the caller password and clears the flag after password u
   if (body.data.changed !== true) throw new Error("successful response should confirm the password change");
 });
 
-Deno.test("rejects a caller who is not an active forced-change student", async () => {
-  const invalidCallers: ForcedStudentPasswordChangeCaller[] = [
+Deno.test("allows an active forced-change teacher to change only their own password", async () => {
+  const forcedTeacher: ForcedPasswordChangeCaller = {
+    user: { id: "qa-teacher-user" },
+    profile: { role: "TEACHER", status: "ACTIVE", force_password_change: true },
+  };
+  const { calls, dependencies } = makeDependencies({ getCaller: async () => forcedTeacher });
+  const response = await createForcedPasswordChangeHandler(dependencies)(makeRequest({ new_password: "QA-TeacherNewPassword-123" }));
+  const body = await response.json();
+
+  if (response.status !== 200 || body.data.changed !== true) {
+    throw new Error("active forced-change teacher should be able to complete the required change");
+  }
+  if (calls.updates.length !== 1 || calls.updates[0].userId !== "qa-teacher-user") {
+    throw new Error("the authenticated teacher must be the only account updated");
+  }
+  if (calls.clears.length !== 1 || calls.clears[0] !== "qa-teacher-user") {
+    throw new Error("the authenticated teacher force-change flag should be cleared");
+  }
+});
+
+Deno.test("rejects callers who are not active forced-change students or teachers", async () => {
+  const invalidCallers: ForcedPasswordChangeCaller[] = [
     {
       user: { id: "qa-not-forced-user" },
       profile: { role: "STUDENT", status: "ACTIVE", force_password_change: false },
@@ -74,17 +94,21 @@ Deno.test("rejects a caller who is not an active forced-change student", async (
       profile: { role: "STUDENT", status: "LOCKED", force_password_change: true },
     },
     {
-      user: { id: "qa-non-student-user" },
-      profile: { role: "TEACHER", status: "ACTIVE", force_password_change: true },
+      user: { id: "qa-not-forced-teacher" },
+      profile: { role: "TEACHER", status: "ACTIVE", force_password_change: false },
+    },
+    {
+      user: { id: "qa-non-supported-user" },
+      profile: { role: "ADMIN", status: "ACTIVE", force_password_change: true },
     },
   ];
 
   for (const caller of invalidCallers) {
     const { calls, dependencies } = makeDependencies({ getCaller: async () => caller });
-    const handler = createForcedStudentPasswordChangeHandler(dependencies);
+    const handler = createForcedPasswordChangeHandler(dependencies);
     const response = await handler(makeRequest({ new_password: "QA-NewPassword-123" }));
 
-    if (response.status !== 403) throw new Error("only an active forced-change student may change password here");
+    if (response.status !== 403) throw new Error("only an active forced-change student or teacher may change password here");
     if (calls.updates.length || calls.clears.length) throw new Error("rejected caller must not mutate credentials");
   }
 });
@@ -93,7 +117,7 @@ Deno.test("keeps the forced flag when caller authentication fails", async () => 
   const { calls, dependencies } = makeDependencies({
     getCaller: async () => { throw new Error("UNAUTHENTICATED"); },
   });
-  const handler = createForcedStudentPasswordChangeHandler(dependencies);
+  const handler = createForcedPasswordChangeHandler(dependencies);
   const response = await handler(makeRequest({ new_password: "QA-NewPassword-123" }));
 
   if (response.status !== 401) throw new Error("unauthenticated requests should be rejected");
@@ -102,7 +126,7 @@ Deno.test("keeps the forced flag when caller authentication fails", async () => 
 
 Deno.test("rejects invalid passwords without changing the password or flag", async () => {
   const { calls, dependencies } = makeDependencies();
-  const handler = createForcedStudentPasswordChangeHandler(dependencies);
+  const handler = createForcedPasswordChangeHandler(dependencies);
   const shortPasswordResponse = await handler(makeRequest({ new_password: "short" }));
   const nullBodyResponse = await handler(makeRequest(null));
 
@@ -118,7 +142,7 @@ Deno.test("keeps the forced flag when the Auth password update fails", async () 
       throw new Error("QA_AUTH_UPDATE_FAILED");
     },
   });
-  const handler = createForcedStudentPasswordChangeHandler(dependencies);
+  const handler = createForcedPasswordChangeHandler(dependencies);
   const response = await handler(makeRequest({ new_password: "QA-NewPassword-123" }));
 
   if (response.status !== 500) throw new Error("Auth failure should return a server error");
@@ -132,7 +156,7 @@ Deno.test("does not report success when the profile flag cannot be cleared", asy
       throw new Error("QA_PROFILE_UPDATE_FAILED");
     },
   });
-  const handler = createForcedStudentPasswordChangeHandler(dependencies);
+  const handler = createForcedPasswordChangeHandler(dependencies);
   const response = await handler(makeRequest({ new_password: "QA-NewPassword-123" }));
 
   if (response.status !== 500) throw new Error("profile update failure should not report success");

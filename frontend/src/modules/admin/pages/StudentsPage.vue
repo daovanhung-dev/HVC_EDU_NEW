@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
-import { adminCreateUser, adminResetPassword, archiveStudent, setAccountStatus, updateStudent } from '@/services/commands'
+import { adminCreateUser, adminResetPassword, adminResetPasswordBulk, archiveStudent, setAccountStatus, updateStudent } from '@/services/commands'
 import { getStudents } from '@/services/data-queries'
 import { formatDateTime } from '@/shared/utils/format'
 import { useToastStore } from '@/stores/toast.store'
@@ -11,12 +11,23 @@ import AppState from '@/app/components/AppState.vue'
 import FormModal from '@/app/components/FormModal.vue'
 import ConfirmModal from '@/app/components/ConfirmModal.vue'
 import DetailModal from '@/app/components/DetailModal.vue'
+import BulkPasswordResetModal from '@/modules/admin/components/BulkPasswordResetModal.vue'
+import type { BulkResetDisplayResult, BulkResetPerson } from '@/modules/admin/components/bulk-password-reset.types'
 
 interface Student { id: string; user_id: string; student_code: string; full_name: string; phone: string | null; parent_name: string | null; parent_phone?: string | null; status: string; created_at: string }
 interface StudentForm { student_code: string; full_name: string; phone: string; parent_name: string; parent_phone: string }
 const toast = useToastStore()
+const MAX_BULK_RESET_TARGETS = 100
 const rows = ref<Student[]>([])
 const search = ref('')
+const selectedUserIds = ref<string[]>([])
+const bulkDialogOpen = ref(false)
+const bulkDialogMode = ref<'confirm' | 'result'>('confirm')
+const bulkBusy = ref(false)
+const bulkErrorMessage = ref('')
+const bulkPeople = ref<BulkResetPerson[]>([])
+const bulkResults = ref<BulkResetDisplayResult[]>([])
+const bulkTemporaryPassword = ref('')
 const loading = ref(false)
 const showForm = ref(false)
 const editing = ref<Student | null>(null)
@@ -33,13 +44,67 @@ const confirmBusy = ref(false)
 const confirmDetails = ref({ title: '', message: '', itemName: '', warning: '', confirmLabel: 'Xác nhận', destructive: false })
 const pendingAction = ref<(() => Promise<void>) | null>(null)
 const modalTitle = computed(() => editing.value ? 'Sửa hồ sơ học sinh' : 'Tạo hồ sơ và tài khoản học sinh')
+const activeRows = computed(() => rows.value.filter((row) => row.status === 'ACTIVE'))
+const allActiveSelected = computed(() => activeRows.value.length > 0 && activeRows.value.length <= MAX_BULK_RESET_TARGETS && activeRows.value.every((row) => selectedUserIds.value.includes(row.user_id)))
+const tooManyActiveRows = computed(() => activeRows.value.length > MAX_BULK_RESET_TARGETS)
 
 async function load() {
+  selectedUserIds.value = []
   loading.value = true
   errorMessage.value = ''
   try { rows.value = await getStudents(search.value) as Student[] }
   catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể tải học sinh' }
   finally { loading.value = false }
+}
+
+watch(search, () => { selectedUserIds.value = [] })
+
+function toggleAllActive(checked: boolean) {
+  selectedUserIds.value = checked && !tooManyActiveRows.value
+    ? activeRows.value.map((row) => row.user_id)
+    : []
+}
+
+function toggleSelectedUser(userId: string, checked: boolean) {
+  if (checked) {
+    if (selectedUserIds.value.length >= MAX_BULK_RESET_TARGETS) return
+    if (!selectedUserIds.value.includes(userId)) selectedUserIds.value = [...selectedUserIds.value, userId]
+    return
+  }
+  selectedUserIds.value = selectedUserIds.value.filter((id) => id !== userId)
+}
+
+function beginBulkReset() {
+  const selected = activeRows.value.filter((row) => selectedUserIds.value.includes(row.user_id))
+  if (!selected.length || selected.length > MAX_BULK_RESET_TARGETS) return
+  bulkPeople.value = selected.map((row) => ({ user_id: row.user_id, full_name: row.full_name, code: row.student_code }))
+  bulkResults.value = []
+  bulkTemporaryPassword.value = ''
+  bulkErrorMessage.value = ''
+  bulkDialogMode.value = 'confirm'
+  bulkDialogOpen.value = true
+}
+
+async function confirmBulkReset() {
+  if (bulkBusy.value || !bulkPeople.value.length) return
+  bulkBusy.value = true
+  bulkErrorMessage.value = ''
+  try {
+    const response = await adminResetPasswordBulk(bulkPeople.value.map((person) => person.user_id))
+    const peopleById = new Map(bulkPeople.value.map((person) => [person.user_id.toLowerCase(), person]))
+    bulkResults.value = response.results.map((result) => ({
+      ...peopleById.get(result.user_id.toLowerCase()) || { user_id: result.user_id, full_name: 'Tài khoản không xác định', code: null },
+      ...result,
+    }))
+    bulkTemporaryPassword.value = response.temporary_password || ''
+    selectedUserIds.value = []
+    bulkDialogMode.value = 'result'
+    toast.success(`Đã xử lý ${response.results.length} tài khoản.`)
+  } catch (error) {
+    bulkErrorMessage.value = error instanceof Error ? error.message : 'Không thể đặt lại mật khẩu hàng loạt.'
+  } finally {
+    bulkBusy.value = false
+  }
 }
 
 function openCreate() {
@@ -143,11 +208,16 @@ onMounted(load)
   <div v-if="errorMessage && rows.length" class="alert alert-danger" role="alert">{{ errorMessage }} <button class="btn btn-sm btn-outline-danger ms-2" type="button" @click="load">Thử tải lại</button></div>
   <section class="card"><div class="card-body">
     <form class="app-list-search d-flex flex-wrap gap-2 mb-3" role="search" @submit.prevent="load"><label class="visually-hidden" for="student-search">Tìm học sinh</label><input id="student-search" v-model="search" class="form-control flex-grow-1" placeholder="Tìm theo tên hoặc mã học sinh" /><button class="btn btn-outline-primary" type="submit" :disabled="loading">Tìm</button></form>
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+      <p class="mb-0 small text-secondary">{{ activeRows.length }} tài khoản đang hoạt động · {{ selectedUserIds.length }}/{{ MAX_BULK_RESET_TARGETS }} đã chọn</p>
+      <button class="btn btn-outline-primary" type="button" data-testid="bulk-reset-students" :disabled="!selectedUserIds.length || loading" @click="beginBulkReset">Đặt lại mật khẩu đã chọn</button>
+    </div>
+    <p v-if="tooManyActiveRows" class="small text-secondary mb-2">Có hơn {{ MAX_BULK_RESET_TARGETS }} học sinh đang hoạt động trong kết quả. Hãy lọc thêm trước khi chọn tất cả.</p>
     <AppState v-if="loading" kind="loading" title="Đang tải danh sách học sinh" message="Thông tin sẽ xuất hiện tại đây sau khi tải xong." />
     <AppState v-else-if="errorMessage && !rows.length" kind="error" title="Không thể tải danh sách học sinh" :message="errorMessage" @retry="load" />
     <AppState v-else-if="!rows.length" kind="empty" title="Chưa có học sinh phù hợp" message="Thêm hồ sơ mới hoặc điều chỉnh từ khóa tìm kiếm." />
-    <div v-else class="table-responsive"><table class="table align-middle"><thead><tr><th>Mã</th><th>Họ tên</th><th>SĐT</th><th>Phụ huynh</th><th>Trạng thái</th><th>Ngày tạo</th><th>Thao tác</th></tr></thead><tbody>
-      <tr v-for="row in rows" :key="row.id"><td><code>{{ row.student_code }}</code></td><td class="fw-semibold">{{ row.full_name }}</td><td>{{ row.phone || '—' }}</td><td>{{ row.parent_name || '—' }}</td><td><span class="badge" :class="row.status === 'ACTIVE' ? 'text-bg-success' : 'text-bg-secondary'">{{ row.status === 'ACTIVE' ? 'Đang hoạt động' : row.status === 'LOCKED' ? 'Đã khóa' : row.status }}</span></td><td>{{ formatDateTime(row.created_at) }}</td><td><div class="d-flex flex-wrap gap-1"><RouterLink class="btn btn-sm btn-outline-primary" :to="`/admin/students/${row.id}`">Chi tiết</RouterLink><button class="btn btn-sm btn-outline-secondary" type="button" @click="beginEdit(row)">Sửa</button><button v-if="row.status !== 'ARCHIVED'" class="btn btn-sm btn-outline-danger" type="button" @click="askFor(row, 'archive')">Lưu trữ</button><button v-if="row.status !== 'ARCHIVED'" class="btn btn-sm btn-outline-secondary" type="button" @click="askFor(row, 'toggle')">{{ row.status === 'ACTIVE' ? 'Khóa TK' : 'Mở TK' }}</button><button v-if="row.status !== 'ARCHIVED'" class="btn btn-sm btn-outline-primary" type="button" @click="askFor(row, 'reset')">Đặt lại mật khẩu</button></div></td></tr>
+    <div v-else class="table-responsive"><table class="table align-middle"><thead><tr><th><input type="checkbox" class="form-check-input" data-testid="select-all-active-students" aria-label="Chọn tất cả học sinh đang hoạt động trong kết quả lọc" :checked="allActiveSelected" :disabled="loading || !activeRows.length || tooManyActiveRows" @change="toggleAllActive(($event.target as HTMLInputElement).checked)" /></th><th>Mã</th><th>Họ tên</th><th>SĐT</th><th>Phụ huynh</th><th>Trạng thái</th><th>Ngày tạo</th><th>Thao tác</th></tr></thead><tbody>
+      <tr v-for="row in rows" :key="row.id"><td><input type="checkbox" class="form-check-input" data-testid="select-student-row" :aria-label="`Chọn ${row.full_name}`" :checked="selectedUserIds.includes(row.user_id)" :disabled="loading || row.status !== 'ACTIVE' || (selectedUserIds.length >= MAX_BULK_RESET_TARGETS && !selectedUserIds.includes(row.user_id))" @change="toggleSelectedUser(row.user_id, ($event.target as HTMLInputElement).checked)" /></td><td><code>{{ row.student_code }}</code></td><td class="fw-semibold">{{ row.full_name }}</td><td>{{ row.phone || '—' }}</td><td>{{ row.parent_name || '—' }}</td><td><span class="badge" :class="row.status === 'ACTIVE' ? 'text-bg-success' : 'text-bg-secondary'">{{ row.status === 'ACTIVE' ? 'Đang hoạt động' : row.status === 'LOCKED' ? 'Đã khóa' : row.status }}</span></td><td>{{ formatDateTime(row.created_at) }}</td><td><div class="d-flex flex-wrap gap-1"><RouterLink class="btn btn-sm btn-outline-primary" :to="`/admin/students/${row.id}`">Chi tiết</RouterLink><button class="btn btn-sm btn-outline-secondary" type="button" @click="beginEdit(row)">Sửa</button><button v-if="row.status !== 'ARCHIVED'" class="btn btn-sm btn-outline-danger" type="button" @click="askFor(row, 'archive')">Lưu trữ</button><button v-if="row.status !== 'ARCHIVED'" class="btn btn-sm btn-outline-secondary" type="button" @click="askFor(row, 'toggle')">{{ row.status === 'ACTIVE' ? 'Khóa TK' : 'Mở TK' }}</button><button v-if="row.status !== 'ARCHIVED'" class="btn btn-sm btn-outline-primary" type="button" @click="askFor(row, 'reset')">Đặt lại mật khẩu</button></div></td></tr>
     </tbody></table></div>
   </div></section>
 
@@ -159,6 +229,7 @@ onMounted(load)
     <div v-if="errorMessage" class="alert alert-danger mt-3 mb-0" role="alert">{{ errorMessage }}</div>
   </FormModal>
   <ConfirmModal v-model="confirmOpen" v-bind="confirmDetails" :busy="confirmBusy" @confirm="confirmAction" @hidden="onConfirmHidden" />
+  <BulkPasswordResetModal v-model="bulkDialogOpen" :mode="bulkDialogMode" :people="bulkPeople" :results="bulkResults" :temporary-password="bulkTemporaryPassword" :busy="bulkBusy" :error-message="bulkErrorMessage" @confirm="confirmBulkReset" />
   <DetailModal v-model="showPassword" title="Mật khẩu tạm thời" description="Mật khẩu là 12345678. Học sinh sẽ cần đổi mật khẩu ở lần đăng nhập kế tiếp. Mật khẩu chỉ hiển thị trong phiên này; hãy bàn giao qua kênh bảo mật." size="sm">
     <label class="form-label" for="temporary-password">Mật khẩu tạm</label><input id="temporary-password" class="form-control fw-semibold" :value="temporaryPassword" readonly data-modal-autofocus @focus="($event.target as HTMLInputElement).select()" />
     <template #footer><button class="btn btn-primary" type="button" @click="closePassword">Đã ghi lại</button></template>

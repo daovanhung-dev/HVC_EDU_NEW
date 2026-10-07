@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   getStaff: vi.fn(),
   adminCreateUser: vi.fn(),
   adminResetPassword: vi.fn(),
+  adminResetPasswordBulk: vi.fn(),
   archiveStaff: vi.fn(),
   setAccountStatus: vi.fn(),
   updateStaff: vi.fn(),
@@ -24,12 +25,15 @@ vi.mock('@/services/data-queries', () => ({ getStaff: mocks.getStaff }))
 vi.mock('@/services/commands', () => ({
   adminCreateUser: mocks.adminCreateUser,
   adminResetPassword: mocks.adminResetPassword,
+  adminResetPasswordBulk: mocks.adminResetPasswordBulk,
   archiveStaff: mocks.archiveStaff,
   setAccountStatus: mocks.setAccountStatus,
   updateStaff: mocks.updateStaff,
 }))
 
 const staff = { id: 'qa-staff-1', user_id: 'qa-user-1', staff_code: 'QA-T-1', full_name: 'Giáo viên QA', staff_type: 'TEACHER', phone: null, status: 'ACTIVE' }
+const secondActiveStaff = { id: 'qa-staff-2', user_id: 'qa-user-2', staff_code: 'QA-T-2', full_name: 'Giáo viên QA hai', staff_type: 'TEACHER', phone: null, status: 'ACTIVE' }
+const inactiveStaff = { id: 'qa-staff-3', user_id: 'qa-user-3', staff_code: 'QA-T-3', full_name: 'Giáo viên QA nghỉ', staff_type: 'TEACHER', phone: null, status: 'INACTIVE' }
 
 const mountedWrappers: Array<{ unmount: () => void }> = []
 
@@ -61,6 +65,7 @@ describe('StaffPage account creation', () => {
     mocks.getStaff.mockReset().mockResolvedValue([staff])
     mocks.adminCreateUser.mockReset().mockResolvedValue({ temporary_password: 'QA-generated-value' })
     mocks.adminResetPassword.mockReset().mockResolvedValue({ temporary_password: '12345678' })
+    mocks.adminResetPasswordBulk.mockReset().mockResolvedValue({ temporary_password: null, results: [] })
     mocks.archiveStaff.mockReset().mockResolvedValue(undefined)
     mocks.setAccountStatus.mockReset().mockResolvedValue(undefined)
     mocks.updateStaff.mockReset().mockResolvedValue(undefined)
@@ -107,5 +112,63 @@ describe('StaffPage account creation', () => {
 
     expect(mocks.adminResetPassword).toHaveBeenCalledWith('qa-user-1')
     expect((new DOMWrapper(document.body).get('#staff-temporary-password').element as HTMLInputElement).value).toBe('12345678')
+  })
+
+  it('selects only active teachers and cancels bulk reset without changing accounts', async () => {
+    mocks.getStaff.mockResolvedValue([staff, inactiveStaff])
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await getPageOrBody(wrapper, '[data-testid="select-all-active-staff"]').setValue(true)
+    expect(getPageOrBody(wrapper, '[aria-label="Chọn Giáo viên QA nghỉ"]').element).toHaveProperty('disabled', true)
+    expect(wrapper.text()).toContain('1/100 đã chọn')
+    await getPageOrBody(wrapper, '[data-testid="bulk-reset-staff"]').trigger('click')
+    expect(new DOMWrapper(document.body).text()).toContain('1 tài khoản đang hoạt động được chọn')
+    expect(new DOMWrapper(document.body).text()).not.toContain('Giáo viên QA nghỉ')
+
+    await allButtons(wrapper).find((button) => button.text() === 'Hủy')?.trigger('click')
+    await flushPromises()
+    expect(mocks.adminResetPasswordBulk).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('sends one bulk request and displays separate outcomes for each teacher', async () => {
+    mocks.getStaff.mockResolvedValue([staff, secondActiveStaff, inactiveStaff])
+    mocks.adminResetPasswordBulk.mockResolvedValue({
+      temporary_password: '12345678',
+      results: [
+        { user_id: staff.user_id, status: 'SUCCESS', password_reset: true, reason_codes: [] },
+        { user_id: secondActiveStaff.user_id, status: 'FAILED', password_reset: false, reason_codes: ['PASSWORD_UPDATE_FAILED'] },
+      ],
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await getPageOrBody(wrapper, '[data-testid="select-all-active-staff"]').setValue(true)
+    await getPageOrBody(wrapper, '[data-testid="bulk-reset-staff"]').trigger('click')
+    await getPageOrBody(wrapper, '[data-testid="confirm-bulk-reset"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.adminResetPasswordBulk).toHaveBeenCalledTimes(1)
+    expect(mocks.adminResetPasswordBulk).toHaveBeenCalledWith([staff.user_id, secondActiveStaff.user_id])
+    const resultDialog = new DOMWrapper(document.body).findAll('.app-modal[aria-hidden="false"]').find((modal) => modal.text().includes('Kết quả đặt lại mật khẩu'))
+    expect(resultDialog).toBeTruthy()
+    expect(resultDialog!.text()).toContain('Giáo viên QA hai')
+    expect(resultDialog!.text()).toContain('Không thể cập nhật mật khẩu chung; yêu cầu đổi mật khẩu vẫn đang bật.')
+    expect(resultDialog!.text()).not.toContain('Giáo viên QA nghỉ')
+    expect((resultDialog!.get('#bulk-reset-temporary-password').element as HTMLInputElement).value).toBe('12345678')
+    wrapper.unmount()
+  })
+
+  it('clears staff selection when search input changes', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    await getPageOrBody(wrapper, '[aria-label="Chọn Giáo viên QA"]').setValue(true)
+    expect(wrapper.text()).toContain('1/100 đã chọn')
+    await getPageOrBody(wrapper, '#staff-search').setValue('QA-T-2')
+    await flushPromises()
+    expect(wrapper.text()).toContain('0/100 đã chọn')
+    expect(getPageOrBody(wrapper, '[data-testid="bulk-reset-staff"]').element).toHaveProperty('disabled', true)
+    wrapper.unmount()
   })
 })

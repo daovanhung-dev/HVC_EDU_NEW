@@ -20,7 +20,25 @@ export function adminResetPassword(user_id: string) {
   return invokeFunction<{ user_id: string }, { profile: unknown; temporary_password: string }>('admin-reset-password', { user_id })
 }
 
-export function changeRequiredStudentPassword(new_password: string) {
+export type AdminResetPasswordBulkStatus = 'SUCCESS' | 'PARTIAL' | 'FAILED' | 'SKIPPED'
+
+export interface AdminResetPasswordBulkResult {
+  user_id: string
+  status: AdminResetPasswordBulkStatus
+  password_reset: boolean
+  reason_codes: string[]
+}
+
+export interface AdminResetPasswordBulkResponse {
+  temporary_password: string | null
+  results: AdminResetPasswordBulkResult[]
+}
+
+export function adminResetPasswordBulk(user_ids: string[]) {
+  return invokeFunction<{ user_ids: string[] }, AdminResetPasswordBulkResponse>('admin-reset-password-bulk', { user_ids })
+}
+
+export function changeRequiredPassword(new_password: string) {
   return invokeFunction<{ new_password: string }, { changed: boolean }>('student-required-password-change', { new_password })
 }
 

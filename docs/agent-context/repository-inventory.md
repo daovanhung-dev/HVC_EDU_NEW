@@ -92,6 +92,8 @@
 | frontend/src/devtools/ui-review/ReviewApp.vue | Frontend / nền tảng và dịch vụ | Vue SFC |
 | frontend/src/env.d.ts | Frontend / nền tảng và dịch vụ | TypeScript |
 | frontend/src/main.ts | Frontend / nền tảng và dịch vụ | TypeScript |
+| frontend/src/modules/admin/components/bulk-password-reset.types.ts | Frontend / Admin | TypeScript |
+| frontend/src/modules/admin/components/BulkPasswordResetModal.vue | Frontend / Admin | Vue SFC |
 | frontend/src/modules/admin/components/TeacherPicker.test.ts | Frontend / Admin | TypeScript |
 | frontend/src/modules/admin/components/TeacherPicker.vue | Frontend / Admin | Vue SFC |
 | frontend/src/modules/admin/pages/AdminSessionsPage.test.ts | Frontend / Admin | TypeScript |
@@ -160,9 +162,14 @@
 | supabase/config.toml | Supabase / cấu hình và seed | TOML/config |
 | supabase/functions/_shared/auth.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/_shared/cors.ts | Supabase / Edge Functions | TypeScript |
+| supabase/functions/_shared/password-reset.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/_shared/response.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/admin-account-status/index.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/admin-create-user/index.ts | Supabase / Edge Functions | TypeScript |
+| supabase/functions/admin-reset-password-bulk/config.toml | Supabase / Edge Functions | TOML/config |
+| supabase/functions/admin-reset-password-bulk/handler.test.ts | Supabase / Edge Functions | TypeScript |
+| supabase/functions/admin-reset-password-bulk/handler.ts | Supabase / Edge Functions | TypeScript |
+| supabase/functions/admin-reset-password-bulk/index.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/admin-reset-password/handler.test.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/admin-reset-password/handler.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/admin-reset-password/index.ts | Supabase / Edge Functions | TypeScript |
@@ -234,6 +241,7 @@
 | supabase/migrations/0046_allow_secret_key_session_rpcs.sql | Supabase / migrations | SQL |
 | supabase/migrations/0047_lesson_videos_and_ai_tutor.sql | Supabase / migrations | SQL |
 | supabase/migrations/0048_force_student_password_change.sql | Supabase / migrations | SQL |
+| supabase/migrations/0049_force_teacher_password_change.sql | Supabase / migrations | SQL |
 | supabase/seed.sql | Supabase / cấu hình và seed | SQL |
 | supabase/tests/admin_monthly_session_planning.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/backdated_session_creation.test.sql | Supabase / kiểm thử SQL | SQL |
@@ -243,4 +251,4 @@
 | supabase/tests/session_learning_commands.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/timesheet_workflow.test.sql | Supabase / kiểm thử SQL | SQL |
 
-Tổng: 236 đường dẫn có trong inventory.
+Tổng: 244 đường dẫn có trong inventory.

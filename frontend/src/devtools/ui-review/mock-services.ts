@@ -88,6 +88,17 @@ export async function adminCreateUser(input: any) {
   return { temporary_password: 'QA-temp-pass-46' }
 }
 export async function adminResetPassword() { return { temporary_password: '12345678' } }
+export async function adminResetPasswordBulk(userIds: string[]) {
+  const accounts = [...students, ...teachers]
+  const results = userIds.map((userId, index) => {
+    const account = accounts.find((row) => row.user_id === userId)
+    if (!account) return { user_id: userId, status: 'SKIPPED', password_reset: false, reason_codes: ['ACCOUNT_NOT_FOUND'] }
+    if (account.status !== 'ACTIVE') return { user_id: userId, status: 'SKIPPED', password_reset: false, reason_codes: ['TARGET_PROFILE_NOT_ACTIVE'] }
+    if (index === 1) return { user_id: userId, status: 'PARTIAL', password_reset: true, reason_codes: ['AUDIT_WRITE_FAILED'] }
+    return { user_id: userId, status: 'SUCCESS', password_reset: true, reason_codes: [] }
+  })
+  return { temporary_password: results.some((result) => result.password_reset) ? '12345678' : null, results }
+}
 export async function archiveStudent(id: string) { const row = students.find((item) => item.id === id); if (row) row.status = 'ARCHIVED' }
 export async function archiveStaff(id: string) { const row = teachers.find((item) => item.id === id); if (row) row.status = 'ARCHIVED' }
 export async function setAccountStatus(userId: string, status: string) { const row = [...students, ...teachers].find((item) => item.user_id === userId); if (row) row.status = status }

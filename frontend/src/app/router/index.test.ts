@@ -76,6 +76,18 @@ describe('authentication route guard', () => {
     expect(router.currentRoute.value.path).toBe('/auth/change-password')
   })
 
+  it('limits forced-change teachers to the password change route', async () => {
+    mocks.profileRows.push(profile('TEACHER', true))
+    await router.push('/staff/sessions?case=forced-teacher-password')
+    expect(router.currentRoute.value.path).toBe('/auth/change-password')
+
+    await router.push('/staff/timesheets?case=forced-teacher-direct')
+    expect(router.currentRoute.value.path).toBe('/auth/change-password')
+
+    await router.push('/auth/change-password?case=forced-teacher-password')
+    expect(router.currentRoute.value.path).toBe('/auth/change-password')
+  })
+
   it.each(['PARENT', 'ASSISTANT'])('blocks retired %s accounts', async (role) => {
     mocks.profileRows.push(profile(role))
     await router.push(`/student/schedule?role=${role}`)
