@@ -5,7 +5,7 @@ const mockState = vi.hoisted(() => ({ rpc: vi.fn(), invokeFunction: vi.fn() }))
 vi.mock('./supabase', () => ({ supabase: { rpc: mockState.rpc } }))
 vi.mock('./edge-functions', () => ({ invokeFunction: mockState.invokeFunction }))
 
-import { adminResetPasswordBulk, createManualSession, updateSessionOccurrence } from './commands'
+import { adminExportStudentLogins, adminResetPasswordBulk, createManualSession, updateSessionOccurrence } from './commands'
 
 describe('session room scheduling commands', () => {
   beforeEach(() => {
@@ -18,6 +18,15 @@ describe('session room scheduling commands', () => {
 
     expect(mockState.invokeFunction).toHaveBeenCalledTimes(1)
     expect(mockState.invokeFunction).toHaveBeenCalledWith('admin-reset-password-bulk', {
+      user_ids: ['qa-user-1', 'qa-user-2'],
+    })
+  })
+
+  it('requests Auth login emails through the dedicated export function once', async () => {
+    await adminExportStudentLogins(['qa-user-1', 'qa-user-2'])
+
+    expect(mockState.invokeFunction).toHaveBeenCalledTimes(1)
+    expect(mockState.invokeFunction).toHaveBeenCalledWith('admin-export-student-logins', {
       user_ids: ['qa-user-1', 'qa-user-2'],
     })
   })

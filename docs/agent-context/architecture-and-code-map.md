@@ -26,7 +26,7 @@
 ## Luồng request
 
 - Truy vấn và CRUD đơn giản có thể gọi Supabase từ frontend; RLS phải giới hạn dữ liệu.
-- Thao tác cần kiểm tra server hoặc transaction nghiệp vụ đi qua Edge Function/RPC. Các handler hiện có: admin-account-status, admin-create-user, admin-reset-password, admin-reset-password-bulk, bootstrap-root, login-by-identifier, session-start, session-complete, session-learning-update, student-ai-tutor, timesheet-submit, timesheet-review.
+- Thao tác cần kiểm tra server hoặc transaction nghiệp vụ đi qua Edge Function/RPC. Các handler hiện có: admin-account-status, admin-create-user, admin-export-student-logins, admin-reset-password, admin-reset-password-bulk, bootstrap-root, login-by-identifier, session-start, session-complete, session-learning-update, student-ai-tutor, timesheet-submit, timesheet-review.
 - Dùng services hiện hành thay vì rải lệnh Supabase trong component khi đã có adapter phù hợp.
 - Edge Function dùng helper trong supabase/functions/_shared/; response theo dạng success/data hoặc success/error và trace_id.
 - UI/route không phải ranh giới bảo mật; quyền cuối cùng phải được kiểm tra ở database/server.

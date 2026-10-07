@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
-import { adminCreateUser, adminResetPassword, adminResetPasswordBulk, archiveStudent, setAccountStatus, updateStudent } from '@/services/commands'
+import { adminCreateUser, adminExportStudentLogins, adminResetPassword, adminResetPasswordBulk, archiveStudent, setAccountStatus, updateStudent } from '@/services/commands'
 import { getStudents } from '@/services/data-queries'
 import { formatDateTime } from '@/shared/utils/format'
 import { useToastStore } from '@/stores/toast.store'
@@ -13,6 +13,7 @@ import ConfirmModal from '@/app/components/ConfirmModal.vue'
 import DetailModal from '@/app/components/DetailModal.vue'
 import BulkPasswordResetModal from '@/modules/admin/components/BulkPasswordResetModal.vue'
 import type { BulkResetDisplayResult, BulkResetPerson } from '@/modules/admin/components/bulk-password-reset.types'
+import { downloadStudentLoginExport } from '@/modules/admin/utils/student-account-export'
 
 interface Student { id: string; user_id: string; student_code: string; full_name: string; phone: string | null; parent_name: string | null; parent_phone?: string | null; status: string; created_at: string }
 interface StudentForm { student_code: string; full_name: string; phone: string; parent_name: string; parent_phone: string }
@@ -28,6 +29,7 @@ const bulkErrorMessage = ref('')
 const bulkPeople = ref<BulkResetPerson[]>([])
 const bulkResults = ref<BulkResetDisplayResult[]>([])
 const bulkTemporaryPassword = ref('')
+const exportBusy = ref(false)
 const loading = ref(false)
 const showForm = ref(false)
 const editing = ref<Student | null>(null)
@@ -47,6 +49,28 @@ const modalTitle = computed(() => editing.value ? 'Sửa hồ sơ học sinh' : 
 const activeRows = computed(() => rows.value.filter((row) => row.status === 'ACTIVE'))
 const allActiveSelected = computed(() => activeRows.value.length > 0 && activeRows.value.length <= MAX_BULK_RESET_TARGETS && activeRows.value.every((row) => selectedUserIds.value.includes(row.user_id)))
 const tooManyActiveRows = computed(() => activeRows.value.length > MAX_BULK_RESET_TARGETS)
+
+async function exportActiveStudents() {
+  if (exportBusy.value || loading.value || !activeRows.value.length) return
+  exportBusy.value = true
+  try {
+    const response = await adminExportStudentLogins(activeRows.value.map((row) => row.user_id))
+    if (!response.rows.length) {
+      toast.warning('Không còn học sinh đang hoạt động trong kết quả. Chưa tạo tệp Excel.')
+      return
+    }
+    await downloadStudentLoginExport(response.rows)
+    const notes: string[] = []
+    if (response.skipped_count) notes.push(`${response.skipped_count} hồ sơ không còn ACTIVE đã được bỏ qua`)
+    if (response.missing_email_count) notes.push(`${response.missing_email_count} tài khoản thiếu email Auth, ô email được để trống`)
+    if (notes.length) toast.warning(`Đã xuất ${response.rows.length} tài khoản. ${notes.join('; ')}.`)
+    else toast.success(`Đã xuất ${response.rows.length} tài khoản học sinh.`)
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : 'Không thể xuất tài khoản học sinh.')
+  } finally {
+    exportBusy.value = false
+  }
+}
 
 async function load() {
   selectedUserIds.value = []
@@ -210,7 +234,10 @@ onMounted(load)
     <form class="app-list-search d-flex flex-wrap gap-2 mb-3" role="search" @submit.prevent="load"><label class="visually-hidden" for="student-search">Tìm học sinh</label><input id="student-search" v-model="search" class="form-control flex-grow-1" placeholder="Tìm theo tên hoặc mã học sinh" /><button class="btn btn-outline-primary" type="submit" :disabled="loading">Tìm</button></form>
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
       <p class="mb-0 small text-secondary">{{ activeRows.length }} tài khoản đang hoạt động · {{ selectedUserIds.length }}/{{ MAX_BULK_RESET_TARGETS }} đã chọn</p>
-      <button class="btn btn-outline-primary" type="button" data-testid="bulk-reset-students" :disabled="!selectedUserIds.length || loading" @click="beginBulkReset">Đặt lại mật khẩu đã chọn</button>
+      <div class="d-flex flex-wrap gap-2">
+        <button class="btn btn-outline-secondary" type="button" data-testid="export-student-logins" aria-label="Xuất Excel học sinh đang hoạt động trong kết quả lọc" :aria-busy="exportBusy" :disabled="!activeRows.length || loading || exportBusy" @click="exportActiveStudents">{{ exportBusy ? 'Đang xuất…' : 'Xuất Excel' }}</button>
+        <button class="btn btn-outline-primary" type="button" data-testid="bulk-reset-students" :disabled="!selectedUserIds.length || loading" @click="beginBulkReset">Đặt lại mật khẩu đã chọn</button>
+      </div>
     </div>
     <p v-if="tooManyActiveRows" class="small text-secondary mb-2">Có hơn {{ MAX_BULK_RESET_TARGETS }} học sinh đang hoạt động trong kết quả. Hãy lọc thêm trước khi chọn tất cả.</p>
     <AppState v-if="loading" kind="loading" title="Đang tải danh sách học sinh" message="Thông tin sẽ xuất hiện tại đây sau khi tải xong." />

@@ -99,6 +99,23 @@ export async function adminResetPasswordBulk(userIds: string[]) {
   })
   return { temporary_password: results.some((result) => result.password_reset) ? '12345678' : null, results }
 }
+export async function adminExportStudentLogins(userIds: string[]) {
+  const authLoginEmails: Record<string, string | null> = {
+    'qa-user-1': 'qa-minh-an@hvc-edu.local',
+    'qa-user-2': null,
+  }
+  const active = students.filter((row) => userIds.includes(row.user_id) && row.status === 'ACTIVE')
+  const rows = active.map((row) => ({
+    student_code: row.student_code,
+    full_name: row.full_name,
+    login_email: authLoginEmails[row.user_id] || null,
+  }))
+  return {
+    rows,
+    missing_email_count: rows.filter((row) => !row.login_email).length,
+    skipped_count: userIds.length - active.length,
+  }
+}
 export async function archiveStudent(id: string) { const row = students.find((item) => item.id === id); if (row) row.status = 'ARCHIVED' }
 export async function archiveStaff(id: string) { const row = teachers.find((item) => item.id === id); if (row) row.status = 'ARCHIVED' }
 export async function setAccountStatus(userId: string, status: string) { const row = [...students, ...teachers].find((item) => item.user_id === userId); if (row) row.status = status }

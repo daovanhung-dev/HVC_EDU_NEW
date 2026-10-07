@@ -7,6 +7,7 @@ import StudentsPage from './StudentsPage.vue'
 const mocks = vi.hoisted(() => ({
   getStudents: vi.fn(),
   adminCreateUser: vi.fn(),
+  adminExportStudentLogins: vi.fn(),
   adminResetPassword: vi.fn(),
   adminResetPasswordBulk: vi.fn(),
   archiveStudent: vi.fn(),
@@ -25,12 +26,16 @@ vi.mock('bootstrap', () => ({
 vi.mock('@/services/data-queries', () => ({ getStudents: mocks.getStudents }))
 vi.mock('@/services/commands', () => ({
   adminCreateUser: mocks.adminCreateUser,
+  adminExportStudentLogins: mocks.adminExportStudentLogins,
   adminResetPassword: mocks.adminResetPassword,
   adminResetPasswordBulk: mocks.adminResetPasswordBulk,
   archiveStudent: mocks.archiveStudent,
   setAccountStatus: mocks.setAccountStatus,
   updateStudent: mocks.updateStudent,
 }))
+vi.mock('@/modules/admin/utils/student-account-export', () => ({ downloadStudentLoginExport: vi.fn() }))
+
+import { downloadStudentLoginExport } from '@/modules/admin/utils/student-account-export'
 
 const student = { id: 'qa-student-1', user_id: 'qa-user-1', student_code: 'QA-S-1', full_name: 'Học sinh QA', phone: null, parent_name: null, parent_phone: null, status: 'ACTIVE', created_at: '2026-09-30T08:00:00Z' }
 const secondActiveStudent = { id: 'qa-student-3', user_id: 'qa-user-3', student_code: 'QA-S-3', full_name: 'Học sinh QA hai', phone: null, parent_name: null, parent_phone: null, status: 'ACTIVE', created_at: '2026-09-30T08:00:00Z' }
@@ -70,11 +75,17 @@ describe('StudentsPage dialogs', () => {
   beforeEach(() => {
     mocks.getStudents.mockReset().mockResolvedValue([student])
     mocks.adminCreateUser.mockReset().mockResolvedValue({ temporary_password: 'QA-temp-pass-42' })
+    mocks.adminExportStudentLogins.mockReset().mockResolvedValue({
+      rows: [{ student_code: student.student_code, full_name: student.full_name, login_email: 'qa-login@hvc-edu.local' }],
+      missing_email_count: 0,
+      skipped_count: 0,
+    })
     mocks.adminResetPassword.mockReset().mockResolvedValue({ temporary_password: '12345678' })
     mocks.adminResetPasswordBulk.mockReset().mockResolvedValue({ temporary_password: null, results: [] })
     mocks.archiveStudent.mockReset().mockResolvedValue(undefined)
     mocks.setAccountStatus.mockReset().mockResolvedValue(undefined)
     mocks.updateStudent.mockReset().mockResolvedValue(undefined)
+    vi.mocked(downloadStudentLoginExport).mockReset().mockResolvedValue(undefined)
   })
 
   it('shows a retryable load error instead of a misleading empty list', async () => {
@@ -167,6 +178,72 @@ describe('StudentsPage dialogs', () => {
     expect(wrapper.text()).toContain('0/100 đã chọn')
     expect(getPageOrBody(wrapper, '[data-testid="bulk-reset-students"]').element).toHaveProperty('disabled', true)
     wrapper.unmount()
+  })
+
+  it('exports all active rows in the displayed result independently of checkbox selection', async () => {
+    const exportedRows = [
+      { student_code: student.student_code, full_name: student.full_name, login_email: 'qa-login-1@hvc-edu.local' },
+      { student_code: secondActiveStudent.student_code, full_name: secondActiveStudent.full_name, login_email: 'qa-login-2@gmail.test' },
+    ]
+    mocks.getStudents.mockResolvedValue([student, secondActiveStudent, inactiveStudent])
+    mocks.adminExportStudentLogins.mockResolvedValue({ rows: exportedRows, missing_email_count: 0, skipped_count: 0 })
+    const pinia = createPinia()
+    const wrapper = track(mount(StudentsPage, { global: { plugins: [pinia], stubs: { RouterLink: { template: '<a><slot /></a>' } } } }))
+    await flushPromises()
+
+    await getPageOrBody(wrapper, '[aria-label="Chọn Học sinh QA"]').setValue(true)
+    await getPageOrBody(wrapper, '[data-testid="export-student-logins"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.adminExportStudentLogins).toHaveBeenCalledTimes(1)
+    expect(mocks.adminExportStudentLogins).toHaveBeenCalledWith([student.user_id, secondActiveStudent.user_id])
+    expect(downloadStudentLoginExport).toHaveBeenCalledWith(exportedRows)
+    expect(mocks.adminResetPasswordBulk).not.toHaveBeenCalled()
+    expect(mocks.adminResetPassword).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('1/100 đã chọn')
+    expect(useToastStore(pinia).items.at(-1)?.message).toContain('Đã xuất 2 tài khoản học sinh')
+    wrapper.unmount()
+  })
+
+  it('keeps a blank email and warns when an email is missing or a row became inactive', async () => {
+    mocks.adminExportStudentLogins.mockResolvedValue({
+      rows: [{ student_code: student.student_code, full_name: student.full_name, login_email: null }],
+      missing_email_count: 1,
+      skipped_count: 1,
+    })
+    const pinia = createPinia()
+    const wrapper = track(mount(StudentsPage, { global: { plugins: [pinia], stubs: { RouterLink: { template: '<a><slot /></a>' } } } }))
+    await flushPromises()
+    await getPageOrBody(wrapper, '[data-testid="export-student-logins"]').trigger('click')
+    await flushPromises()
+
+    expect(downloadStudentLoginExport).toHaveBeenCalledWith([
+      { student_code: student.student_code, full_name: student.full_name, login_email: null },
+    ])
+    const warning = useToastStore(pinia).items.at(-1)?.message || ''
+    expect(warning).toContain('1 hồ sơ không còn ACTIVE đã được bỏ qua')
+    expect(warning).toContain('1 tài khoản thiếu email Auth, ô email được để trống')
+    wrapper.unmount()
+  })
+
+  it('disables export when there are no active results and reports endpoint failures', async () => {
+    mocks.getStudents.mockResolvedValue([inactiveStudent])
+    const wrapper = mountPage()
+    await flushPromises()
+    expect(getPageOrBody(wrapper, '[data-testid="export-student-logins"]').element).toHaveProperty('disabled', true)
+    expect(mocks.adminExportStudentLogins).not.toHaveBeenCalled()
+    wrapper.unmount()
+
+    const pinia = createPinia()
+    mocks.getStudents.mockResolvedValue([student])
+    mocks.adminExportStudentLogins.mockRejectedValueOnce(new Error('QA export failure'))
+    const errorWrapper = track(mount(StudentsPage, { global: { plugins: [pinia], stubs: { RouterLink: { template: '<a><slot /></a>' } } } }))
+    await flushPromises()
+    await getPageOrBody(errorWrapper, '[data-testid="export-student-logins"]').trigger('click')
+    await flushPromises()
+    expect(useToastStore(pinia).items.at(-1)?.message).toContain('QA export failure')
+    expect(downloadStudentLoginExport).not.toHaveBeenCalled()
+    errorWrapper.unmount()
   })
 
   it('sends an optional initial password without showing it as a generated password', async () => {

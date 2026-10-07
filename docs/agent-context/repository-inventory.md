@@ -107,6 +107,8 @@
 | frontend/src/modules/admin/pages/StudentDetailPage.vue | Frontend / Admin | Vue SFC |
 | frontend/src/modules/admin/pages/StudentsPage.test.ts | Frontend / Admin | TypeScript |
 | frontend/src/modules/admin/pages/StudentsPage.vue | Frontend / Admin | Vue SFC |
+| frontend/src/modules/admin/utils/student-account-export.test.ts | Frontend / Admin | TypeScript |
+| frontend/src/modules/admin/utils/student-account-export.ts | Frontend / Admin | TypeScript |
 | frontend/src/modules/auth/pages/ChangePasswordPage.test.ts | Frontend / Đăng nhập | TypeScript |
 | frontend/src/modules/auth/pages/ChangePasswordPage.vue | Frontend / Đăng nhập | Vue SFC |
 | frontend/src/modules/auth/pages/LoginPage.test.ts | Frontend / Đăng nhập | TypeScript |
@@ -166,6 +168,10 @@
 | supabase/functions/_shared/response.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/admin-account-status/index.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/admin-create-user/index.ts | Supabase / Edge Functions | TypeScript |
+| supabase/functions/admin-export-student-logins/config.toml | Supabase / Edge Functions | TOML/config |
+| supabase/functions/admin-export-student-logins/handler.test.ts | Supabase / Edge Functions | TypeScript |
+| supabase/functions/admin-export-student-logins/handler.ts | Supabase / Edge Functions | TypeScript |
+| supabase/functions/admin-export-student-logins/index.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/admin-reset-password-bulk/config.toml | Supabase / Edge Functions | TOML/config |
 | supabase/functions/admin-reset-password-bulk/handler.test.ts | Supabase / Edge Functions | TypeScript |
 | supabase/functions/admin-reset-password-bulk/handler.ts | Supabase / Edge Functions | TypeScript |
@@ -251,4 +257,4 @@
 | supabase/tests/session_learning_commands.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/timesheet_workflow.test.sql | Supabase / kiểm thử SQL | SQL |
 
-Tổng: 244 đường dẫn có trong inventory.
+Tổng: 250 đường dẫn có trong inventory.

@@ -38,6 +38,25 @@ export function adminResetPasswordBulk(user_ids: string[]) {
   return invokeFunction<{ user_ids: string[] }, AdminResetPasswordBulkResponse>('admin-reset-password-bulk', { user_ids })
 }
 
+export interface AdminExportStudentLoginsRow {
+  student_code: string
+  full_name: string
+  login_email: string | null
+}
+
+export interface AdminExportStudentLoginsResponse {
+  rows: AdminExportStudentLoginsRow[]
+  missing_email_count: number
+  skipped_count: number
+}
+
+export function adminExportStudentLogins(user_ids: string[]) {
+  return invokeFunction<{ user_ids: string[] }, AdminExportStudentLoginsResponse>(
+    'admin-export-student-logins',
+    { user_ids },
+  )
+}
+
 export function changeRequiredPassword(new_password: string) {
   return invokeFunction<{ new_password: string }, { changed: boolean }>('student-required-password-change', { new_password })
 }
