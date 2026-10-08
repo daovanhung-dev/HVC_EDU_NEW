@@ -99,3 +99,47 @@ export function normalizeAppError(error: unknown, fallback = 'Không thể hoàn
 export function userErrorMessage(error: unknown, fallback: string): string {
   return normalizeAppError(error, fallback).message
 }
+
+const deleteRpcMessages: Record<string, string> = {
+  '23503': 'Không thể xóa vì cơ sở dữ liệu còn phát hiện dữ liệu liên kết chưa được xử lý. Giao dịch đã được hoàn tác.',
+  '42501': 'Tài khoản hiện không đủ quyền xóa buổi học trong tháng.',
+  PGRST202: 'Máy chủ chưa nhận diện RPC xóa tháng. Hãy tải lại trang; nếu lỗi còn, gửi mã lỗi này để kiểm tra cấu hình backend.',
+  PGRST203: 'Máy chủ đang nhận diện RPC xóa tháng không nhất quán. Hãy gửi mã lỗi này để kiểm tra cấu hình backend.',
+  '40P01': 'Có xung đột đồng thời với thao tác lịch khác. Giao dịch xóa chưa hoàn tất; hãy tải lại lịch rồi thử lại.',
+  '55P03': 'Lịch đang được cập nhật. Giao dịch xóa chưa hoàn tất; hãy tải lại lịch rồi thử lại.',
+  '57014': 'Yêu cầu xóa bị máy chủ dừng trước khi hoàn tất. Hãy tải lại lịch để xác nhận trạng thái rồi thử lại.',
+}
+
+function safeDiagnosticCode(code: string): string | undefined {
+  return /^[A-Z0-9]{5}$/.test(code) || /^PGRST\d{3}$/.test(code) ? code : undefined
+}
+
+/** Produces a safe, actionable message for a failed destructive database RPC. */
+export function deleteRpcErrorMessage(error: unknown, fallback: string): string {
+  const normalized = normalizeAppError(error, fallback)
+  const code = normalized.code
+  if (!code) {
+    const status = asErrorLike(error).status
+    const safeStatus = typeof status === 'number' && Number.isInteger(status) && status >= 400 && status <= 599
+      ? status
+      : undefined
+    return safeStatus ? `${normalized.message} (HTTP ${safeStatus}).` : normalized.message
+  }
+
+  if (normalized.message !== fallback && !safeDiagnosticCode(code)) return normalized.message
+
+  let message = deleteRpcMessages[code]
+  if (!message && code.startsWith('23')) {
+    message = 'Cơ sở dữ liệu từ chối xóa do một ràng buộc dữ liệu. Giao dịch đã được hoàn tác.'
+  } else if (!message && code.startsWith('40')) {
+    message = 'Giao dịch xóa bị gián đoạn do xung đột đồng thời. Hãy tải lại lịch rồi thử lại.'
+  } else if (!message && code.startsWith('PGRST')) {
+    message = 'API chưa hoàn tất yêu cầu xóa lịch. Hãy tải lại trang; nếu lỗi còn, gửi mã lỗi này để kiểm tra backend.'
+  } else if (!message && safeDiagnosticCode(code)) {
+    message = fallback
+  }
+
+  if (!message) return normalized.message
+  const diagnosticCode = safeDiagnosticCode(code)
+  return diagnosticCode ? `${message} (mã lỗi ${diagnosticCode}).` : message
+}

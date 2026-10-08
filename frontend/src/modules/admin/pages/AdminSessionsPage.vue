@@ -27,7 +27,7 @@ import {
 import type { ClassDetailRow, ClassScheduleRow, SessionRow } from '@/shared/types/domain'
 import { formatDateTime } from '@/shared/utils/format'
 import { canSelectClassTeacher, getClassTeacherIds, MAX_CLASS_TEACHERS, selectedTeacherCount } from '@/shared/utils/class-teacher-limit'
-import { userErrorMessage } from '@/shared/utils/errors'
+import { deleteRpcErrorMessage, userErrorMessage } from '@/shared/utils/errors'
 import { useToastStore } from '@/stores/toast.store'
 import FormModal from '@/app/components/FormModal.vue'
 import ConfirmModal from '@/app/components/ConfirmModal.vue'
@@ -87,6 +87,7 @@ const scheduleFormBusy = ref(false)
 const scheduleFormDirty = ref(false)
 const confirmOpen = ref(false)
 const confirmBusy = ref(false)
+const deleteError = ref('')
 const deletePreviewBusy = ref(false)
 const templateEditorOpen = ref(false)
 const templatePreviewBusy = ref(false)
@@ -851,6 +852,7 @@ async function previewAndConfirmDeleteMonthSessions() {
   if (deletePreviewBusy.value || loading.value) return
   deletePreviewBusy.value = true
   errorMessage.value = ''
+  deleteError.value = ''
   const monthStart = displayedMonthStart.value
   try {
     const preview = await previewDeleteSessionsForMonth(monthStart)
@@ -893,6 +895,7 @@ async function previewAndConfirmDeleteMonthSessions() {
 async function deleteMonthSessionsNow() {
   try {
     const result = await deleteSessionsForMonth(pendingDeleteMonthStart.value)
+    deleteError.value = ''
     confirmBusy.value = false
     confirmOpen.value = false
     selected.value = null
@@ -908,7 +911,8 @@ async function deleteMonthSessionsNow() {
     }
     toast.success('Đã xóa vĩnh viễn ' + result.deleted_sessions + ' buổi học trong tháng và ' + result.deleted_schedules + ' mẫu lịch lặp của trung tâm.')
   } catch (error) {
-    errorMessage.value = userErrorMessage(error, 'Không thể xóa lịch.')
+    errorMessage.value = deleteRpcErrorMessage(error, 'Không thể xóa lịch.')
+    deleteError.value = errorMessage.value
     toast.error(errorMessage.value)
     confirmBusy.value = false
   }
@@ -968,6 +972,7 @@ async function runConfirmation() {
   if (confirmBusy.value) return
   confirmBusy.value = true
   errorMessage.value = ''
+  if (confirmActionType.value === 'delete-month-sessions') deleteError.value = ''
   try {
     if (confirmActionType.value === 'replace-month-template') await replaceMonthTemplateNow()
     else if (confirmActionType.value === 'archive-schedule') await archiveScheduleNow()
@@ -1160,7 +1165,7 @@ watch(sessionFormIsBackdated, (isBackdated) => {
     </form>
     <div v-if="errorMessage" class="alert alert-danger mt-3 mb-0" role="alert">{{ errorMessage }}</div>
   </FormModal>
-  <ConfirmModal v-model="confirmOpen" v-bind="confirmDetails" :busy="confirmBusy" @confirm="runConfirmation" />
+  <ConfirmModal v-model="confirmOpen" v-bind="confirmDetails" :busy="confirmBusy" :error="confirmActionType === 'delete-month-sessions' ? deleteError : ''" @confirm="runConfirmation" />
 
   <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">

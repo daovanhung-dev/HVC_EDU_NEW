@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeAppError } from './errors'
+import { deleteRpcErrorMessage, normalizeAppError } from './errors'
 
 describe('error normalization', () => {
   it('maps a forbidden domain error to a safe Vietnamese message', () => {
@@ -56,5 +56,39 @@ describe('error normalization', () => {
 
   it('uses a contextual fallback for unknown errors', () => {
     expect(normalizeAppError(new Error('secret database detail'), 'Không thể tải dữ liệu.').message).toBe('Không thể tải dữ liệu.')
+  })
+
+  it('explains a deletion blocked by a linked-row constraint without exposing database details', () => {
+    const result = deleteRpcErrorMessage({
+      code: '23503',
+      message: 'update or delete on table sessions violates a foreign key constraint',
+      details: 'Key contains QA-SENSITIVE-INTERNAL-VALUE',
+      hint: 'internal database hint',
+    }, 'Không thể xóa lịch.')
+
+    expect(result).toContain('dữ liệu liên kết chưa được xử lý')
+    expect(result).toContain('23503')
+    expect(result).not.toContain('QA-SENSITIVE-INTERNAL-VALUE')
+    expect(result).not.toContain('internal database hint')
+  })
+
+  it('maps missing RPC and transient transaction errors to actionable delete messages', () => {
+    expect(deleteRpcErrorMessage({ code: 'PGRST202', message: 'function unavailable' }, 'Không thể xóa lịch.'))
+      .toContain('chưa nhận diện RPC xóa tháng')
+    expect(deleteRpcErrorMessage({ code: '40P01', message: 'deadlock detected' }, 'Không thể xóa lịch.'))
+      .toContain('xung đột đồng thời')
+  })
+
+  it('adds only a safe diagnostic code to otherwise unknown delete errors', () => {
+    const result = deleteRpcErrorMessage({ code: 'P0001', message: 'internal raw error', details: 'private value' }, 'Không thể xóa lịch.')
+
+    expect(result).toBe('Không thể xóa lịch. (mã lỗi P0001).')
+    expect(result).not.toContain('internal raw error')
+    expect(result).not.toContain('private value')
+  })
+
+  it('includes only a valid HTTP status when a query failure has no backend code', () => {
+    expect(deleteRpcErrorMessage({ status: 503 }, 'Không thể xóa lịch.')).toContain('HTTP 503')
+    expect(deleteRpcErrorMessage({ status: 900 }, 'Không thể xóa lịch.')).not.toContain('HTTP 900')
   })
 })

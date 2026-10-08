@@ -7,10 +7,11 @@ withDefaults(defineProps<{
   message: string
   itemName?: string
   warning?: string
+  error?: string
   confirmLabel?: string
   busy?: boolean
   destructive?: boolean
-}>(), { itemName: '', warning: '', confirmLabel: 'Xác nhận', busy: false, destructive: false })
+}>(), { itemName: '', warning: '', error: '', confirmLabel: 'Xác nhận', busy: false, destructive: false })
 
 defineEmits<{
   'update:modelValue': [value: boolean]
@@ -24,6 +25,7 @@ defineEmits<{
     <div class="app-confirm">
       <p>{{ message }}</p>
       <div v-if="itemName" class="app-confirm__item">{{ itemName }}</div>
+      <div v-if="error" class="alert alert-danger mt-3 mb-0" role="alert">{{ error }}</div>
       <p v-if="warning" class="app-confirm__warning">{{ warning }}</p>
     </div>
     <template #footer>

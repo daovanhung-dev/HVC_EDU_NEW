@@ -381,7 +381,11 @@ describe('AdminSessionsPage calendar', () => {
   })
 
   it('keeps confirmation open and reports a delete failure', async () => {
-    mockState.deleteSessionsForMonth.mockRejectedValue(new Error('QA delete failure'))
+    mockState.deleteSessionsForMonth.mockRejectedValue({
+      code: '23503',
+      message: 'foreign key constraint prevents delete',
+      details: 'QA-INTERNAL-ROW-VALUE',
+    })
     const wrapper = mountPage()
     await flushPromises()
 
@@ -391,8 +395,12 @@ describe('AdminSessionsPage calendar', () => {
     await confirmation.get('.btn-danger').trigger('click')
     await flushPromises()
 
-    expect(findAllPageOrBody(wrapper, '.app-modal').some((modal) => modal.text().includes('XÓA VĨNH VIỄN'))).toBe(true)
-    expect(mockState.toastError).toHaveBeenCalledWith('Không thể xóa lịch.')
+    const openConfirmation = findAllPageOrBody(wrapper, '.app-modal').find((modal) => modal.text().includes('XÓA VĨNH VIỄN'))
+    expect(openConfirmation).toBeDefined()
+    expect(openConfirmation?.find('.app-confirm [role="alert"]').text()).toContain('dữ liệu liên kết chưa được xử lý')
+    expect(openConfirmation?.find('.app-confirm [role="alert"]').text()).toContain('23503')
+    expect(openConfirmation?.find('.app-confirm [role="alert"]').text()).not.toContain('QA-INTERNAL-ROW-VALUE')
+    expect(mockState.toastError).toHaveBeenCalledWith(expect.stringContaining('23503'))
     expect(mockState.getMySessions).toHaveBeenCalledTimes(1)
   })
 
