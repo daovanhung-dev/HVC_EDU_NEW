@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.store'
 import { useAppErrorStore } from '@/stores/app-error.store'
@@ -11,16 +11,30 @@ const password = ref('')
 const confirmPassword = ref('')
 const message = ref('')
 const errorMessage = ref('')
+const instructions = computed(() => {
+  if (auth.isStudent && auth.forcePasswordChange) {
+    return 'Bạn cần đổi mật khẩu tạm trước khi xem lịch học và dữ liệu học tập.'
+  }
+  if ((auth.isStudent || auth.isTeacher) && auth.forcePasswordChange) {
+    return 'Hãy đổi mật khẩu tạm để tiếp tục sử dụng ứng dụng.'
+  }
+  return 'Bạn có thể cập nhật mật khẩu khi cần.'
+})
 
 async function submit() {
   errorMessage.value = ''
   message.value = ''
   if (password.value.length < 8) return void (errorMessage.value = 'Mật khẩu phải có ít nhất 8 ký tự.')
   if (password.value !== confirmPassword.value) return void (errorMessage.value = 'Hai mật khẩu không khớp.')
+  const isRequiredChange = (auth.isStudent || auth.isTeacher) && auth.forcePasswordChange
   try {
     await auth.updatePassword(password.value)
+    if (isRequiredChange && auth.forcePasswordChange) {
+      errorMessage.value = 'Chưa thể xác nhận yêu cầu đổi mật khẩu đã hoàn tất nên chưa mở quyền xem lịch học. Vui lòng thử lại hoặc liên hệ quản trị viên.'
+      return
+    }
     message.value = 'Đổi mật khẩu thành công.'
-    await router.push('/dashboard')
+    await router.push(auth.isStudent ? '/student/schedule' : '/dashboard')
   } catch (error) {
     const normalized = appErrors.report(error, 'Không thể đổi mật khẩu. Vui lòng thử lại sau.')
     errorMessage.value = normalized.message
@@ -32,7 +46,7 @@ async function submit() {
   <div class="card border-0 shadow-sm">
     <div class="card-body p-4 p-lg-5">
       <h2 class="h5 mb-1">Đổi mật khẩu</h2>
-      <p class="text-secondary small mb-4">{{ (auth.isStudent || auth.isTeacher) && auth.forcePasswordChange ? 'Hãy đổi mật khẩu tạm để tiếp tục sử dụng ứng dụng.' : 'Bạn có thể cập nhật mật khẩu khi cần.' }}</p>
+      <p class="text-secondary small mb-4">{{ instructions }}</p>
       <div v-if="errorMessage" class="alert alert-danger small">{{ errorMessage }}</div>
       <div v-if="message" class="alert alert-success small">{{ message }}</div>
       <form @submit.prevent="submit">

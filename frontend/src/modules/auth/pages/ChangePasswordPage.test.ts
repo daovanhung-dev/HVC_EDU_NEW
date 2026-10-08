@@ -22,9 +22,9 @@ describe('ChangePasswordPage', () => {
     mocks.report.mockImplementation((error: unknown) => ({ message: error instanceof Error ? error.message : 'QA password failure' }))
   })
 
-  it('explains the mandatory change for a student using the reset password', () => {
+  it('explains that students must change the temporary password before seeing their schedule', () => {
     const wrapper = mount(ChangePasswordPage)
-    expect(wrapper.text()).toContain('Hãy đổi mật khẩu tạm để tiếp tục sử dụng ứng dụng.')
+    expect(wrapper.text()).toContain('Bạn cần đổi mật khẩu tạm trước khi xem lịch học và dữ liệu học tập.')
   })
 
   it('explains the mandatory change for a teacher using the reset password', () => {
@@ -50,6 +50,9 @@ describe('ChangePasswordPage', () => {
   })
 
   it('updates the password then routes back to the app', async () => {
+    mocks.auth.updatePassword.mockImplementationOnce(async () => {
+      mocks.auth.forcePasswordChange = false
+    })
     const wrapper = mount(ChangePasswordPage)
     await wrapper.get('#new-password').setValue('QA-NewPassword-123')
     await wrapper.get('#confirm-password').setValue('QA-NewPassword-123')
@@ -57,7 +60,19 @@ describe('ChangePasswordPage', () => {
     await flushPromises()
 
     expect(mocks.auth.updatePassword).toHaveBeenCalledWith('QA-NewPassword-123')
-    expect(mocks.push).toHaveBeenCalledWith('/dashboard')
+    expect(mocks.push).toHaveBeenCalledWith('/student/schedule')
+    expect(wrapper.text()).toContain('Đổi mật khẩu thành công.')
+  })
+
+  it('keeps a forced-change student on the form when the refreshed profile still requires a change', async () => {
+    const wrapper = mount(ChangePasswordPage)
+    await wrapper.get('#new-password').setValue('QA-NewPassword-123')
+    await wrapper.get('#confirm-password').setValue('QA-NewPassword-123')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Chưa thể xác nhận yêu cầu đổi mật khẩu đã hoàn tất nên chưa mở quyền xem lịch học.')
+    expect(mocks.push).not.toHaveBeenCalled()
   })
 
   it('keeps the student on the password form when the secure update fails', async () => {
