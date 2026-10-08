@@ -22,8 +22,8 @@ const mockState = vi.hoisted(() => ({
   removeTeacherFromClassSchedule: vi.fn(),
   setClassScheduleStatus: vi.fn(),
   updateClassSchedule: vi.fn(),
-  previewAllSchedulesReset: vi.fn(),
-  resetAllSchedules: vi.fn(),
+  previewScheduleResetForMonth: vi.fn(),
+  resetScheduleForMonth: vi.fn(),
   toastSuccess: vi.fn(),
   toastInfo: vi.fn(),
   toastError: vi.fn(),
@@ -48,8 +48,8 @@ vi.mock('@/services/commands', () => ({
   removeTeacherFromClassSchedule: mockState.removeTeacherFromClassSchedule,
   setClassScheduleStatus: mockState.setClassScheduleStatus,
   updateClassSchedule: mockState.updateClassSchedule,
-  previewAllSchedulesReset: mockState.previewAllSchedulesReset,
-  resetAllSchedules: mockState.resetAllSchedules,
+  previewScheduleResetForMonth: mockState.previewScheduleResetForMonth,
+  resetScheduleForMonth: mockState.resetScheduleForMonth,
 }))
 
 vi.mock('bootstrap', () => ({
@@ -165,8 +165,17 @@ describe('AdminSessionsPage calendar', () => {
     mockState.removeTeacherFromClassSchedule.mockReset().mockResolvedValue(undefined)
     mockState.setClassScheduleStatus.mockReset().mockResolvedValue({})
     mockState.updateClassSchedule.mockReset().mockResolvedValue({})
-    mockState.previewAllSchedulesReset.mockReset().mockResolvedValue({ schedule_count: 2, session_count: 4 })
-    mockState.resetAllSchedules.mockReset().mockResolvedValue({ archived_schedules: 2, cancelled_sessions: 4 })
+    mockState.previewScheduleResetForMonth.mockReset().mockResolvedValue({
+      schedule_count: 2,
+      recurring_session_count: 3,
+      month_manual_session_count: 1,
+      protected_session_count: 0,
+    })
+    mockState.resetScheduleForMonth.mockReset().mockResolvedValue({
+      deleted_schedules: 2,
+      deleted_recurring_sessions: 3,
+      deleted_month_manual_sessions: 1,
+    })
     mockState.toastSuccess.mockReset()
     mockState.toastInfo.mockReset()
     mockState.toastError.mockReset()
@@ -228,30 +237,74 @@ describe('AdminSessionsPage calendar', () => {
     expect(wrapper.find('.session-list').text()).not.toContain('Buổi đã hủy QA')
   })
 
-  it('previews a global reset, supports cancel, and reports the actual counts after confirmation', async () => {
+  it('explains when the selected period contains only sessions hidden by the history filter', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-08T12:00:00+07:00'))
+    const today = getBusinessDateKey(new Date())
+    mockState.getMySessions.mockResolvedValue([
+      makeSession('qa-session-hidden-past', 'Buổi cũ QA', '10:00', '12:00', addCalendarDays(today, -1)),
+      { ...makeSession('qa-session-hidden-cancelled', 'Buổi hủy QA', '10:00', '12:00', addCalendarDays(today, 1)), status: 'CANCELLED' as const },
+    ])
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.find('.session-calendar-empty').text()).toContain('Không có buổi học nào hiển thị trong kỳ này. 2 buổi cũ hoặc đã hủy đang ẩn.')
+    await clickButtonWithText(wrapper, 'Hiện lịch sử')
+    expect(wrapper.findAll('.calendar-event-name').map((event) => event.text())).toEqual(['Buổi cũ QA', 'Buổi hủy QA'])
+  })
+
+  it('explains when sessions in the selected period are hidden by the class filter', async () => {
+    mockState.route.query.class_id = 'qa-class-2'
+    mockState.getMySessions.mockResolvedValue([makeSession('qa-session-other-class', 'Lớp Toán QA')])
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.find('.session-calendar-empty').text()).toContain('1 buổi ở lớp khác đang bị bộ lọc lớp ẩn.')
+  })
+
+  it('previews a month-scoped deletion, supports cancel, and reports the deleted counts', async () => {
     mockState.route.query.class_id = 'qa-class-1'
     const wrapper = mountPage()
     await flushPromises()
 
-    await clickButtonWithText(wrapper, 'Đặt lại tất cả lịch')
-    expect(mockState.previewAllSchedulesReset).toHaveBeenCalledOnce()
-    const confirmation = findAllPageOrBody(wrapper, '.app-modal').find((modal) => modal.text().includes('không phụ thuộc lớp đang lọc'))
-    if (!confirmation) throw new Error('Global reset confirmation dialog not found')
-    expect(confirmation.text()).toContain('2 khung lịch lặp · 4 buổi học')
-    expect(confirmation.text()).toContain('Buổi đang diễn ra hoặc đã hoàn tất không bị thay đổi')
+    const monthStart = `${getBusinessDateKey(new Date()).slice(0, 7)}-01`
+    await clickButtonWithText(wrapper, 'Xóa tất cả lịch')
+    expect(mockState.previewScheduleResetForMonth).toHaveBeenCalledWith(monthStart)
+    const confirmation = findAllPageOrBody(wrapper, '.app-modal').find((modal) => modal.text().includes('không phụ thuộc bộ lọc lớp'))
+    if (!confirmation) throw new Error('Month reset confirmation dialog not found')
+    expect(confirmation.text()).toContain(formatBusinessMonth(monthStart))
+    expect(confirmation.text()).toContain('2 khung lịch lặp · 3 buổi từ lịch lặp · 1 buổi riêng trong tháng')
+    expect(confirmation.text()).toContain('Buổi đã hủy, đang diễn ra hoặc hoàn tất')
     await confirmation.get('.btn-outline-secondary').trigger('click')
     await flushPromises()
-    expect(mockState.resetAllSchedules).not.toHaveBeenCalled()
+    expect(mockState.resetScheduleForMonth).not.toHaveBeenCalled()
 
-    await clickButtonWithText(wrapper, 'Đặt lại tất cả lịch')
-    const secondConfirmation = findAllPageOrBody(wrapper, '.app-modal').find((modal) => modal.text().includes('không phụ thuộc lớp đang lọc'))
-    if (!secondConfirmation) throw new Error('Global reset confirmation dialog not found after reopening')
+    await clickButtonWithText(wrapper, 'Xóa tất cả lịch')
+    const secondConfirmation = findAllPageOrBody(wrapper, '.app-modal').find((modal) => modal.text().includes('không phụ thuộc bộ lọc lớp'))
+    if (!secondConfirmation) throw new Error('Month reset confirmation dialog not found after reopening')
     await secondConfirmation.get('.btn-danger').trigger('click')
     await flushPromises()
 
-    expect(mockState.resetAllSchedules).toHaveBeenCalledOnce()
+    expect(mockState.resetScheduleForMonth).toHaveBeenCalledWith(monthStart)
     expect(mockState.getMySessions).toHaveBeenCalledTimes(2)
-    expect(mockState.toastSuccess).toHaveBeenCalledWith('Đã lưu trữ 2 khung lịch lặp và hủy 4 buổi học. Lịch sử vẫn được giữ.')
+    expect(mockState.toastSuccess).toHaveBeenCalledWith('Đã xóa 2 khung lịch lặp, 3 buổi từ lịch lặp và 1 buổi riêng trong tháng.')
+  })
+
+  it('blocks confirmation when the reset preview finds scheduled sessions with linked history', async () => {
+    mockState.previewScheduleResetForMonth.mockResolvedValue({
+      schedule_count: 1,
+      recurring_session_count: 2,
+      month_manual_session_count: 0,
+      protected_session_count: 1,
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await clickButtonWithText(wrapper, 'Xóa tất cả lịch')
+
+    expect(mockState.resetScheduleForMonth).not.toHaveBeenCalled()
+    expect(wrapper.find('.app-modal').exists()).toBe(false)
+    expect(pageAndBodyText(wrapper)).toContain('có 1 buổi SCHEDULED đã gắn dữ liệu điểm danh')
   })
 
   it('opens the selected session details and displays the class name', async () => {
@@ -324,15 +377,15 @@ describe('AdminSessionsPage calendar', () => {
     mockState.getMySessions.mockResolvedValue([])
     const emptyPage = mountPage()
     await flushPromises()
-    expect(emptyPage.text()).toContain('Chưa có buổi học.')
+    expect(emptyPage.text()).toContain('Chưa có buổi học nào.')
     await clickButtonWithText(emptyPage, 'Danh sách')
-    expect(emptyPage.find('.session-list').text()).toContain('Chưa có buổi học.')
+    expect(emptyPage.find('.session-list').text()).toContain('Chưa có buổi học nào.')
 
     mockState.getMySessions.mockRejectedValue(new Error('Không thể kết nối.'))
     const failedPage = mountPage()
     await flushPromises()
     expect(failedPage.text()).toContain('Không thể kết nối.')
-    expect(failedPage.text()).not.toContain('Chưa có buổi học.')
+    expect(failedPage.text()).not.toContain('Chưa có buổi học nào.')
     await clickButtonWithText(failedPage, 'Danh sách')
     expect(failedPage.find('.app-state--error').text()).toContain('Không thể kết nối.')
     expect(failedPage.find('.session-list').exists()).toBe(false)
@@ -346,14 +399,14 @@ describe('AdminSessionsPage calendar', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('Đang tải buổi học…')
-    expect(wrapper.text()).not.toContain('Chưa có buổi học.')
+    expect(wrapper.text()).not.toContain('Chưa có buổi học nào.')
     await clickButtonWithText(wrapper, 'Danh sách')
     expect(wrapper.text()).toContain('Đang tải buổi học…')
-    expect(wrapper.text()).not.toContain('Chưa có buổi học.')
+    expect(wrapper.text()).not.toContain('Chưa có buổi học nào.')
 
     resolveSessions([])
     await flushPromises()
-    expect(wrapper.text()).toContain('Chưa có buổi học.')
+    expect(wrapper.text()).toContain('Chưa có buổi học nào.')
   })
 
   it('keeps class choices available when the sessions request fails', async () => {
@@ -537,6 +590,22 @@ describe('AdminSessionsPage calendar', () => {
 
     expect(wrapper.find('[role="alert"]').text()).toContain('Buổi học đã được tạo nhưng chưa xuất hiện sau khi tải lại.')
     expect(wrapper.text()).not.toContain('Chưa có buổi học.')
+  })
+
+  it('reports that creation succeeded when the refresh request fails', async () => {
+    mockState.getMySessions.mockResolvedValueOnce([]).mockRejectedValueOnce(new Error('Không thể kết nối sau khi tạo.'))
+    const wrapper = mountPage()
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Thêm buổi')
+    await getPageOrBody(wrapper, '#session-class').setValue('qa-class-1')
+    await getPageOrBody(wrapper, '#session-date').setValue(addCalendarDays(getBusinessDateKey(new Date()), 2))
+    await flushPromises()
+    await chooseTeacher(wrapper, 'session-teachers', 'qa-teacher-1')
+    await getPageOrBody(wrapper, '.session-create-form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.find('.app-state--error').text()).toContain('Buổi học đã được tạo nhưng không tải lại được danh sách.')
+    expect(wrapper.text()).not.toContain('Chưa có buổi học nào.')
   })
 
   it('creates past sessions and still rejects reversed manual session times', async () => {

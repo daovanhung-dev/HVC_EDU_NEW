@@ -7,8 +7,8 @@ import {
   createClassSchedule,
   createManualSession,
   removeTeacherFromClassSchedule,
-  previewAllSchedulesReset,
-  resetAllSchedules,
+  previewScheduleResetForMonth,
+  resetScheduleForMonth,
   setClassScheduleStatus,
   updateClassSchedule,
   updateSessionOccurrence,
@@ -86,7 +86,7 @@ const confirmBusy = ref(false)
 const resetPreviewBusy = ref(false)
 const showHistory = ref(false)
 const confirmDetails = ref({ title: '', message: '', itemName: '', warning: '', confirmLabel: 'Xác nhận', destructive: false })
-const confirmActionType = ref<'copy-week' | 'archive-schedule' | 'cancel-session' | 'reset-all-schedules' | ''>('')
+const confirmActionType = ref<'copy-week' | 'archive-schedule' | 'cancel-session' | 'delete-schedules' | ''>('')
 const pendingSchedule = ref<ClassScheduleRow | null>(null)
 const editingScheduleId = ref('')
 const teacherSelections = ref<Record<string, string>>({})
@@ -136,18 +136,56 @@ function fromLocalInput(value: string) {
   return new Date(`${value}:00+07:00`).toISOString()
 }
 
-const visibleSessions = computed(() => {
-  const classSessions = selectedClassId.value
+const classSessions = computed(() => selectedClassId.value
     ? sessions.value.filter((session) => session.class_id === selectedClassId.value)
-    : sessions.value
-  if (showHistory.value) return classSessions
-  return classSessions.filter((session) => session.status !== 'CANCELLED'
-    && getBusinessDateKey(session.scheduled_start_at) >= todayDateKey.value)
-})
+    : sessions.value)
+const sessionsHiddenByClassFilter = computed(() => selectedClassId.value
+  ? sessions.value.filter((session) => session.class_id !== selectedClassId.value)
+  : [])
+const isHiddenByHistoryFilter = (session: SessionRow) => session.status === 'CANCELLED'
+  || getBusinessDateKey(session.scheduled_start_at) < todayDateKey.value
+const hiddenHistorySessions = computed(() => classSessions.value.filter(isHiddenByHistoryFilter))
+const visibleSessions = computed(() => showHistory.value
+  ? classSessions.value
+  : classSessions.value.filter((session) => !isHiddenByHistoryFilter(session)))
 const visibleSessionsByDate = computed(() => groupSessionsByBusinessDate(visibleSessions.value))
 const monthDateKeys = computed(() => getMonthGridDateKeys(calendarAnchorDate.value))
 const weekDateKeys = computed(() => getWeekDateKeys(calendarAnchorDate.value))
 const visibleDateKeys = computed(() => viewMode.value === 'week' ? weekDateKeys.value : monthDateKeys.value)
+const sessionDateKeysInView = computed(() => new Set(visibleDateKeys.value))
+const sessionsInView = computed(() => classSessions.value.filter((session) => sessionDateKeysInView.value.has(getBusinessDateKey(session.scheduled_start_at))))
+const visibleSessionsInView = computed(() => visibleSessions.value.filter((session) => sessionDateKeysInView.value.has(getBusinessDateKey(session.scheduled_start_at))))
+const hiddenHistorySessionsInView = computed(() => sessionsInView.value.filter(isHiddenByHistoryFilter))
+const sessionsHiddenByClassFilterInView = computed(() => sessionsHiddenByClassFilter.value.filter((session) => sessionDateKeysInView.value.has(getBusinessDateKey(session.scheduled_start_at))))
+const listEmptyMessage = computed(() => {
+  if (classSessions.value.length) {
+    return hiddenHistorySessions.value.length
+      ? `Không có buổi sắp tới. ${hiddenHistorySessions.value.length} buổi cũ hoặc đã hủy đang ẩn.`
+      : 'Chưa có buổi học trong danh sách.'
+  }
+  if (selectedClassId.value && sessionsHiddenByClassFilter.value.length) {
+    return `Lớp đang chọn chưa có buổi học. ${sessionsHiddenByClassFilter.value.length} buổi ở lớp khác đang bị bộ lọc lớp ẩn.`
+  }
+  return selectedClassId.value ? 'Lớp đang chọn chưa có buổi học.' : 'Chưa có buổi học nào.'
+})
+const calendarEmptyMessage = computed(() => {
+  const hiddenReasons = [
+    hiddenHistorySessionsInView.value.length
+      ? `${hiddenHistorySessionsInView.value.length} buổi cũ hoặc đã hủy đang ẩn`
+      : '',
+    sessionsHiddenByClassFilterInView.value.length
+      ? `${sessionsHiddenByClassFilterInView.value.length} buổi ở lớp khác đang bị bộ lọc lớp ẩn`
+      : '',
+  ].filter(Boolean)
+  if (hiddenReasons.length) {
+    return `Không có buổi học nào hiển thị trong kỳ này. ${hiddenReasons.join('; ')}.`
+  }
+  if (visibleSessions.value.length) return 'Không có buổi học trong khoảng thời gian này.'
+  if (hiddenHistorySessions.value.length) {
+    return `Không có buổi sắp tới trong kỳ này. ${hiddenHistorySessions.value.length} buổi cũ hoặc đã hủy đang ẩn.`
+  }
+  return listEmptyMessage.value
+})
 const agendaSessions = computed(() => {
   const dates = new Set(visibleDateKeys.value)
   return visibleSessions.value.filter((session) => dates.has(getBusinessDateKey(session.scheduled_start_at)))
@@ -157,6 +195,7 @@ const periodTitle = computed(() => viewMode.value === 'month'
   ? formatBusinessMonth(calendarAnchorDate.value)
   : `${formatBusinessDate(weekDateKeys.value[0])} – ${formatBusinessDate(weekDateKeys.value[6])}`)
 const visibleCalendarSessionCount = computed(() => visibleDateKeys.value.reduce((total, dateKey) => total + (visibleSessionsByDate.value[dateKey]?.length || 0), 0))
+const displayedMonthStart = computed(() => `${calendarAnchorDate.value.slice(0, 7)}-01`)
 const sourceWeekSessions = computed(() => {
   const dates = new Set(weekDateKeys.value)
   return visibleSessions.value.filter((session) => dates.has(getBusinessDateKey(session.scheduled_start_at))
@@ -199,8 +238,14 @@ function goToToday() {
   calendarAnchorDate.value = refreshTodayDateKey()
 }
 
-async function load() {
+function revealHiddenHistory() {
+  showHistory.value = true
+  if (!visibleSessionsInView.value.length && hiddenHistorySessions.value.length) viewMode.value = 'list'
+}
+
+async function load(): Promise<boolean> {
   loading.value = true
+  let sessionsRequestSucceeded = false
   refreshTodayDateKey()
   errorMessage.value = ''
   try {
@@ -214,6 +259,7 @@ async function load() {
     if (sessionResult.status === 'fulfilled') {
       sessions.value = sessionResult.value
       sessionsLoaded.value = true
+      sessionsRequestSucceeded = true
       if (selected.value) {
         selected.value = sessions.value.find((session) => session.id === selected.value?.id) || null
         if (!selected.value) { students.value = []; selectedTeacherIds.value = [] }
@@ -241,6 +287,7 @@ async function load() {
     loading.value = false
   }
   await loadSchedules()
+  return sessionsRequestSucceeded
 }
 
 async function loadSchedules() {
@@ -495,10 +542,14 @@ async function createSession() {
     sessionFormBusy.value = false
     sessionFormOpen.value = false
     sessionFormDirty.value = false
-    await load()
-    if (sessionsLoaded.value && (!createdSessionId || !sessions.value.some((session) => session.id === createdSessionId))) {
-      const refreshMessage = 'Buổi học đã được tạo nhưng chưa xuất hiện sau khi tải lại. Hãy nhấn “Làm mới” để kiểm tra lại.'
+    const refreshed = await load()
+    if (!refreshed) {
+      const refreshMessage = 'Buổi học đã được tạo nhưng không tải lại được danh sách. Hãy nhấn “Làm mới” để kiểm tra lại.'
       errorMessage.value = errorMessage.value ? `${refreshMessage} ${errorMessage.value}` : refreshMessage
+    } else if (!createdSessionId) {
+      errorMessage.value = 'Buổi học đã được tạo nhưng máy chủ không trả mã buổi để xác minh. Hãy nhấn “Làm mới” để kiểm tra lại.'
+    } else if (!sessions.value.some((session) => session.id === createdSessionId)) {
+      errorMessage.value = 'Buổi học đã được tạo nhưng chưa xuất hiện sau khi tải lại. Hãy nhấn “Làm mới” để kiểm tra lại.'
     }
   } catch (error) { errorMessage.value = teacherLimitMessage(error, 'Không thể tạo buổi học.') }
   finally { sessionFormBusy.value = false }
@@ -676,25 +727,33 @@ async function previewAndConfirmAllSchedulesReset() {
   resetPreviewBusy.value = true
   errorMessage.value = ''
   try {
-    const preview = await previewAllSchedulesReset()
+    const preview = await previewScheduleResetForMonth(displayedMonthStart.value)
     const scheduleCount = Math.max(0, Number(preview.schedule_count) || 0)
-    const sessionCount = Math.max(0, Number(preview.session_count) || 0)
-    if (scheduleCount === 0 && sessionCount === 0) {
-      toast.info('Không có khung lịch lặp hoặc buổi SCHEDULED nào cần đặt lại.')
+    const recurringSessionCount = Math.max(0, Number(preview.recurring_session_count) || 0)
+    const monthManualSessionCount = Math.max(0, Number(preview.month_manual_session_count) || 0)
+    const protectedSessionCount = Math.max(0, Number(preview.protected_session_count) || 0)
+    if (protectedSessionCount > 0) {
+      const protectedMessage = `Không thể xóa lịch vì có ${protectedSessionCount} buổi SCHEDULED đã gắn dữ liệu điểm danh, chấm công hoặc lịch sử khác. Dữ liệu được giữ nguyên.`
+      errorMessage.value = protectedMessage
+      toast.error(protectedMessage)
       return
     }
-    confirmActionType.value = 'reset-all-schedules'
+    if (scheduleCount === 0 && recurringSessionCount === 0 && monthManualSessionCount === 0) {
+      toast.info('Không có lịch lặp hoặc buổi SCHEDULED nào thuộc phạm vi xóa.')
+      return
+    }
+    confirmActionType.value = 'delete-schedules'
     confirmDetails.value = {
-      title: 'Đặt lại toàn bộ lịch?',
-      message: 'Thao tác áp dụng cho toàn trung tâm, không phụ thuộc lớp đang lọc. Các buổi SCHEDULED, kể cả buổi đã qua giờ và buổi tạo riêng, sẽ được đánh dấu đã hủy.',
-      itemName: `${scheduleCount} khung lịch lặp · ${sessionCount} buổi học`,
-      warning: 'Lịch sử và điểm danh được giữ nguyên. Buổi đang diễn ra hoặc đã hoàn tất không bị thay đổi. Admin có thể tạo lại khung lịch bằng trình chỉnh sửa lịch.',
-      confirmLabel: 'Đặt lại tất cả lịch',
+      title: `Xóa lịch ${formatBusinessMonth(displayedMonthStart.value)}?`,
+      message: 'Thao tác áp dụng cho mọi lớp, không phụ thuộc bộ lọc lớp. Tất cả khung lịch lặp toàn trung tâm và các buổi SCHEDULED do lịch lặp sinh ra ở mọi ngày sẽ bị xóa. Buổi SCHEDULED tạo riêng chỉ bị xóa nếu thuộc tháng đang xem.',
+      itemName: `${scheduleCount} khung lịch lặp · ${recurringSessionCount} buổi từ lịch lặp · ${monthManualSessionCount} buổi riêng trong tháng`,
+      warning: 'Buổi đã hủy, đang diễn ra hoặc hoàn tất cùng điểm danh, kết quả học tập và chấm công được giữ nguyên. Nếu phát hiện dữ liệu lịch sử gắn với buổi cần xóa, thao tác sẽ bị từ chối toàn bộ.',
+      confirmLabel: 'Xóa lịch và buổi',
       destructive: true,
     }
     confirmOpen.value = true
   } catch (error) {
-    errorMessage.value = userErrorMessage(error, 'Không thể xem trước thao tác đặt lại lịch.')
+    errorMessage.value = userErrorMessage(error, 'Không thể xem trước phạm vi xóa lịch.')
     toast.error(errorMessage.value)
   } finally {
     resetPreviewBusy.value = false
@@ -703,7 +762,7 @@ async function previewAndConfirmAllSchedulesReset() {
 
 async function resetSchedulesNow() {
   try {
-    const result = await resetAllSchedules()
+    const result = await resetScheduleForMonth(displayedMonthStart.value)
     confirmBusy.value = false
     confirmOpen.value = false
     selected.value = null
@@ -711,10 +770,10 @@ async function resetSchedulesNow() {
     students.value = []
     selectedTeacherIds.value = []
     showHistory.value = false
-    toast.success(`Đã lưu trữ ${result.archived_schedules || 0} khung lịch lặp và hủy ${result.cancelled_sessions || 0} buổi học. Lịch sử vẫn được giữ.`)
+    toast.success(`Đã xóa ${result.deleted_schedules || 0} khung lịch lặp, ${result.deleted_recurring_sessions || 0} buổi từ lịch lặp và ${result.deleted_month_manual_sessions || 0} buổi riêng trong tháng.`)
     await load()
   } catch (error) {
-    errorMessage.value = userErrorMessage(error, 'Không thể đặt lại lịch toàn trung tâm.')
+    errorMessage.value = userErrorMessage(error, 'Không thể xóa lịch.')
     toast.error(errorMessage.value)
   }
 }
@@ -777,7 +836,7 @@ async function runConfirmation() {
     if (confirmActionType.value === 'copy-week') await applyWeekNow()
     else if (confirmActionType.value === 'archive-schedule') await archiveScheduleNow()
     else if (confirmActionType.value === 'cancel-session') await cancelSessionNow()
-    else if (confirmActionType.value === 'reset-all-schedules') await resetSchedulesNow()
+    else if (confirmActionType.value === 'delete-schedules') await resetSchedulesNow()
   } finally { confirmBusy.value = false }
 }
 
@@ -803,7 +862,7 @@ watch(sessionFormIsBackdated, (isBackdated) => {
     <template #actions>
       <button class="btn btn-primary" @click="scheduleEditorOpen = !scheduleEditorOpen">Chỉnh sửa lịch</button>
       <button class="btn btn-outline-danger" :disabled="loading || resetPreviewBusy" :aria-busy="resetPreviewBusy || undefined" @click="previewAndConfirmAllSchedulesReset">
-        <span v-if="resetPreviewBusy" class="app-button__spinner" aria-hidden="true"></span>{{ resetPreviewBusy ? 'Đang kiểm tra…' : 'Đặt lại tất cả lịch' }}
+        <span v-if="resetPreviewBusy" class="app-button__spinner" aria-hidden="true"></span>{{ resetPreviewBusy ? 'Đang kiểm tra…' : 'Xóa tất cả lịch' }}
       </button>
       <button class="btn btn-outline-primary" @click="openSessionForm()">Thêm buổi</button>
       <button class="btn btn-outline-primary" :disabled="loading" @click="load">Làm mới</button>
@@ -932,7 +991,10 @@ watch(sessionFormIsBackdated, (isBackdated) => {
           <Transition name="view-swap" mode="out-in">
           <div v-if="viewMode === 'list'" key="list" class="session-list">
             <div v-if="loading" class="text-center text-secondary py-4" role="status">Đang tải buổi học…</div>
-            <div v-else-if="!loading && !errorMessage && !visibleSessions.length" class="text-center text-secondary py-5">Chưa có buổi học.</div>
+            <div v-else-if="!loading && !errorMessage && !visibleSessions.length" class="text-center text-secondary py-5">
+              <p class="mb-2">{{ listEmptyMessage }}</p>
+              <button v-if="!showHistory && hiddenHistorySessions.length" type="button" class="btn btn-sm btn-outline-primary" @click="revealHiddenHistory">Xem lịch sử trong danh sách</button>
+            </div>
             <div class="table-responsive">
               <table class="table align-middle mb-0">
                 <thead><tr><th>Ngày</th><th>Lớp</th><th>Thời gian</th><th>Phòng</th><th>Giáo viên</th><th>Trạng thái</th></tr></thead>
@@ -945,7 +1007,6 @@ watch(sessionFormIsBackdated, (isBackdated) => {
                     <td>{{ (session.session_staff || []).map((item) => item.staff?.full_name).filter(Boolean).join(', ') || 'Chưa phân công' }}</td>
                     <td><span class="badge" :class="sessionStatusClass(session.status)">{{ session.status }}</span></td>
                   </tr>
-                  <tr v-if="!loading && !errorMessage && !visibleSessions.length"><td colspan="6" class="text-center text-secondary py-4">Chưa có buổi học.</td></tr>
                 </tbody>
               </table>
             </div>
@@ -1001,11 +1062,13 @@ watch(sessionFormIsBackdated, (isBackdated) => {
                 </button>
                 <span class="badge" :class="sessionStatusClass(session.status)">{{ session.status }}</span>
               </div>
-              <p v-if="!errorMessage && !agendaSessions.length && !loading" class="text-secondary text-center py-4 mb-0">{{ visibleSessions.length ? 'Không có buổi học trong khoảng thời gian này.' : 'Chưa có buổi học.' }}</p>
             </div>
             <div v-if="loading" class="text-center text-secondary py-3" role="status">Đang tải buổi học…</div>
             <div v-else-if="!loading && !errorMessage && !visibleCalendarSessionCount" class="session-calendar-empty text-center text-secondary py-3">
-              {{ visibleSessions.length ? 'Không có buổi học trong khoảng thời gian này.' : 'Chưa có buổi học.' }}
+              <p class="mb-2">{{ calendarEmptyMessage }}</p>
+              <button v-if="!showHistory && hiddenHistorySessions.length" type="button" class="btn btn-sm btn-outline-primary" @click="revealHiddenHistory">
+                {{ hiddenHistorySessionsInView.length ? 'Hiện lịch sử' : 'Xem lịch sử trong danh sách' }}
+              </button>
             </div>
           </div>
           </Transition>

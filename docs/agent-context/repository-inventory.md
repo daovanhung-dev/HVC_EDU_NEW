@@ -109,6 +109,8 @@
 | frontend/src/modules/admin/pages/StudentsPage.vue | Frontend / Admin | Vue SFC |
 | frontend/src/modules/admin/utils/student-account-export.test.ts | Frontend / Admin | TypeScript |
 | frontend/src/modules/admin/utils/student-account-export.ts | Frontend / Admin | TypeScript |
+| frontend/src/modules/admin/utils/student-class-roster-export.test.ts | Frontend / Admin | TypeScript |
+| frontend/src/modules/admin/utils/student-class-roster-export.ts | Frontend / Admin | TypeScript |
 | frontend/src/modules/auth/pages/ChangePasswordPage.test.ts | Frontend / Đăng nhập | TypeScript |
 | frontend/src/modules/auth/pages/ChangePasswordPage.vue | Frontend / Đăng nhập | Vue SFC |
 | frontend/src/modules/auth/pages/LoginPage.test.ts | Frontend / Đăng nhập | TypeScript |
@@ -249,6 +251,7 @@
 | supabase/migrations/0048_force_student_password_change.sql | Supabase / migrations | SQL |
 | supabase/migrations/0049_force_teacher_password_change.sql | Supabase / migrations | SQL |
 | supabase/migrations/0050_reset_all_schedules.sql | Supabase / migrations | SQL |
+| supabase/migrations/0051_delete_schedules_for_month.sql | Supabase / migrations | SQL |
 | supabase/seed.sql | Supabase / cấu hình và seed | SQL |
 | supabase/tests/admin_monthly_session_planning.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/backdated_session_creation.test.sql | Supabase / kiểm thử SQL | SQL |
@@ -259,4 +262,4 @@
 | supabase/tests/session_learning_commands.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/timesheet_workflow.test.sql | Supabase / kiểm thử SQL | SQL |
 
-Tổng: 252 đường dẫn có trong inventory.
+Tổng: 255 đường dẫn có trong inventory.

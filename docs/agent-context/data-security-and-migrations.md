@@ -10,7 +10,7 @@
 
 ## Chuỗi migration
 
-Migration được đánh số trong supabase/migrations; repo hiện có đến 0050. Luôn đọc file liên quan và phần migration sau đó đã thay đổi cùng object.
+Migration được đánh số trong supabase/migrations; repo hiện có đến 0051. Luôn đọc file liên quan và phần migration sau đó đã thay đổi cùng object.
 
 - 0036–0038 thêm rồi retire vai trò PARENT; hồ sơ/liên kết lịch sử còn được giữ.
 - 0039 chuyển ứng dụng sang lịch lặp, membership liên tục, gắn session với class và chuyển ASSISTANT thành TEACHER.
@@ -24,7 +24,8 @@ Migration được đánh số trong supabase/migrations; repo hiện có đến
 - 0047 thêm link YouTube tùy chọn cho buổi học và mở rộng RPC học tập mà vẫn giữ EXECUTE chỉ cho service_role; audit lưu link cũ/mới. `student-ai-tutor` chỉ phục vụ học sinh đang hoạt động, kiểm tra quyền sở hữu buổi được chọn và gửi cho Gemini câu hỏi, lịch sử chat cùng tên lớp/môn, ngày và nội dung buổi học; không gửi điểm, chuyên cần, nhận xét cá nhân hoặc video.
 - 0048 giới hạn học sinh đang bị buộc đổi mật khẩu khỏi dữ liệu học tập cho đến khi đổi xong; chỉ luồng Edge Function service-role được xóa cờ.
 - 0049 mở rộng yêu cầu đổi mật khẩu và chặn RLS của dữ liệu giảng dạy/chấm công cho giáo viên bị reset; hồ sơ vẫn đọc được để hoàn tất đổi mật khẩu.
-- 0050 thêm RPC đặt lại lịch toàn trung tâm: yêu cầu CLASS_MANAGE, khóa đồng bộ với bộ sinh lịch, lưu trữ khung lặp, hủy mọi buổi SCHEDULED và ghi audit trong cùng transaction; buổi đang diễn ra/đã hoàn tất và lịch sử điểm danh được giữ nguyên. Khung đã lưu trữ không còn chặn Admin tạo lịch mới cùng thứ/giờ.
+- 0050 ban đầu thêm RPC đặt lại lịch toàn trung tâm theo kiểu lưu trữ khung lặp và hủy buổi SCHEDULED.
+- 0051 thay thao tác reset bằng xóa có preview theo tháng Việt Nam: yêu cầu CLASS_MANAGE, đồng bộ với bộ sinh lịch, xóa khung lặp toàn trung tâm cùng buổi SCHEDULED do lịch lặp sinh ở mọi ngày và buổi tạo riêng trong tháng chọn. Buổi đã hủy/đang diễn ra/hoàn tất và lịch sử liên quan được giữ; snapshot khung lặp được lưu trên buổi còn lại trước khi xóa mẫu. Điểm danh, snapshot kết quả, nội dung buổi, chấm công hoặc payroll liên kết với buổi cần xóa sẽ chặn toàn bộ thao tác. RPC reset cũ bị thu hồi quyền EXECUTE.
 
 Các migration cũ hơn tạo schema nền, role, RBAC, lớp tháng, buổi, điểm danh, tài chính, function, RLS và index. Không suy ra phạm vi sản phẩm hiện tại từ migration cũ.
 

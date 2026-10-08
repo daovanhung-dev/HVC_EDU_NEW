@@ -224,16 +224,29 @@ export async function generateUpcomingSessions(): Promise<{ room_conflicts?: num
   return data as { room_conflicts?: number; missing_room_conflicts?: number; [key: string]: unknown }
 }
 
-export async function previewAllSchedulesReset(): Promise<{ schedule_count: number; session_count: number }> {
-  const { data, error } = await supabase.rpc('admin_preview_all_schedules_reset')
-  if (error) throw error
-  return data as { schedule_count: number; session_count: number }
+export type ScheduleResetForMonthPreview = {
+  schedule_count: number
+  recurring_session_count: number
+  month_manual_session_count: number
+  protected_session_count: number
 }
 
-export async function resetAllSchedules(): Promise<{ archived_schedules: number; cancelled_sessions: number }> {
-  const { data, error } = await supabase.rpc('admin_reset_all_schedules')
+export type ScheduleResetForMonthResult = {
+  deleted_schedules: number
+  deleted_recurring_sessions: number
+  deleted_month_manual_sessions: number
+}
+
+export async function previewScheduleResetForMonth(monthStart: string): Promise<ScheduleResetForMonthPreview> {
+  const { data, error } = await supabase.rpc('admin_preview_schedule_reset_for_month', { p_month_start: monthStart })
   if (error) throw error
-  return data as { archived_schedules: number; cancelled_sessions: number }
+  return data as ScheduleResetForMonthPreview
+}
+
+export async function resetScheduleForMonth(monthStart: string): Promise<ScheduleResetForMonthResult> {
+  const { data, error } = await supabase.rpc('admin_delete_schedule_reset_for_month', { p_month_start: monthStart })
+  if (error) throw error
+  return data as ScheduleResetForMonthResult
 }
 
 export async function updateSessionOccurrence(input: { session_id: string; start?: string; end?: string; cancel?: boolean; room?: string | null }) {
