@@ -11,6 +11,8 @@ import {
   createManualSession,
   deleteSessionsForMonth,
   previewDeleteSessionsForMonth,
+  previewMonthWeekTemplateReplacement,
+  replaceMonthWithWeekTemplate,
   updateSessionOccurrence,
 } from './commands'
 
@@ -79,5 +81,28 @@ describe('session room scheduling commands', () => {
 
     expect(mockState.rpc).toHaveBeenNthCalledWith(1, 'admin_preview_delete_sessions_for_month', { p_month_start: '2026-10-01' })
     expect(mockState.rpc).toHaveBeenNthCalledWith(2, 'admin_delete_sessions_for_month', { p_month_start: '2026-10-01' })
+  })
+
+  it('sends the complete weekly template to preview and atomic month replacement RPCs', async () => {
+    const slots = [{
+      day_of_week: 1,
+      class_id: 'qa-class-1',
+      start_time: '17:30',
+      end_time: '19:30',
+      room: 'QA-A1',
+      staff_ids: ['qa-teacher-1'],
+    }]
+
+    await previewMonthWeekTemplateReplacement('2026-10-01', slots)
+    await replaceMonthWithWeekTemplate('2026-10-01', slots)
+
+    expect(mockState.rpc).toHaveBeenNthCalledWith(1, 'admin_preview_month_week_template_replacement', {
+      p_month_start: '2026-10-01',
+      p_template: slots,
+    })
+    expect(mockState.rpc).toHaveBeenNthCalledWith(2, 'admin_replace_month_with_week_template', {
+      p_month_start: '2026-10-01',
+      p_template: slots,
+    })
   })
 })

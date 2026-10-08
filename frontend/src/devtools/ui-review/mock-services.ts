@@ -217,6 +217,100 @@ export async function removeTeacherFromClassSchedule(id: string, staffId: string
 export async function createManualSession(input: any) { const row = { id: `qa-session-${Date.now()}`, class_id: input.class_id, recurrence_schedule_id: null, recurrence_occurrence_date: null, manual_schedule: true, scheduled_start_at: input.start, scheduled_end_at: input.end, room: input.room, status: 'SCHEDULED', session_note: null, classes: classes.find((item) => item.id === input.class_id), session_staff: input.staff_ids.map((id: string) => ({ staff_id: id, assignment_role: 'TEACHER', staff: teachers.find((item) => item.id === id) })) }; sessions.unshift(row); return { session_id: row.id } }
 export async function updateSessionOccurrence(input: any) { const row = sessions.find((item) => item.id === input.session_id); if (row) { if (input.start) row.scheduled_start_at = input.start; if (input.end) row.scheduled_end_at = input.end; if (input.cancel) row.status = 'CANCELLED'; row.room = input.room } }
 export async function applyWeekToMonth() { return { created: 3 } }
+export async function previewMonthWeekTemplateReplacement(monthStart: string, slots: any[]) {
+  const month = monthStart.slice(0, 7)
+  const targets = sessions.filter((item) => sessionMonth(item) === month)
+  const statusCount = (status: string) => targets.filter((item) => item.status === status).length
+  const targetIds = new Set(targets.map((item) => item.id))
+  let newSessionCount = 0
+  const [year, monthNumber] = month.split('-').map(Number)
+  const monthLength = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate()
+  for (const slot of slots) {
+    for (let day = 1; day <= monthLength; day += 1) {
+      const weekday = new Date(Date.UTC(year, monthNumber - 1, day)).getUTCDay() || 7
+      if (weekday === slot.day_of_week) newSessionCount += 1
+    }
+  }
+  return query({
+    month_start: monthStart,
+    session_count: targets.length,
+    status_counts: {
+      SCHEDULED: statusCount('SCHEDULED'),
+      IN_PROGRESS: statusCount('IN_PROGRESS'),
+      COMPLETED: statusCount('COMPLETED'),
+      CANCELLED: statusCount('CANCELLED'),
+    },
+    session_student_count: targets.reduce((sum, item) => sum + (item.session_students?.length || 0), 0),
+    assessment_count: 0,
+    session_staff_count: targets.reduce((sum, item) => sum + (item.session_staff?.length || 0), 0),
+    staff_replacement_count: 0,
+    attendance_count: attendance.filter((item) => targetIds.has(item.session_id)).length,
+    timesheet_count: timesheets.filter((item) => targetIds.has(item.session_id)).length,
+    payroll_item_count: 0,
+    new_session_count: newSessionCount,
+  })
+}
+export async function replaceMonthWithWeekTemplate(monthStart: string, slots: any[]) {
+  await query(true)
+  const month = monthStart.slice(0, 7)
+  const targets = sessions.filter((item) => sessionMonth(item) === month)
+  const targetIds = new Set(targets.map((item) => item.id))
+  const deletedStatusCounts = {
+    SCHEDULED: targets.filter((item) => item.status === 'SCHEDULED').length,
+    IN_PROGRESS: targets.filter((item) => item.status === 'IN_PROGRESS').length,
+    COMPLETED: targets.filter((item) => item.status === 'COMPLETED').length,
+    CANCELLED: targets.filter((item) => item.status === 'CANCELLED').length,
+  }
+  const deletedAttendanceCount = attendance.filter((item) => targetIds.has(item.session_id)).length
+  const deletedTimesheetCount = timesheets.filter((item) => targetIds.has(item.session_id)).length
+  sessions.splice(0, sessions.length, ...sessions.filter((item) => !targetIds.has(item.id)))
+  attendance.splice(0, attendance.length, ...attendance.filter((item) => !targetIds.has(item.session_id)))
+  timesheets.splice(0, timesheets.length, ...timesheets.filter((item) => !targetIds.has(item.session_id)))
+
+  const [year, monthNumber] = month.split('-').map(Number)
+  const monthLength = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate()
+  let createdSessions = 0
+  for (let day = 1; day <= monthLength; day += 1) {
+    const date = `${month}-${String(day).padStart(2, '0')}`
+    const weekday = new Date(Date.UTC(year, monthNumber - 1, day)).getUTCDay() || 7
+    for (const slot of slots.filter((item) => item.day_of_week === weekday)) {
+      const classRow = classes.find((item) => item.id === slot.class_id)
+      const roster = memberships.filter((item) => item.class_id === slot.class_id
+        && item.status === 'ACTIVE' && item.start_date <= date && (!item.end_date || item.end_date >= date))
+      const id = `qa-template-session-${month.replace('-', '')}-${createdSessions + 1}`
+      const session = {
+        id,
+        class_id: slot.class_id,
+        recurrence_schedule_id: null,
+        recurrence_occurrence_date: null,
+        manual_schedule: true,
+        scheduled_start_at: `${date}T${slot.start_time}:00+07:00`,
+        scheduled_end_at: `${date}T${slot.end_time}:00+07:00`,
+        status: 'SCHEDULED',
+        room: slot.room,
+        session_note: null,
+        classes: classRow,
+        class_schedules: null,
+        session_staff: slot.staff_ids.map((staffId: string) => ({ staff_id: staffId, assignment_role: 'TEACHER', staff: teachers.find((teacher) => teacher.id === staffId) })),
+        session_students: roster.map((membership) => ({ student_id: membership.student_id })),
+      }
+      sessions.push(session)
+      createdSessions += 1
+    }
+  }
+  return {
+    month_start: monthStart,
+    deleted_sessions: targets.length,
+    deleted_status_counts: deletedStatusCounts,
+    deleted_session_students: targets.reduce((sum, item) => sum + (item.session_students?.length || 0), 0),
+    deleted_session_staff: targets.reduce((sum, item) => sum + (item.session_staff?.length || 0), 0),
+    deleted_staff_replacements: 0,
+    deleted_attendances: deletedAttendanceCount,
+    deleted_timesheets: deletedTimesheetCount,
+    deleted_payroll_items: 0,
+    created_sessions: createdSessions,
+  }
+}
 export async function updateSessionTeachers(input: any) { const row = sessions.find((item) => item.id === input.session_id); if (row) row.session_staff = input.staff_ids.map((id: string) => ({ staff_id: id, assignment_role: 'TEACHER', staff: teachers.find((item) => item.id === id) })); return {} }
 export async function startSession(id: string) { const row = sessions.find((item) => item.id === id); if (row) row.status = 'IN_PROGRESS' }
 export async function completeSession(id: string) { const row = sessions.find((item) => item.id === id); if (row) row.status = 'COMPLETED' }

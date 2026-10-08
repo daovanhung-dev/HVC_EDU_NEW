@@ -15,7 +15,8 @@ const mockState = vi.hoisted(() => ({
   getClassActiveRosterSize: vi.fn(),
   updateSessionOccurrence: vi.fn(),
   createManualSession: vi.fn(),
-  applyWeekToMonth: vi.fn(),
+  previewMonthWeekTemplateReplacement: vi.fn(),
+  replaceMonthWithWeekTemplate: vi.fn(),
   updateSessionTeachers: vi.fn(),
   addTeacherToClassSchedule: vi.fn(),
   createClassSchedule: vi.fn(),
@@ -41,7 +42,8 @@ vi.mock('@/services/data-queries', () => ({
 vi.mock('@/services/commands', () => ({
   updateSessionOccurrence: mockState.updateSessionOccurrence,
   createManualSession: mockState.createManualSession,
-  applyWeekToMonth: mockState.applyWeekToMonth,
+  previewMonthWeekTemplateReplacement: mockState.previewMonthWeekTemplateReplacement,
+  replaceMonthWithWeekTemplate: mockState.replaceMonthWithWeekTemplate,
   updateSessionTeachers: mockState.updateSessionTeachers,
   addTeacherToClassSchedule: mockState.addTeacherToClassSchedule,
   createClassSchedule: mockState.createClassSchedule,
@@ -158,7 +160,31 @@ describe('AdminSessionsPage calendar', () => {
     mockState.getClassActiveRosterSize.mockReset().mockResolvedValue(0)
     mockState.updateSessionOccurrence.mockReset().mockResolvedValue(undefined)
     mockState.createManualSession.mockReset().mockResolvedValue({ session_id: 'qa-new-session' })
-    mockState.applyWeekToMonth.mockReset().mockResolvedValue({ created: 4 })
+    mockState.previewMonthWeekTemplateReplacement.mockReset().mockResolvedValue({
+      month_start: `${getBusinessDateKey(new Date()).slice(0, 7)}-01`,
+      session_count: 6,
+      status_counts: { SCHEDULED: 3, IN_PROGRESS: 1, COMPLETED: 1, CANCELLED: 1 },
+      session_student_count: 2,
+      assessment_count: 2,
+      session_staff_count: 1,
+      staff_replacement_count: 1,
+      attendance_count: 2,
+      timesheet_count: 1,
+      payroll_item_count: 1,
+      new_session_count: 10,
+    })
+    mockState.replaceMonthWithWeekTemplate.mockReset().mockResolvedValue({
+      month_start: `${getBusinessDateKey(new Date()).slice(0, 7)}-01`,
+      deleted_sessions: 6,
+      deleted_status_counts: { SCHEDULED: 3, IN_PROGRESS: 1, COMPLETED: 1, CANCELLED: 1 },
+      deleted_session_students: 2,
+      deleted_session_staff: 1,
+      deleted_staff_replacements: 1,
+      deleted_attendances: 2,
+      deleted_timesheets: 1,
+      deleted_payroll_items: 1,
+      created_sessions: 10,
+    })
     mockState.updateSessionTeachers.mockReset().mockResolvedValue({})
     mockState.addTeacherToClassSchedule.mockReset().mockResolvedValue({})
     mockState.createClassSchedule.mockReset().mockResolvedValue({ id: 'qa-schedule' })
@@ -443,22 +469,81 @@ describe('AdminSessionsPage calendar', () => {
     expect(mockState.updateSessionOccurrence).toHaveBeenLastCalledWith({ session_id: session.id, cancel: true, room: null })
   })
 
-  it('applies future sessions from the visible week to the month in view', async () => {
-    const today = getBusinessDateKey(new Date())
-    const session = makeSession('qa-week-template', 'Lớp Mẫu QA', '17:30', '19:30', addCalendarDays(today, 1), ['qa-teacher-1'])
-    mockState.getMySessions.mockResolvedValue([session])
+  it('creates a seven-day editable template and confirms replacement across the selected month', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-08T12:00:00+07:00'))
     const wrapper = mountPage()
     await flushPromises()
-    await clickButtonWithText(wrapper, 'Tuần')
 
-    await clickButtonWithText(wrapper, 'Áp dụng tuần này cho tháng')
-    await clickButtonWithText(wrapper, 'Áp dụng tuần mẫu')
+    await clickButtonWithText(wrapper, 'Tạo lịch mẫu')
+    expect(findAllPageOrBody(wrapper, '.weekly-template-day')).toHaveLength(7)
+    expect(pageAndBodyText(wrapper)).toContain('Thứ Hai')
+    expect(pageAndBodyText(wrapper)).toContain('Chủ nhật')
+
+    const weekdays = findAllPageOrBody(wrapper, '.weekly-template-day')
+    await weekdays[0].get('button').trigger('click')
+    await weekdays[1].get('button').trigger('click')
+    const rows = findAllPageOrBody(wrapper, '.weekly-template-slot')
+    const mondaySlotId = findPageOrBody(wrapper, '.weekly-template-day .weekly-template-slot select').attributes('id')!.replace('weekly-template-class-', '')
+    const tuesdaySlotId = findPageOrBody(wrapper, '.weekly-template-day:nth-child(2) .weekly-template-slot select').attributes('id')!.replace('weekly-template-class-', '')
+
+    await getPageOrBody(wrapper, `#weekly-template-class-${mondaySlotId}`).setValue('qa-class-1')
+    await getPageOrBody(wrapper, `#weekly-template-room-${mondaySlotId}`).setValue('QA-A1')
+    await getPageOrBody(wrapper, `#weekly-template-start-${mondaySlotId}`).setValue('17:30')
+    await getPageOrBody(wrapper, `#weekly-template-end-${mondaySlotId}`).setValue('19:30')
+    await chooseTeacher(wrapper, `weekly-template-teachers-${mondaySlotId}`, 'qa-teacher-1')
+    await getPageOrBody(wrapper, `#weekly-template-class-${tuesdaySlotId}`).setValue('qa-class-2')
+    await getPageOrBody(wrapper, `#weekly-template-room-${tuesdaySlotId}`).setValue('QA-B1')
+    await getPageOrBody(wrapper, `#weekly-template-start-${tuesdaySlotId}`).setValue('18:00')
+    await getPageOrBody(wrapper, `#weekly-template-end-${tuesdaySlotId}`).setValue('20:00')
+    await chooseTeacher(wrapper, `weekly-template-teachers-${tuesdaySlotId}`, 'qa-teacher-2')
+
+    expect(rows).toHaveLength(2)
+    await clickButtonWithText(wrapper, 'Xem phạm vi thay lịch')
     await flushPromises()
 
-    expect(mockState.applyWeekToMonth).toHaveBeenCalledWith({
-      source_session_ids: [session.id],
-      month_start: `${today.slice(0, 7)}-01`,
-    })
+    const confirmation = findAllPageOrBody(wrapper, '.app-modal').find((modal) => modal.text().includes('Thay toàn bộ lịch tháng'))
+    if (!confirmation) throw new Error('Month replacement confirmation was not opened')
+    expect(confirmation.text()).toContain('Thay toàn bộ lịch tháng 10 năm 2026?')
+    expect(confirmation.text()).toContain('tất cả lớp')
+    expect(confirmation.text()).toContain('đang diễn ra')
+    expect(confirmation.text()).toContain('10 buổi mới sẽ được tạo')
+    expect(mockState.previewMonthWeekTemplateReplacement).toHaveBeenCalledWith('2026-10-01', [
+      { day_of_week: 1, class_id: 'qa-class-1', start_time: '17:30', end_time: '19:30', room: 'QA-A1', staff_ids: ['qa-teacher-1'] },
+      { day_of_week: 2, class_id: 'qa-class-2', start_time: '18:00', end_time: '20:00', room: 'QA-B1', staff_ids: ['qa-teacher-2'] },
+    ])
+
+    await clickButtonWithText(wrapper, 'Xóa lịch cũ và tạo lịch mới')
+    await flushPromises()
+    expect(mockState.replaceMonthWithWeekTemplate).toHaveBeenCalledWith('2026-10-01', [
+      { day_of_week: 1, class_id: 'qa-class-1', start_time: '17:30', end_time: '19:30', room: 'QA-A1', staff_ids: ['qa-teacher-1'] },
+      { day_of_week: 2, class_id: 'qa-class-2', start_time: '18:00', end_time: '20:00', room: 'QA-B1', staff_ids: ['qa-teacher-2'] },
+    ])
+    expect(mockState.toastSuccess).toHaveBeenCalledWith('Đã xóa 6 buổi cũ và tạo 10 buổi mới cho tháng 10 năm 2026.')
+  })
+
+  it('returns to the editor and preserves the template when replacement fails', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-08T12:00:00+07:00'))
+    mockState.replaceMonthWithWeekTemplate.mockRejectedValue(new Error('SCHEDULE_CONFLICT'))
+    const wrapper = mountPage()
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Tạo lịch mẫu')
+    const monday = findAllPageOrBody(wrapper, '.weekly-template-day')[0]
+    await monday.get('button').trigger('click')
+    const slotId = findPageOrBody(wrapper, '.weekly-template-day .weekly-template-slot select').attributes('id')!.replace('weekly-template-class-', '')
+    await getPageOrBody(wrapper, `#weekly-template-class-${slotId}`).setValue('qa-class-1')
+    await getPageOrBody(wrapper, `#weekly-template-start-${slotId}`).setValue('17:30')
+    await getPageOrBody(wrapper, `#weekly-template-end-${slotId}`).setValue('19:30')
+    await chooseTeacher(wrapper, `weekly-template-teachers-${slotId}`, 'qa-teacher-1')
+    await clickButtonWithText(wrapper, 'Xem phạm vi thay lịch')
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Xóa lịch cũ và tạo lịch mới')
+    await flushPromises()
+
+    expect(findAllPageOrBody(wrapper, '.weekly-template-slot')).toHaveLength(1)
+    expect(pageAndBodyText(wrapper)).toContain('Không thể xếp lịch vì lớp hoặc học sinh đã có buổi học trùng giờ.')
+    expect(mockState.toastError).toHaveBeenCalledWith('Không thể xếp lịch vì lớp hoặc học sinh đã có buổi học trùng giờ.')
   })
 
   it('shows separate empty and error states with a retry action', async () => {

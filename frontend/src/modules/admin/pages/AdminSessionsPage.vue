@@ -3,17 +3,19 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   addTeacherToClassSchedule,
-  applyWeekToMonth,
   createClassSchedule,
   createManualSession,
   removeTeacherFromClassSchedule,
   previewDeleteSessionsForMonth,
   deleteSessionsForMonth,
+  previewMonthWeekTemplateReplacement,
+  replaceMonthWithWeekTemplate,
   setClassScheduleStatus,
   updateClassSchedule,
   updateSessionOccurrence,
   updateSessionTeachers,
 } from '@/services/commands'
+import type { MonthWeekTemplateSlot } from '@/services/commands'
 import {
   getClassActiveRosterSize,
   getClassSchedules,
@@ -48,6 +50,8 @@ import {
 } from '@/shared/utils/session-calendar'
 
 type ViewMode = 'month' | 'week' | 'list'
+type WeeklyTemplateSlotDraft = MonthWeekTemplateSlot & { client_id: string }
+type WeeklyTemplateDayDraft = { day_of_week: number; slots: WeeklyTemplateSlotDraft[] }
 
 const weekdayLabels = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy', 'Chủ nhật']
 const route = useRoute()
@@ -84,10 +88,17 @@ const scheduleFormDirty = ref(false)
 const confirmOpen = ref(false)
 const confirmBusy = ref(false)
 const deletePreviewBusy = ref(false)
+const templateEditorOpen = ref(false)
+const templatePreviewBusy = ref(false)
+const templateError = ref('')
+const weeklyTemplateDays = ref<WeeklyTemplateDayDraft[]>([])
+const pendingTemplateMonthStart = ref('')
+const pendingTemplateSlots = ref<MonthWeekTemplateSlot[]>([])
+let weeklyTemplateSlotSequence = 0
 const pendingDeleteMonthStart = ref('')
 const showHistory = ref(false)
 const confirmDetails = ref({ title: '', message: '', itemName: '', warning: '', confirmLabel: 'Xác nhận', destructive: false })
-const confirmActionType = ref<'copy-week' | 'archive-schedule' | 'cancel-session' | 'delete-month-sessions' | ''>('')
+const confirmActionType = ref<'archive-schedule' | 'cancel-session' | 'delete-month-sessions' | 'replace-month-template' | ''>('')
 const pendingSchedule = ref<ClassScheduleRow | null>(null)
 const editingScheduleId = ref('')
 const teacherSelections = ref<Record<string, string>>({})
@@ -100,6 +111,35 @@ const scheduleFormEnd = computed({ get: () => editingScheduleId.value ? editSche
 const scheduleFormRoom = computed({ get: () => editingScheduleId.value ? editSchedule.value.room : scheduleForm.value.room, set: (value: string) => { if (editingScheduleId.value) editSchedule.value.room = value; else scheduleForm.value.room = value } })
 const teachers = computed(() => (selected.value?.session_staff || []).map((item) => item.staff?.full_name).filter(Boolean).join(', ') || 'Chưa phân công')
 const activeTeachers = computed(() => teachersList.value.filter((row) => row.status === 'ACTIVE'))
+const activeTemplateClasses = computed(() => classes.value.filter((row) => row.status === 'ACTIVE'))
+const weeklyTemplateSlotCount = computed(() => weeklyTemplateDays.value.reduce((total, day) => total + day.slots.length, 0))
+const weeklyTemplateValidationError = computed(() => {
+  const slots = weeklyTemplateDays.value.flatMap((day) => day.slots)
+  if (!slots.length) return 'Hãy thêm ít nhất một buổi vào mẫu tuần.'
+  if (slots.length > 100) return 'Mẫu tuần tối đa 100 dòng buổi.'
+
+  const teachersByClass = new Map<string, Set<string>>()
+  for (const slot of slots) {
+    if (!slot.class_id) return 'Hãy chọn lớp cho từng buổi.'
+    if (!slot.start_time || !slot.end_time || slot.end_time <= slot.start_time) {
+      return 'Giờ kết thúc phải sau giờ bắt đầu trong cùng ngày.'
+    }
+    if (!slot.staff_ids.length) return 'Mỗi buổi cần ít nhất một giáo viên.'
+    if (slot.staff_ids.length > 5 || new Set(slot.staff_ids).size !== slot.staff_ids.length) {
+      return 'Mỗi buổi cần từ 1 đến 5 giáo viên duy nhất.'
+    }
+    const selectedTeachers = teachersByClass.get(slot.class_id) || new Set<string>()
+    slot.staff_ids.forEach((teacherId) => selectedTeachers.add(teacherId))
+    teachersByClass.set(slot.class_id, selectedTeachers)
+  }
+  for (const [classId, selectedTeachers] of teachersByClass) {
+    if (selectedTeachers.size > MAX_CLASS_TEACHERS) {
+      const classRow = activeTemplateClasses.value.find((row) => row.id === classId)
+      return `${classRow?.name || 'Lớp đã chọn'} có tối đa ${MAX_CLASS_TEACHERS} giáo viên được phân công.`
+    }
+  }
+  return ''
+})
 const sessionFormStartTimestamp = computed(() => {
   if (!sessionForm.value.date || !sessionForm.value.start_time) return Number.NaN
   return Date.parse(`${sessionForm.value.date}T${sessionForm.value.start_time}:00+07:00`)
@@ -197,12 +237,6 @@ const periodTitle = computed(() => viewMode.value === 'month'
   : `${formatBusinessDate(weekDateKeys.value[0])} – ${formatBusinessDate(weekDateKeys.value[6])}`)
 const visibleCalendarSessionCount = computed(() => visibleDateKeys.value.reduce((total, dateKey) => total + (visibleSessionsByDate.value[dateKey]?.length || 0), 0))
 const displayedMonthStart = computed(() => `${calendarAnchorDate.value.slice(0, 7)}-01`)
-const sourceWeekSessions = computed(() => {
-  const dates = new Set(weekDateKeys.value)
-  return visibleSessions.value.filter((session) => dates.has(getBusinessDateKey(session.scheduled_start_at))
-    && session.status === 'SCHEDULED' && Date.parse(session.scheduled_start_at) > Date.now()
-    && (session.session_staff || []).some((assignment) => assignment.assignment_role === 'TEACHER'))
-})
 
 function dayLabel(day: number) {
   return day === 7 ? 'Chủ nhật' : `Thứ ${day + 1}`
@@ -556,31 +590,121 @@ async function createSession() {
   finally { sessionFormBusy.value = false }
 }
 
-async function copyWeekToMonth() {
-  const sourceIds = sourceWeekSessions.value.map((session) => session.id)
-  if (!sourceIds.length) {
-    errorMessage.value = 'Tuần này chưa có buổi SCHEDULED trong tương lai có giáo viên để làm mẫu.'
-    return
-  }
-  const monthStart = `${calendarAnchorDate.value.slice(0, 7)}-01`
-  confirmActionType.value = 'copy-week'
-  confirmDetails.value = { title: 'Áp dụng tuần mẫu cho tháng?', message: 'Các buổi trùng hoặc xung đột sẽ làm cả đợt bị từ chối; hãy kiểm tra danh sách buổi mẫu trước khi tiếp tục.', itemName: `${sourceIds.length} buổi mẫu · ${formatBusinessMonth(monthStart)}`, warning: 'Hệ thống sẽ tạo các buổi cụ thể cho các ngày tương ứng trong tháng.', confirmLabel: 'Áp dụng tuần mẫu', destructive: false }
-  confirmOpen.value = true
+function initializeWeeklyTemplate() {
+  if (weeklyTemplateDays.value.length) return
+  weeklyTemplateDays.value = weekdayLabels.map((_, index) => ({ day_of_week: index + 1, slots: [] }))
 }
 
-async function applyWeekNow() {
-  const sourceIds = sourceWeekSessions.value.map((session) => session.id)
-  const monthStart = `${calendarAnchorDate.value.slice(0, 7)}-01`
-  errorMessage.value = ''
+function openWeeklyTemplate() {
+  initializeWeeklyTemplate()
+  templateError.value = ''
+  templateEditorOpen.value = true
+}
+
+function addWeeklyTemplateSlot(day: WeeklyTemplateDayDraft) {
+  if (weeklyTemplateSlotCount.value >= 100) {
+    templateError.value = 'Mẫu tuần tối đa 100 dòng buổi.'
+    return
+  }
+  weeklyTemplateSlotSequence += 1
+  day.slots.push({
+    client_id: `weekly-template-slot-${weeklyTemplateSlotSequence}`,
+    day_of_week: day.day_of_week,
+    class_id: '',
+    start_time: '17:30',
+    end_time: '19:30',
+    room: '',
+    staff_ids: [],
+  })
+  templateError.value = ''
+}
+
+function removeWeeklyTemplateSlot(day: WeeklyTemplateDayDraft, slotId: string) {
+  day.slots = day.slots.filter((slot) => slot.client_id !== slotId)
+  templateError.value = ''
+}
+
+function templatePayload(): MonthWeekTemplateSlot[] {
+  return weeklyTemplateDays.value.flatMap((day) => day.slots.map((slot) => ({
+    day_of_week: day.day_of_week,
+    class_id: slot.class_id,
+    start_time: slot.start_time,
+    end_time: slot.end_time,
+    room: slot.room.trim() || null,
+    staff_ids: [...slot.staff_ids],
+  })))
+}
+
+async function previewAndConfirmMonthTemplate() {
+  if (templatePreviewBusy.value) return
+  templateError.value = weeklyTemplateValidationError.value
+  if (templateError.value) return
+
+  templatePreviewBusy.value = true
+  const monthStart = displayedMonthStart.value
+  const slots = templatePayload()
   try {
-    const result = await applyWeekToMonth({ source_session_ids: sourceIds, month_start: monthStart }) as { created?: number }
-    toast.success(`Đã tạo ${result.created || 0} buổi cụ thể cho tháng.`)
+    const preview = await previewMonthWeekTemplateReplacement(monthStart, slots)
+    const statuses = [
+      ['đã lên lịch', preview.status_counts.SCHEDULED],
+      ['đang diễn ra', preview.status_counts.IN_PROGRESS],
+      ['đã hoàn tất', preview.status_counts.COMPLETED],
+      ['đã hủy', preview.status_counts.CANCELLED],
+    ].filter(([, count]) => Number(count) > 0).map(([label, count]) => `${count} ${label}`).join(' · ')
+
+    pendingTemplateMonthStart.value = monthStart
+    pendingTemplateSlots.value = slots
+    templateEditorOpen.value = false
+    confirmActionType.value = 'replace-month-template'
+    confirmDetails.value = {
+      title: `Thay toàn bộ lịch ${formatBusinessMonth(monthStart)}?`,
+      message: 'Xóa hẳn mọi buổi trong tháng này của tất cả lớp, ở mọi trạng thái; bộ lọc lớp không giới hạn phạm vi. Sau đó tạo lại buổi theo mẫu cho cả tháng, kể cả ngày đã qua.',
+      itemName: `${preview.session_count} buổi cũ (${statuses || 'không có buổi'}) · ${preview.session_student_count} dòng học sinh · ${preview.session_staff_count} phân công giáo viên · ${preview.staff_replacement_count} thay giáo viên · ${preview.attendance_count} điểm danh · ${preview.assessment_count} kết quả · ${preview.timesheet_count} chấm công · ${preview.payroll_item_count} mục lương sẽ bị xóa; ${preview.new_session_count} buổi mới sẽ được tạo.`,
+      warning: 'XÓA VĨNH VIỄN dữ liệu liên kết của các buổi cũ. Hồ sơ lớp, học sinh và nhân sự được giữ. Khung lịch lặp được giữ cho các tháng khác và không sinh buổi trong tháng vừa thay. Nếu mẫu thiếu thành viên phù hợp hoặc có xung đột, toàn bộ thao tác bị từ chối và lịch cũ được giữ nguyên. Nhật ký kiểm toán được lưu lại.',
+      confirmLabel: 'Xóa lịch cũ và tạo lịch mới',
+      destructive: true,
+    }
+    confirmOpen.value = true
+  } catch (error) {
+    templateError.value = userErrorMessage(error, 'Không thể xem trước phạm vi thay lịch tháng.')
+  } finally {
+    templatePreviewBusy.value = false
+  }
+}
+
+async function replaceMonthTemplateNow() {
+  const monthStart = pendingTemplateMonthStart.value
+  if (!monthStart || !pendingTemplateSlots.value.length) return
+  templateError.value = ''
+  try {
+    const result = await replaceMonthWithWeekTemplate(monthStart, pendingTemplateSlots.value)
     confirmBusy.value = false
     confirmOpen.value = false
-    await load()
+    selected.value = null
+    selectedDetailOpen.value = false
+    students.value = []
+    selectedTeacherIds.value = []
+    selectedClassId.value = ''
+    calendarAnchorDate.value = monthStart
+    showHistory.value = true
+    viewMode.value = 'month'
+    weeklyTemplateDays.value = []
+    pendingTemplateSlots.value = []
+
+    const refreshed = await load()
+    if (!refreshed) {
+      const refreshMessage = `Đã xóa ${result.deleted_sessions} buổi cũ và tạo ${result.created_sessions} buổi mới, nhưng chưa tải lại được lịch. Hãy nhấn “Làm mới”.`
+      errorMessage.value = refreshMessage
+      toast.error(refreshMessage)
+      return
+    }
+    toast.success(`Đã xóa ${result.deleted_sessions} buổi cũ và tạo ${result.created_sessions} buổi mới cho ${formatBusinessMonth(monthStart)}.`)
   } catch (error) {
-    errorMessage.value = teacherLimitMessage(error, 'Không thể áp dụng tuần mẫu.')
-    toast.error(errorMessage.value)
+    confirmOpen.value = false
+    templateEditorOpen.value = true
+    templateError.value = userErrorMessage(error, 'Không thể thay lịch tháng. Lịch cũ vẫn được giữ nguyên.')
+    toast.error(templateError.value)
+    confirmBusy.value = false
   }
 }
 
@@ -845,7 +969,7 @@ async function runConfirmation() {
   confirmBusy.value = true
   errorMessage.value = ''
   try {
-    if (confirmActionType.value === 'copy-week') await applyWeekNow()
+    if (confirmActionType.value === 'replace-month-template') await replaceMonthTemplateNow()
     else if (confirmActionType.value === 'archive-schedule') await archiveScheduleNow()
     else if (confirmActionType.value === 'cancel-session') await cancelSessionNow()
     else if (confirmActionType.value === 'delete-month-sessions') await deleteMonthSessionsNow()
@@ -873,6 +997,7 @@ watch(sessionFormIsBackdated, (isBackdated) => {
   <AppPageHeader title="Buổi học" eyebrow="Lịch giảng dạy" description="Xem lịch tháng, tuần hoặc danh sách; quản lý buổi riêng và khung lịch lặp.">
     <template #actions>
       <button class="btn btn-primary" @click="scheduleEditorOpen = !scheduleEditorOpen">Chỉnh sửa lịch</button>
+      <button class="btn btn-outline-primary" :disabled="loading" @click="openWeeklyTemplate">Tạo lịch mẫu</button>
       <button class="btn btn-outline-danger" :disabled="loading || deletePreviewBusy" :aria-busy="deletePreviewBusy || undefined" @click="previewAndConfirmDeleteMonthSessions">
         <span v-if="deletePreviewBusy" class="app-button__spinner" aria-hidden="true"></span>{{ deletePreviewBusy ? 'Đang kiểm tra…' : 'Xóa toàn bộ buổi trong tháng' }}
       </button>
@@ -891,12 +1016,6 @@ watch(sessionFormIsBackdated, (isBackdated) => {
           <option v-for="classRow in classFilterOptions" :key="classRow.id" :value="classRow.id">{{ classRow.name }}</option>
         </select>
       </div>
-      <div v-if="viewMode === 'week'" class="d-flex align-items-center gap-2">
-        <span class="small text-secondary">{{ sourceWeekSessions.length }} buổi mẫu trong tuần</span>
-        <button class="btn btn-outline-primary" :disabled="!sourceWeekSessions.length || loading" @click="copyWeekToMonth">
-          Áp dụng tuần này cho tháng
-        </button>
-      </div>
     </div>
   </div>
 
@@ -914,6 +1033,78 @@ watch(sessionFormIsBackdated, (isBackdated) => {
     </form>
     <div v-if="errorMessage" class="alert alert-danger mt-3 mb-0" role="alert">{{ errorMessage }}</div>
     <template #footer><button class="btn btn-outline-secondary" type="button" :disabled="sessionFormBusy" @click="sessionFormOpen = false">Hủy</button><button class="btn btn-primary" type="button" :disabled="sessionFormBusy || !sessionForm.class_id || !sessionForm.staff_ids.length || (teacherCountKnown(sessionForm.class_id) && sessionFormTeacherCount > MAX_CLASS_TEACHERS)" @click="createSession"><span v-if="sessionFormBusy" class="app-button__spinner" aria-hidden="true"></span>{{ sessionFormBusy ? 'Đang tạo…' : 'Tạo buổi học' }}</button></template>
+  </FormModal>
+
+  <FormModal
+    v-model="templateEditorOpen"
+    :title="`Tạo lịch mẫu cho ${formatBusinessMonth(displayedMonthStart)}`"
+    description="Nhập các buổi theo thứ. Khi lưu, toàn bộ buổi trong tháng của mọi lớp sẽ bị xóa và tạo lại theo mẫu này, kể cả ngày đã qua."
+    size="xl"
+    :busy="templatePreviewBusy"
+    :submit-disabled="Boolean(weeklyTemplateValidationError) || !activeTemplateClasses.length"
+    submit-label="Xem phạm vi thay lịch"
+    submitting-label="Đang kiểm tra…"
+    @submit="previewAndConfirmMonthTemplate"
+    @cancel="templateEditorOpen = false"
+  >
+    <div class="alert alert-warning" role="note">
+      Phạm vi áp dụng là toàn trung tâm, không phụ thuộc bộ lọc lớp. Mỗi buổi mới dùng danh sách thành viên có hiệu lực vào ngày học.
+    </div>
+    <div v-if="!activeTemplateClasses.length" class="alert alert-danger" role="alert">
+      Không có lớp đang hoạt động để đưa vào mẫu lịch.
+    </div>
+    <div class="weekly-template-days" @input="templateError = ''" @change="templateError = ''">
+      <section v-for="day in weeklyTemplateDays" :key="day.day_of_week" class="weekly-template-day" :aria-labelledby="`weekly-template-day-${day.day_of_week}`">
+        <div class="weekly-template-day__heading">
+          <h3 :id="`weekly-template-day-${day.day_of_week}`" class="h6 mb-0">{{ weekdayLabels[day.day_of_week - 1] }}</h3>
+          <button class="btn btn-sm btn-outline-primary" type="button" :disabled="weeklyTemplateSlotCount >= 100" @click="addWeeklyTemplateSlot(day)">Thêm buổi</button>
+        </div>
+        <p v-if="!day.slots.length" class="small text-secondary mb-0">Chưa có buổi mẫu cho ngày này.</p>
+        <div v-for="(slot, slotIndex) in day.slots" :key="slot.client_id" class="weekly-template-slot">
+          <div class="weekly-template-slot__heading">
+            <strong class="small">Buổi {{ slotIndex + 1 }}</strong>
+            <button
+              class="btn btn-sm btn-outline-danger"
+              type="button"
+              :aria-label="`Xóa buổi ${slotIndex + 1}, ${weekdayLabels[day.day_of_week - 1]}`"
+              @click="removeWeeklyTemplateSlot(day, slot.client_id)"
+            >Xóa buổi</button>
+          </div>
+          <div class="row g-3">
+            <AppField :id="`weekly-template-class-${slot.client_id}`" class="col-md-6" label="Lớp" required>
+              <template #default="field">
+                <select :id="field.id" v-model="slot.class_id" class="form-select" required>
+                  <option value="">Chọn lớp</option>
+                  <option v-for="classRow in activeTemplateClasses" :key="classRow.id" :value="classRow.id">{{ classRow.name }}</option>
+                </select>
+              </template>
+            </AppField>
+            <AppField :id="`weekly-template-room-${slot.client_id}`" class="col-md-6" label="Phòng">
+              <template #default="field"><input :id="field.id" v-model="slot.room" class="form-control" placeholder="Ví dụ: A1" /></template>
+            </AppField>
+            <AppField :id="`weekly-template-start-${slot.client_id}`" class="col-md-3" label="Giờ bắt đầu" required>
+              <template #default="field"><input :id="field.id" v-model="slot.start_time" class="form-control" type="time" required /></template>
+            </AppField>
+            <AppField :id="`weekly-template-end-${slot.client_id}`" class="col-md-3" label="Giờ kết thúc" required>
+              <template #default="field"><input :id="field.id" v-model="slot.end_time" class="form-control" type="time" required /></template>
+            </AppField>
+            <div class="col-md-6">
+              <TeacherPicker
+                :id="`weekly-template-teachers-${slot.client_id}`"
+                :model-value="slot.staff_ids"
+                :teachers="activeTeachers"
+                multiple
+                label="Giáo viên"
+                placeholder="Tìm và chọn giáo viên"
+                @update:model-value="slot.staff_ids = Array.isArray($event) ? $event : ($event ? [$event] : [])"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <div v-if="weeklyTemplateValidationError" class="alert alert-info mt-3 mb-0" role="status">{{ weeklyTemplateValidationError }}</div>
+    <div v-if="templateError" class="alert alert-danger mt-3 mb-0" role="alert">{{ templateError }}</div>
   </FormModal>
 
   <div v-if="scheduleEditorOpen" class="card border-0 shadow-sm mb-4">
@@ -1139,6 +1330,43 @@ watch(sessionFormIsBackdated, (isBackdated) => {
 .class-filter {
   min-width: min(100%, 18rem);
   max-width: 30rem;
+}
+
+.weekly-template-days {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.weekly-template-day {
+  padding: 1rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.65rem;
+  background: var(--bs-tertiary-bg);
+}
+
+.weekly-template-day__heading,
+.weekly-template-slot__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.weekly-template-day__heading {
+  margin-bottom: 0.75rem;
+}
+
+.weekly-template-slot {
+  padding: 0.9rem 0 0.15rem;
+  border-top: 1px solid var(--bs-border-color);
+}
+
+.weekly-template-slot + .weekly-template-slot {
+  margin-top: 0.75rem;
+}
+
+.weekly-template-slot__heading {
+  margin-bottom: 0.75rem;
 }
 
 .calendar-scroll {

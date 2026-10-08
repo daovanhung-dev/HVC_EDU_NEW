@@ -275,6 +275,71 @@ export async function deleteSessionsForMonth(monthStart: string): Promise<Delete
   return data as DeleteSessionsForMonthResult
 }
 
+export interface MonthWeekTemplateSlot {
+  day_of_week: number
+  class_id: string
+  start_time: string
+  end_time: string
+  room: string | null
+  staff_ids: string[]
+}
+
+export interface MonthWeekTemplatePreview {
+  month_start: string
+  session_count: number
+  status_counts: {
+    SCHEDULED: number
+    IN_PROGRESS: number
+    COMPLETED: number
+    CANCELLED: number
+  }
+  session_student_count: number
+  assessment_count: number
+  session_staff_count: number
+  staff_replacement_count: number
+  attendance_count: number
+  timesheet_count: number
+  payroll_item_count: number
+  new_session_count: number
+}
+
+export interface MonthWeekTemplateReplacementResult {
+  month_start: string
+  deleted_sessions: number
+  deleted_status_counts: MonthWeekTemplatePreview['status_counts']
+  deleted_session_students: number
+  deleted_session_staff: number
+  deleted_staff_replacements: number
+  deleted_attendances: number
+  deleted_timesheets: number
+  deleted_payroll_items: number
+  created_sessions: number
+}
+
+export async function previewMonthWeekTemplateReplacement(
+  monthStart: string,
+  slots: MonthWeekTemplateSlot[],
+): Promise<MonthWeekTemplatePreview> {
+  const { data, error } = await supabase.rpc('admin_preview_month_week_template_replacement', {
+    p_month_start: monthStart,
+    p_template: slots,
+  })
+  if (error) throw error
+  return data as MonthWeekTemplatePreview
+}
+
+export async function replaceMonthWithWeekTemplate(
+  monthStart: string,
+  slots: MonthWeekTemplateSlot[],
+): Promise<MonthWeekTemplateReplacementResult> {
+  const { data, error } = await supabase.rpc('admin_replace_month_with_week_template', {
+    p_month_start: monthStart,
+    p_template: slots,
+  })
+  if (error) throw error
+  return data as MonthWeekTemplateReplacementResult
+}
+
 export async function updateSessionOccurrence(input: { session_id: string; start?: string; end?: string; cancel?: boolean; room?: string | null }) {
   const { data, error } = await supabase.rpc('admin_update_session_occurrence', {
     p_session_id: input.session_id,
