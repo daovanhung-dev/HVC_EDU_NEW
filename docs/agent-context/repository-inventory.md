@@ -253,14 +253,18 @@
 | supabase/migrations/0050_reset_all_schedules.sql | Supabase / migrations | SQL |
 | supabase/migrations/0051_delete_schedules_for_month.sql | Supabase / migrations | SQL |
 | supabase/migrations/0052_delete_all_sessions_in_month.sql | Supabase / migrations | SQL |
+| supabase/migrations/0053_month_week_template_replacement.sql | Supabase / migrations | SQL |
+| supabase/migrations/0054_sync_manual_session_student_rosters.sql | Supabase / migrations | SQL |
 | supabase/seed.sql | Supabase / cấu hình và seed | SQL |
 | supabase/tests/admin_monthly_session_planning.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/backdated_session_creation.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/class_teacher_limit.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/continuous_learning_rls.test.sql | Supabase / kiểm thử SQL | SQL |
+| supabase/tests/month_week_template_replacement.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/parallel_session_rooms.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/schedule_reset.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/session_learning_commands.test.sql | Supabase / kiểm thử SQL | SQL |
+| supabase/tests/student_future_session_roster_sync.test.sql | Supabase / kiểm thử SQL | SQL |
 | supabase/tests/timesheet_workflow.test.sql | Supabase / kiểm thử SQL | SQL |
 
-Tổng: 256 đường dẫn có trong inventory.
+Tổng: 260 đường dẫn có trong inventory.
