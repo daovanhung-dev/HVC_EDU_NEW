@@ -144,6 +144,27 @@ describe('Staff SessionsPage', () => {
     unmountSessionsPage(wrapper)
   })
 
+  it('shows a sign-in message and keeps attendance closed when starting fails', async () => {
+    mocks.getMySessions.mockResolvedValueOnce([makeSession('SCHEDULED')])
+    mocks.startSession.mockRejectedValueOnce({ code: 'UNAUTHENTICATED', status: 401 })
+    const wrapper = mountSessionsPage()
+    await flushPromises()
+
+    await wrapper.get('.session-month__session-card').trigger('click')
+    await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text().includes('Bắt đầu buổi học'))?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[role="alert"]').text()).toBe('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.')
+    expect(wrapper.get('.teacher-session-status').text()).toBe('Sắp diễn ra')
+    const modal = document.body.querySelector<HTMLElement>('.staff-attendance-modal.app-modal')
+    expect(modal?.classList.contains('show')).toBe(false)
+    expect(modal?.getAttribute('aria-hidden')).toBe('true')
+    expect(mocks.getSessionStudents).toHaveBeenCalledTimes(1)
+    expect(mocks.updateSessionLearning).not.toHaveBeenCalled()
+    unmountSessionsPage(wrapper)
+  })
+
   it('shows Vietnamese statuses and saves only changed student rows', async () => {
     const wrapper = await openAttendance()
     expect(attendanceModal().text()).toContain('Có mặt')
