@@ -51,6 +51,46 @@ export async function getClassActiveMemberships(classId: string): Promise<ClassM
   return rows.map((row) => ({ ...row, students: oneRelation(row.students) }) as ClassMembershipDetailRow)
 }
 
+export interface ClassRosterExportStudent {
+  id: string
+  student_code: string | null
+  full_name: string
+  phone: string | null
+  parent_name: string | null
+  status: string
+  created_at: string | null
+}
+
+export async function getClassRosterForExport(classId: string): Promise<ClassRosterExportStudent[]> {
+  const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date())
+  const rows = await unwrap<any[]>(supabase.from('class_memberships')
+    .select('class_id,student_id,start_date,end_date,status,students(id,student_code,full_name,phone,parent_name,status,created_at)')
+    .eq('class_id', classId)
+    .eq('status', 'ACTIVE')
+    .lte('start_date', today)
+    .or(`end_date.is.null,end_date.gte.${today}`)
+    .order('start_date')
+    .order('created_at'))
+
+  const studentsById = new Map<string, ClassRosterExportStudent>()
+  for (const row of rows) {
+    if (row.class_id !== classId || row.status !== 'ACTIVE' || row.start_date > today || (row.end_date && row.end_date < today)) continue
+    const student = oneRelation<any>(row.students)
+    if (!student || studentsById.has(student.id)) continue
+    studentsById.set(student.id, {
+      id: student.id,
+      student_code: student.student_code ?? null,
+      full_name: student.full_name,
+      phone: student.phone ?? null,
+      parent_name: student.parent_name ?? null,
+      status: student.status,
+      created_at: student.created_at ?? null,
+    })
+  }
+
+  return [...studentsById.values()].sort((a, b) => a.full_name.localeCompare(b.full_name, 'vi'))
+}
+
 export async function getClassActiveRosterSize(classId: string): Promise<number> {
   const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date())
   const rows = await unwrap<Array<{ id: string }>>(supabase.from('class_memberships').select('id').eq('class_id', classId).eq('status', 'ACTIVE').lte('start_date', today).or(`end_date.is.null,end_date.gte.${today}`).limit(1))

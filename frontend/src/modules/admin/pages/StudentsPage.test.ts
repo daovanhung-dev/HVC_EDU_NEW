@@ -6,6 +6,8 @@ import StudentsPage from './StudentsPage.vue'
 
 const mocks = vi.hoisted(() => ({
   getStudents: vi.fn(),
+  getClasses: vi.fn(),
+  getClassRosterForExport: vi.fn(),
   adminCreateUser: vi.fn(),
   adminExportStudentLogins: vi.fn(),
   adminResetPassword: vi.fn(),
@@ -23,7 +25,11 @@ vi.mock('bootstrap', () => ({
     dispose() {}
   },
 }))
-vi.mock('@/services/data-queries', () => ({ getStudents: mocks.getStudents }))
+vi.mock('@/services/data-queries', () => ({
+  getStudents: mocks.getStudents,
+  getClasses: mocks.getClasses,
+  getClassRosterForExport: mocks.getClassRosterForExport,
+}))
 vi.mock('@/services/commands', () => ({
   adminCreateUser: mocks.adminCreateUser,
   adminExportStudentLogins: mocks.adminExportStudentLogins,
@@ -34,12 +40,16 @@ vi.mock('@/services/commands', () => ({
   updateStudent: mocks.updateStudent,
 }))
 vi.mock('@/modules/admin/utils/student-account-export', () => ({ downloadStudentLoginExport: vi.fn() }))
+vi.mock('@/modules/admin/utils/student-class-roster-export', () => ({ downloadStudentClassRosterExport: vi.fn() }))
 
 import { downloadStudentLoginExport } from '@/modules/admin/utils/student-account-export'
+import { downloadStudentClassRosterExport } from '@/modules/admin/utils/student-class-roster-export'
 
 const student = { id: 'qa-student-1', user_id: 'qa-user-1', student_code: 'QA-S-1', full_name: 'Học sinh QA', phone: null, parent_name: null, parent_phone: null, status: 'ACTIVE', created_at: '2026-09-30T08:00:00Z' }
 const secondActiveStudent = { id: 'qa-student-3', user_id: 'qa-user-3', student_code: 'QA-S-3', full_name: 'Học sinh QA hai', phone: null, parent_name: null, parent_phone: null, status: 'ACTIVE', created_at: '2026-09-30T08:00:00Z' }
 const inactiveStudent = { id: 'qa-student-2', user_id: 'qa-user-2', student_code: 'QA-S-2', full_name: 'Học sinh QA nghỉ', phone: null, parent_name: null, parent_phone: null, status: 'INACTIVE', created_at: '2026-09-30T08:00:00Z' }
+const qaClass = { id: 'qa-class-1', code: 'QA-CLASS-1', name: 'Lớp QA' }
+const qaClassStudent = { id: student.id, student_code: student.student_code, full_name: student.full_name, phone: student.phone, parent_name: student.parent_name, status: student.status, created_at: student.created_at }
 
 const mountedWrappers: Array<{ unmount: () => void }> = []
 
@@ -74,6 +84,8 @@ describe('StudentsPage dialogs', () => {
 
   beforeEach(() => {
     mocks.getStudents.mockReset().mockResolvedValue([student])
+    mocks.getClasses.mockReset().mockResolvedValue([qaClass])
+    mocks.getClassRosterForExport.mockReset().mockResolvedValue([qaClassStudent])
     mocks.adminCreateUser.mockReset().mockResolvedValue({ temporary_password: 'QA-temp-pass-42' })
     mocks.adminExportStudentLogins.mockReset().mockResolvedValue({
       rows: [{ student_code: student.student_code, full_name: student.full_name, login_email: 'qa-login@hvc-edu.local' }],
@@ -86,6 +98,7 @@ describe('StudentsPage dialogs', () => {
     mocks.setAccountStatus.mockReset().mockResolvedValue(undefined)
     mocks.updateStudent.mockReset().mockResolvedValue(undefined)
     vi.mocked(downloadStudentLoginExport).mockReset().mockResolvedValue(undefined)
+    vi.mocked(downloadStudentClassRosterExport).mockReset().mockResolvedValue(undefined)
   })
 
   it('shows a retryable load error instead of a misleading empty list', async () => {
@@ -203,6 +216,50 @@ describe('StudentsPage dialogs', () => {
     expect(wrapper.text()).toContain('1/100 đã chọn')
     expect(useToastStore(pinia).items.at(-1)?.message).toContain('Đã xuất 2 tài khoản học sinh')
     wrapper.unmount()
+  })
+
+  it('exports the complete selected class roster independently of the student search and login export', async () => {
+    const pinia = createPinia()
+    const wrapper = track(mount(StudentsPage, { global: { plugins: [pinia], stubs: { RouterLink: { template: '<a><slot /></a>' } } } }))
+    await flushPromises()
+
+    expect(getPageOrBody(wrapper, '[data-testid="export-student-class-roster"]').element).toHaveProperty('disabled', true)
+    expect(mocks.getClassRosterForExport).not.toHaveBeenCalled()
+
+    await getPageOrBody(wrapper, '#student-search').setValue('không khớp roster')
+    await getPageOrBody(wrapper, '[data-testid="student-export-class"]').setValue(qaClass.id)
+    await getPageOrBody(wrapper, '[data-testid="export-student-class-roster"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.getClassRosterForExport).toHaveBeenCalledWith(qaClass.id)
+    expect(downloadStudentClassRosterExport).toHaveBeenCalledWith(qaClass.code, [qaClassStudent])
+    expect(mocks.adminExportStudentLogins).not.toHaveBeenCalled()
+    expect(useToastStore(pinia).items.at(-1)?.message).toContain(`Đã xuất 1 học sinh lớp ${qaClass.name}`)
+    wrapper.unmount()
+  })
+
+  it('does not create a workbook for an empty roster and reports roster query errors', async () => {
+    const pinia = createPinia()
+    const emptyWrapper = track(mount(StudentsPage, { global: { plugins: [pinia], stubs: { RouterLink: { template: '<a><slot /></a>' } } } }))
+    await flushPromises()
+    await getPageOrBody(emptyWrapper, '[data-testid="student-export-class"]').setValue(qaClass.id)
+    mocks.getClassRosterForExport.mockResolvedValueOnce([])
+    await getPageOrBody(emptyWrapper, '[data-testid="export-student-class-roster"]').trigger('click')
+    await flushPromises()
+    expect(downloadStudentClassRosterExport).not.toHaveBeenCalled()
+    expect(useToastStore(pinia).items.at(-1)?.message).toContain('Chưa tạo tệp Excel')
+    emptyWrapper.unmount()
+
+    const errorPinia = createPinia()
+    const errorWrapper = track(mount(StudentsPage, { global: { plugins: [errorPinia], stubs: { RouterLink: { template: '<a><slot /></a>' } } } }))
+    await flushPromises()
+    await getPageOrBody(errorWrapper, '[data-testid="student-export-class"]').setValue(qaClass.id)
+    mocks.getClassRosterForExport.mockRejectedValueOnce(new Error('QA class roster failure'))
+    await getPageOrBody(errorWrapper, '[data-testid="export-student-class-roster"]').trigger('click')
+    await flushPromises()
+    expect(downloadStudentClassRosterExport).not.toHaveBeenCalled()
+    expect(useToastStore(errorPinia).items.at(-1)?.message).toContain('QA class roster failure')
+    errorWrapper.unmount()
   })
 
   it('keeps a blank email and warns when an email is missing or a row became inactive', async () => {
