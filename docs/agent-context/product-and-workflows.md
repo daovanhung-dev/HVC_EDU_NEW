@@ -19,7 +19,7 @@ ASSISTANT là role lịch sử; migration 0039 chuyển sang TEACHER. PARENT là
 - Lịch ACTIVE sinh buổi 30 ngày tới theo Asia/Ho_Chi_Minh; generator giữ nguyên buổi đã bắt đầu/hoàn tất và các override được đánh dấu. Xác minh migration/config backend hiện hành trước khi dựa vào lịch chạy.
 - Admin có thể lập buổi cụ thể và áp buổi trong một tuần làm mẫu cho tháng được chọn. Kết quả là các session theo ngày cụ thể, không tạo kỳ vận hành ClassMonth.
 - Buổi lớp khác nhau có thể trùng giờ nếu phòng khác và roster không giao nhau. Cùng lớp, học sinh chung, phòng trùng hoặc thiếu phòng khi giao giờ bị chặn. Tối đa 5 teacher duy nhất được tính trên assignment đang hoạt động của lớp.
-- Hủy hoặc đổi giờ buổi tương lai không xóa buổi/hồ sơ học tập lịch sử. Các ngày trong tuần lưu theo ISO: 1 là Thứ Hai, 7 là Chủ Nhật.
+- Hủy hoặc đổi giờ buổi tương lai không xóa buổi/hồ sơ học tập lịch sử. Tác vụ xóa hàng loạt dành riêng cho Admin là ngoại lệ: xóa hẳn các buổi và dữ liệu liên kết của tháng đã chọn, đồng thời giữ audit và các buổi ngoài tháng. Các ngày trong tuần lưu theo ISO: 1 là Thứ Hai, 7 là Chủ Nhật.
 
 ## Buổi học và kết quả
 

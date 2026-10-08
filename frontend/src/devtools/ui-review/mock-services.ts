@@ -42,6 +42,7 @@ export const sessions: any[] = [
   { id: 'qa-session-3', class_id: 'qa-class-2', scheduled_start_at: at(-1, '15:00'), scheduled_end_at: at(-1, '16:30'), status: 'COMPLETED', room: 'QA-B2', session_note: 'Ôn tập từ vựng.', lesson_youtube_url: 'https://youtu.be/dQw4w9WgXcQ', classes: classes[1], class_schedules: null, session_staff: [{ staff_id: 'qa-teacher-2', assignment_role: 'TEACHER', staff: teachers[1] }], session_students: [] },
   { id: 'qa-session-4', class_id: 'qa-class-1', recurrence_schedule_id: 'qa-schedule-1', manual_schedule: false, scheduled_start_at: at(-3, '17:30'), scheduled_end_at: at(-3, '19:00'), status: 'COMPLETED', room: 'QA-A1', session_note: 'Phép chia và luyện tập.', classes: classes[0], class_schedules: schedules[0], session_staff: [{ staff_id: 'qa-teacher-1', assignment_role: 'TEACHER', staff: teachers[0] }], session_students: [] },
   { id: 'qa-session-5', class_id: 'qa-class-2', recurrence_schedule_id: null, manual_schedule: true, scheduled_start_at: at(3, '15:00'), scheduled_end_at: at(3, '16:30'), status: 'SCHEDULED', room: 'QA-B2', session_note: null, classes: classes[1], class_schedules: null, session_staff: [{ staff_id: 'qa-teacher-2', assignment_role: 'TEACHER', staff: teachers[1] }], session_students: [] },
+  { id: 'qa-session-6', class_id: 'qa-class-2', recurrence_schedule_id: null, manual_schedule: true, scheduled_start_at: at(-2, '15:00'), scheduled_end_at: at(-2, '16:30'), status: 'CANCELLED', room: 'QA-B2', session_note: null, classes: classes[1], class_schedules: null, session_staff: [], session_students: [] },
 ]
 
 export const attendance: any[] = [
@@ -154,34 +155,62 @@ function sessionMonth(session: any) {
   const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(session.scheduled_start_at))
   return day.slice(0, 7)
 }
-function isResetCandidate(session: any, monthStart: string) {
-  return session.status === 'SCHEDULED'
-    && (!session.manual_schedule || sessionMonth(session) === monthStart.slice(0, 7))
-}
-function isProtectedSession(sessionId: string) {
-  return attendance.some((item) => item.session_id === sessionId)
-    || timesheets.some((item) => item.session_id === sessionId)
-}
-export async function previewScheduleResetForMonth(monthStart: string) {
+export async function previewDeleteSessionsForMonth(monthStart: string) {
+  const month = monthStart.slice(0, 7)
+  const targets = sessions.filter((item) => sessionMonth(item) === month)
+  const statusCount = (status: string) => targets.filter((item) => item.status === status).length
   return query({
+    month_start: monthStart,
     schedule_count: schedules.length,
-    recurring_session_count: sessions.filter((item) => item.status === 'SCHEDULED' && !item.manual_schedule).length,
-    month_manual_session_count: sessions.filter((item) => item.status === 'SCHEDULED' && item.manual_schedule && sessionMonth(item) === monthStart.slice(0, 7)).length,
-    protected_session_count: sessions.filter((item) => isResetCandidate(item, monthStart) && isProtectedSession(item.id)).length,
+    schedule_staff_count: schedules.reduce((sum, item) => sum + (item.class_schedule_staff?.length || 0), 0),
+    session_count: targets.length,
+    status_counts: {
+      SCHEDULED: statusCount('SCHEDULED'),
+      IN_PROGRESS: statusCount('IN_PROGRESS'),
+      COMPLETED: statusCount('COMPLETED'),
+      CANCELLED: statusCount('CANCELLED'),
+    },
+    session_student_count: targets.reduce((sum, item) => sum + (item.session_students?.length || 0), 0),
+    assessment_count: 0,
+    session_staff_count: targets.reduce((sum, item) => sum + (item.session_staff?.length || 0), 0),
+    staff_replacement_count: 0,
+    attendance_count: attendance.filter((item) => targets.some((session) => session.id === item.session_id)).length,
+    timesheet_count: timesheets.filter((item) => targets.some((session) => session.id === item.session_id)).length,
+    payroll_item_count: 0,
   })
 }
-export async function resetScheduleForMonth(monthStart: string) {
+export async function deleteSessionsForMonth(monthStart: string) {
   await query(true)
-  const protectedCount = sessions.filter((item) => isResetCandidate(item, monthStart) && isProtectedSession(item.id)).length
-  if (protectedCount) throw new Error('RESET_PROTECTED_HISTORY')
-  const candidates = sessions.filter((item) => isResetCandidate(item, monthStart))
-  const deleted_recurring_sessions = candidates.filter((item) => !item.manual_schedule).length
-  const deleted_month_manual_sessions = candidates.filter((item) => item.manual_schedule).length
+  const month = monthStart.slice(0, 7)
+  const targets = sessions.filter((item) => sessionMonth(item) === month)
+  const deleted_status_counts = {
+    SCHEDULED: targets.filter((item) => item.status === 'SCHEDULED').length,
+    IN_PROGRESS: targets.filter((item) => item.status === 'IN_PROGRESS').length,
+    COMPLETED: targets.filter((item) => item.status === 'COMPLETED').length,
+    CANCELLED: targets.filter((item) => item.status === 'CANCELLED').length,
+  }
+  const deletedIds = new Set(targets.map((item) => item.id))
   const deleted_schedules = schedules.length
-  const deletedIds = new Set(candidates.map((item) => item.id))
+  const deleted_schedule_staff = schedules.reduce((sum, item) => sum + (item.class_schedule_staff?.length || 0), 0)
+  const deleted_attendances = attendance.filter((item) => deletedIds.has(item.session_id)).length
+  const deleted_timesheets = timesheets.filter((item) => deletedIds.has(item.session_id)).length
   sessions.splice(0, sessions.length, ...sessions.filter((item) => !deletedIds.has(item.id)))
+  attendance.splice(0, attendance.length, ...attendance.filter((item) => !deletedIds.has(item.session_id)))
+  timesheets.splice(0, timesheets.length, ...timesheets.filter((item) => !deletedIds.has(item.session_id)))
   schedules.splice(0, schedules.length)
-  return { deleted_schedules, deleted_recurring_sessions, deleted_month_manual_sessions }
+  return {
+    month_start: monthStart,
+    deleted_sessions: targets.length,
+    deleted_schedules,
+    deleted_schedule_staff,
+    deleted_status_counts,
+    deleted_session_students: targets.reduce((sum, item) => sum + (item.session_students?.length || 0), 0),
+    deleted_session_staff: targets.reduce((sum, item) => sum + (item.session_staff?.length || 0), 0),
+    deleted_staff_replacements: 0,
+    deleted_attendances,
+    deleted_timesheets,
+    deleted_payroll_items: 0,
+  }
 }
 export async function addTeacherToClassSchedule(id: string, staffId: string) { const row = schedules.find((item) => item.id === id); const staff = teachers.find((item) => item.id === staffId); if (row && staff) row.class_schedule_staff.push({ staff_id: staffId, staff }); return {} }
 export async function removeTeacherFromClassSchedule(id: string, staffId: string) { const row = schedules.find((item) => item.id === id); if (row) row.class_schedule_staff = row.class_schedule_staff.filter((item: any) => item.staff_id !== staffId); return {} }

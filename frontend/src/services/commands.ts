@@ -224,29 +224,55 @@ export async function generateUpcomingSessions(): Promise<{ room_conflicts?: num
   return data as { room_conflicts?: number; missing_room_conflicts?: number; [key: string]: unknown }
 }
 
-export type ScheduleResetForMonthPreview = {
+export type DeleteSessionsForMonthPreview = {
+  month_start: string
   schedule_count: number
-  recurring_session_count: number
-  month_manual_session_count: number
-  protected_session_count: number
+  schedule_staff_count: number
+  session_count: number
+  status_counts: {
+    SCHEDULED: number
+    IN_PROGRESS: number
+    COMPLETED: number
+    CANCELLED: number
+  }
+  session_student_count: number
+  assessment_count: number
+  session_staff_count: number
+  staff_replacement_count: number
+  attendance_count: number
+  timesheet_count: number
+  payroll_item_count: number
 }
 
-export type ScheduleResetForMonthResult = {
+export type DeleteSessionsForMonthResult = {
+  month_start: string
+  deleted_sessions: number
   deleted_schedules: number
-  deleted_recurring_sessions: number
-  deleted_month_manual_sessions: number
+  deleted_schedule_staff: number
+  deleted_status_counts: {
+    SCHEDULED: number
+    IN_PROGRESS: number
+    COMPLETED: number
+    CANCELLED: number
+  }
+  deleted_session_students: number
+  deleted_session_staff: number
+  deleted_staff_replacements: number
+  deleted_attendances: number
+  deleted_timesheets: number
+  deleted_payroll_items: number
 }
 
-export async function previewScheduleResetForMonth(monthStart: string): Promise<ScheduleResetForMonthPreview> {
-  const { data, error } = await supabase.rpc('admin_preview_schedule_reset_for_month', { p_month_start: monthStart })
+export async function previewDeleteSessionsForMonth(monthStart: string): Promise<DeleteSessionsForMonthPreview> {
+  const { data, error } = await supabase.rpc('admin_preview_delete_sessions_for_month', { p_month_start: monthStart })
   if (error) throw error
-  return data as ScheduleResetForMonthPreview
+  return data as DeleteSessionsForMonthPreview
 }
 
-export async function resetScheduleForMonth(monthStart: string): Promise<ScheduleResetForMonthResult> {
-  const { data, error } = await supabase.rpc('admin_delete_schedule_reset_for_month', { p_month_start: monthStart })
+export async function deleteSessionsForMonth(monthStart: string): Promise<DeleteSessionsForMonthResult> {
+  const { data, error } = await supabase.rpc('admin_delete_sessions_for_month', { p_month_start: monthStart })
   if (error) throw error
-  return data as ScheduleResetForMonthResult
+  return data as DeleteSessionsForMonthResult
 }
 
 export async function updateSessionOccurrence(input: { session_id: string; start?: string; end?: string; cancel?: boolean; room?: string | null }) {

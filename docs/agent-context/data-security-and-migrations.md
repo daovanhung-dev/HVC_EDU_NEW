@@ -10,7 +10,7 @@
 
 ## Chuỗi migration
 
-Migration được đánh số trong supabase/migrations; repo hiện có đến 0051. Luôn đọc file liên quan và phần migration sau đó đã thay đổi cùng object.
+Migration được đánh số trong supabase/migrations; repo hiện có đến 0052. Luôn đọc file liên quan và phần migration sau đó đã thay đổi cùng object.
 
 - 0036–0038 thêm rồi retire vai trò PARENT; hồ sơ/liên kết lịch sử còn được giữ.
 - 0039 chuyển ứng dụng sang lịch lặp, membership liên tục, gắn session với class và chuyển ASSISTANT thành TEACHER.
@@ -26,6 +26,7 @@ Migration được đánh số trong supabase/migrations; repo hiện có đến
 - 0049 mở rộng yêu cầu đổi mật khẩu và chặn RLS của dữ liệu giảng dạy/chấm công cho giáo viên bị reset; hồ sơ vẫn đọc được để hoàn tất đổi mật khẩu.
 - 0050 ban đầu thêm RPC đặt lại lịch toàn trung tâm theo kiểu lưu trữ khung lặp và hủy buổi SCHEDULED.
 - 0051 thay thao tác reset bằng xóa có preview theo tháng Việt Nam: yêu cầu CLASS_MANAGE, đồng bộ với bộ sinh lịch, xóa khung lặp toàn trung tâm cùng buổi SCHEDULED do lịch lặp sinh ở mọi ngày và buổi tạo riêng trong tháng chọn. Buổi đã hủy/đang diễn ra/hoàn tất và lịch sử liên quan được giữ; snapshot khung lặp được lưu trên buổi còn lại trước khi xóa mẫu. Điểm danh, snapshot kết quả, nội dung buổi, chấm công hoặc payroll liên kết với buổi cần xóa sẽ chặn toàn bộ thao tác. RPC reset cũ bị thu hồi quyền EXECUTE.
+- 0052 thay RPC xóa tháng bằng xóa vật lý mọi buổi trong tháng Việt Nam đã chọn, ở mọi trạng thái và mọi lớp; xóa cả roster, phân công, thay giáo viên, điểm danh, kết quả, chấm công và payroll item liên kết. Các mẫu lịch lặp toàn trung tâm bị xóa; buổi ngoài tháng được giữ và lưu snapshot mẫu lịch trước khi FK bị xóa. RPC 0051 bị thu hồi EXECUTE; RPC mới xác minh CLASS_MANAGE, khóa đồng bộ bộ sinh lịch, preview số lượng và audit trước thao tác xóa.
 
 Các migration cũ hơn tạo schema nền, role, RBAC, lớp tháng, buổi, điểm danh, tài chính, function, RLS và index. Không suy ra phạm vi sản phẩm hiện tại từ migration cũ.
 

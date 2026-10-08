@@ -22,8 +22,8 @@ const mockState = vi.hoisted(() => ({
   removeTeacherFromClassSchedule: vi.fn(),
   setClassScheduleStatus: vi.fn(),
   updateClassSchedule: vi.fn(),
-  previewScheduleResetForMonth: vi.fn(),
-  resetScheduleForMonth: vi.fn(),
+  previewDeleteSessionsForMonth: vi.fn(),
+  deleteSessionsForMonth: vi.fn(),
   toastSuccess: vi.fn(),
   toastInfo: vi.fn(),
   toastError: vi.fn(),
@@ -48,8 +48,8 @@ vi.mock('@/services/commands', () => ({
   removeTeacherFromClassSchedule: mockState.removeTeacherFromClassSchedule,
   setClassScheduleStatus: mockState.setClassScheduleStatus,
   updateClassSchedule: mockState.updateClassSchedule,
-  previewScheduleResetForMonth: mockState.previewScheduleResetForMonth,
-  resetScheduleForMonth: mockState.resetScheduleForMonth,
+  previewDeleteSessionsForMonth: mockState.previewDeleteSessionsForMonth,
+  deleteSessionsForMonth: mockState.deleteSessionsForMonth,
 }))
 
 vi.mock('bootstrap', () => ({
@@ -165,16 +165,32 @@ describe('AdminSessionsPage calendar', () => {
     mockState.removeTeacherFromClassSchedule.mockReset().mockResolvedValue(undefined)
     mockState.setClassScheduleStatus.mockReset().mockResolvedValue({})
     mockState.updateClassSchedule.mockReset().mockResolvedValue({})
-    mockState.previewScheduleResetForMonth.mockReset().mockResolvedValue({
+    mockState.previewDeleteSessionsForMonth.mockReset().mockResolvedValue({
+      month_start: `${getBusinessDateKey(new Date()).slice(0, 7)}-01`,
       schedule_count: 2,
-      recurring_session_count: 3,
-      month_manual_session_count: 1,
-      protected_session_count: 0,
+      schedule_staff_count: 2,
+      session_count: 6,
+      status_counts: { SCHEDULED: 3, IN_PROGRESS: 1, COMPLETED: 1, CANCELLED: 1 },
+      session_student_count: 2,
+      assessment_count: 2,
+      session_staff_count: 1,
+      staff_replacement_count: 1,
+      attendance_count: 2,
+      timesheet_count: 1,
+      payroll_item_count: 1,
     })
-    mockState.resetScheduleForMonth.mockReset().mockResolvedValue({
+    mockState.deleteSessionsForMonth.mockReset().mockResolvedValue({
+      month_start: `${getBusinessDateKey(new Date()).slice(0, 7)}-01`,
+      deleted_sessions: 6,
       deleted_schedules: 2,
-      deleted_recurring_sessions: 3,
-      deleted_month_manual_sessions: 1,
+      deleted_schedule_staff: 2,
+      deleted_status_counts: { SCHEDULED: 3, IN_PROGRESS: 1, COMPLETED: 1, CANCELLED: 1 },
+      deleted_session_students: 2,
+      deleted_session_staff: 1,
+      deleted_staff_replacements: 1,
+      deleted_attendances: 2,
+      deleted_timesheets: 1,
+      deleted_payroll_items: 1,
     })
     mockState.toastSuccess.mockReset()
     mockState.toastInfo.mockReset()
@@ -262,49 +278,121 @@ describe('AdminSessionsPage calendar', () => {
     expect(wrapper.find('.session-calendar-empty').text()).toContain('1 buổi ở lớp khác đang bị bộ lọc lớp ẩn.')
   })
 
-  it('previews a month-scoped deletion, supports cancel, and reports the deleted counts', async () => {
+  it('previews permanent deletion for every status, supports cancel, and reports deleted counts', async () => {
     mockState.route.query.class_id = 'qa-class-1'
     const wrapper = mountPage()
     await flushPromises()
 
     const monthStart = `${getBusinessDateKey(new Date()).slice(0, 7)}-01`
-    await clickButtonWithText(wrapper, 'Xóa tất cả lịch')
-    expect(mockState.previewScheduleResetForMonth).toHaveBeenCalledWith(monthStart)
-    const confirmation = findAllPageOrBody(wrapper, '.app-modal').find((modal) => modal.text().includes('không phụ thuộc bộ lọc lớp'))
-    if (!confirmation) throw new Error('Month reset confirmation dialog not found')
+    await clickButtonWithText(wrapper, 'Xóa toàn bộ buổi trong tháng')
+    expect(mockState.previewDeleteSessionsForMonth).toHaveBeenCalledWith(monthStart)
+    const confirmation = findAllPageOrBody(wrapper, '.app-modal').find((modal) => modal.text().includes('Bộ lọc lớp không làm thay đổi phạm vi xóa'))
+    if (!confirmation) throw new Error('Month deletion confirmation dialog not found')
     expect(confirmation.text()).toContain(formatBusinessMonth(monthStart))
-    expect(confirmation.text()).toContain('2 khung lịch lặp · 3 buổi từ lịch lặp · 1 buổi riêng trong tháng')
-    expect(confirmation.text()).toContain('Buổi đã hủy, đang diễn ra hoặc hoàn tất')
+    expect(confirmation.text()).toContain('6 buổi (3 đã lên lịch · 1 đang diễn ra · 1 đã hoàn tất · 1 đã hủy)')
+    expect(confirmation.text()).toContain('2 mẫu lịch lặp')
+    expect(confirmation.text()).toContain('2 phân công giáo viên trên mẫu lịch')
+    expect(confirmation.text()).toContain('2 điểm danh')
+    expect(confirmation.text()).toContain('1 mục lương')
+    expect(confirmation.text()).toContain('XÓA VĨNH VIỄN')
+    expect(confirmation.text()).toContain('buổi thuộc tháng khác được giữ')
     await confirmation.get('.btn-outline-secondary').trigger('click')
     await flushPromises()
-    expect(mockState.resetScheduleForMonth).not.toHaveBeenCalled()
+    expect(mockState.deleteSessionsForMonth).not.toHaveBeenCalled()
 
-    await clickButtonWithText(wrapper, 'Xóa tất cả lịch')
-    const secondConfirmation = findAllPageOrBody(wrapper, '.app-modal').find((modal) => modal.text().includes('không phụ thuộc bộ lọc lớp'))
-    if (!secondConfirmation) throw new Error('Month reset confirmation dialog not found after reopening')
+    await clickButtonWithText(wrapper, 'Xóa toàn bộ buổi trong tháng')
+    const secondConfirmation = findAllPageOrBody(wrapper, '.app-modal').find((modal) => modal.text().includes('Bộ lọc lớp không làm thay đổi phạm vi xóa'))
+    if (!secondConfirmation) throw new Error('Month deletion confirmation dialog not found after reopening')
     await secondConfirmation.get('.btn-danger').trigger('click')
     await flushPromises()
 
-    expect(mockState.resetScheduleForMonth).toHaveBeenCalledWith(monthStart)
+    expect(mockState.deleteSessionsForMonth).toHaveBeenCalledWith(monthStart)
     expect(mockState.getMySessions).toHaveBeenCalledTimes(2)
-    expect(mockState.toastSuccess).toHaveBeenCalledWith('Đã xóa 2 khung lịch lặp, 3 buổi từ lịch lặp và 1 buổi riêng trong tháng.')
+    expect(mockState.toastSuccess).toHaveBeenCalledWith('Đã xóa vĩnh viễn 6 buổi học trong tháng và 2 mẫu lịch lặp của trung tâm.')
   })
 
-  it('blocks confirmation when the reset preview finds scheduled sessions with linked history', async () => {
-    mockState.previewScheduleResetForMonth.mockResolvedValue({
+  it('allows deletion of all linked records and every session status after preview', async () => {
+    mockState.previewDeleteSessionsForMonth.mockResolvedValue({
+      month_start: `${getBusinessDateKey(new Date()).slice(0, 7)}-01`,
       schedule_count: 1,
-      recurring_session_count: 2,
-      month_manual_session_count: 0,
-      protected_session_count: 1,
+      schedule_staff_count: 1,
+      session_count: 2,
+      status_counts: { SCHEDULED: 0, IN_PROGRESS: 1, COMPLETED: 1, CANCELLED: 0 },
+      session_student_count: 2,
+      assessment_count: 1,
+      session_staff_count: 1,
+      staff_replacement_count: 0,
+      attendance_count: 2,
+      timesheet_count: 1,
+      payroll_item_count: 1,
     })
     const wrapper = mountPage()
     await flushPromises()
 
-    await clickButtonWithText(wrapper, 'Xóa tất cả lịch')
+    await clickButtonWithText(wrapper, 'Xóa toàn bộ buổi trong tháng')
+    expect(findAllPageOrBody(wrapper, '.app-modal').some((modal) => modal.text().includes('1 đang diễn ra · 1 đã hoàn tất'))).toBe(true)
+    expect(pageAndBodyText(wrapper)).not.toContain('đã gắn dữ liệu điểm danh')
+    expect(mockState.deleteSessionsForMonth).not.toHaveBeenCalled()
 
-    expect(mockState.resetScheduleForMonth).not.toHaveBeenCalled()
-    expect(wrapper.find('.app-modal').exists()).toBe(false)
-    expect(pageAndBodyText(wrapper)).toContain('có 1 buổi SCHEDULED đã gắn dữ liệu điểm danh')
+    const confirmation = findAllPageOrBody(wrapper, '.app-modal').find((modal) => modal.text().includes('1 đang diễn ra · 1 đã hoàn tất'))
+    if (!confirmation) throw new Error('Month deletion confirmation dialog not found')
+    await confirmation.get('.btn-danger').trigger('click')
+    await flushPromises()
+    expect(mockState.deleteSessionsForMonth).toHaveBeenCalled()
+  })
+
+  it('reports preview failures without opening the delete confirmation', async () => {
+    mockState.previewDeleteSessionsForMonth.mockRejectedValue(new Error('QA preview failure'))
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await clickButtonWithText(wrapper, 'Xóa toàn bộ buổi trong tháng')
+    await flushPromises()
+
+    expect(findAllPageOrBody(wrapper, '.app-modal').some((modal) => modal.text().includes('XÓA VĨNH VIỄN'))).toBe(false)
+    expect(mockState.deleteSessionsForMonth).not.toHaveBeenCalled()
+    expect(mockState.toastError).toHaveBeenCalledWith('Không thể xem trước phạm vi xóa lịch.')
+  })
+
+  it('keeps confirmation open and reports a delete failure', async () => {
+    mockState.deleteSessionsForMonth.mockRejectedValue(new Error('QA delete failure'))
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await clickButtonWithText(wrapper, 'Xóa toàn bộ buổi trong tháng')
+    const confirmation = findAllPageOrBody(wrapper, '.app-modal').find((modal) => modal.text().includes('XÓA VĨNH VIỄN'))
+    if (!confirmation) throw new Error('Month deletion confirmation dialog not found')
+    await confirmation.get('.btn-danger').trigger('click')
+    await flushPromises()
+
+    expect(findAllPageOrBody(wrapper, '.app-modal').some((modal) => modal.text().includes('XÓA VĨNH VIỄN'))).toBe(true)
+    expect(mockState.toastError).toHaveBeenCalledWith('Không thể xóa lịch.')
+    expect(mockState.getMySessions).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not open confirmation when the selected month has no sessions or schedules', async () => {
+    mockState.previewDeleteSessionsForMonth.mockResolvedValue({
+      month_start: `${getBusinessDateKey(new Date()).slice(0, 7)}-01`,
+      schedule_count: 0,
+      schedule_staff_count: 0,
+      session_count: 0,
+      status_counts: { SCHEDULED: 0, IN_PROGRESS: 0, COMPLETED: 0, CANCELLED: 0 },
+      session_student_count: 0,
+      assessment_count: 0,
+      session_staff_count: 0,
+      staff_replacement_count: 0,
+      attendance_count: 0,
+      timesheet_count: 0,
+      payroll_item_count: 0,
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await clickButtonWithText(wrapper, 'Xóa toàn bộ buổi trong tháng')
+    await flushPromises()
+
+    expect(findAllPageOrBody(wrapper, '.app-modal').some((modal) => modal.text().includes('Xóa toàn bộ buổi học'))).toBe(false)
+    expect(mockState.toastInfo).toHaveBeenCalledWith('Không có buổi học hoặc mẫu lịch lặp nào để xóa.')
   })
 
   it('opens the selected session details and displays the class name', async () => {

@@ -5,7 +5,14 @@ const mockState = vi.hoisted(() => ({ rpc: vi.fn(), invokeFunction: vi.fn() }))
 vi.mock('./supabase', () => ({ supabase: { rpc: mockState.rpc } }))
 vi.mock('./edge-functions', () => ({ invokeFunction: mockState.invokeFunction }))
 
-import { adminExportStudentLogins, adminResetPasswordBulk, createManualSession, updateSessionOccurrence } from './commands'
+import {
+  adminExportStudentLogins,
+  adminResetPasswordBulk,
+  createManualSession,
+  deleteSessionsForMonth,
+  previewDeleteSessionsForMonth,
+  updateSessionOccurrence,
+} from './commands'
 
 describe('session room scheduling commands', () => {
   beforeEach(() => {
@@ -64,5 +71,13 @@ describe('session room scheduling commands', () => {
       p_cancel: false,
       p_room: 'QA-Room-B',
     })
+  })
+
+  it('uses the Admin preview and permanent-delete RPCs for the selected month', async () => {
+    await previewDeleteSessionsForMonth('2026-10-01')
+    await deleteSessionsForMonth('2026-10-01')
+
+    expect(mockState.rpc).toHaveBeenNthCalledWith(1, 'admin_preview_delete_sessions_for_month', { p_month_start: '2026-10-01' })
+    expect(mockState.rpc).toHaveBeenNthCalledWith(2, 'admin_delete_sessions_for_month', { p_month_start: '2026-10-01' })
   })
 })

@@ -7,8 +7,8 @@ import {
   createClassSchedule,
   createManualSession,
   removeTeacherFromClassSchedule,
-  previewScheduleResetForMonth,
-  resetScheduleForMonth,
+  previewDeleteSessionsForMonth,
+  deleteSessionsForMonth,
   setClassScheduleStatus,
   updateClassSchedule,
   updateSessionOccurrence,
@@ -83,10 +83,11 @@ const scheduleFormBusy = ref(false)
 const scheduleFormDirty = ref(false)
 const confirmOpen = ref(false)
 const confirmBusy = ref(false)
-const resetPreviewBusy = ref(false)
+const deletePreviewBusy = ref(false)
+const pendingDeleteMonthStart = ref('')
 const showHistory = ref(false)
 const confirmDetails = ref({ title: '', message: '', itemName: '', warning: '', confirmLabel: 'Xác nhận', destructive: false })
-const confirmActionType = ref<'copy-week' | 'archive-schedule' | 'cancel-session' | 'delete-schedules' | ''>('')
+const confirmActionType = ref<'copy-week' | 'archive-schedule' | 'cancel-session' | 'delete-month-sessions' | ''>('')
 const pendingSchedule = ref<ClassScheduleRow | null>(null)
 const editingScheduleId = ref('')
 const teacherSelections = ref<Record<string, string>>({})
@@ -722,33 +723,38 @@ async function archiveSchedule(row: ClassScheduleRow) {
   confirmOpen.value = true
 }
 
-async function previewAndConfirmAllSchedulesReset() {
-  if (resetPreviewBusy.value || loading.value) return
-  resetPreviewBusy.value = true
+async function previewAndConfirmDeleteMonthSessions() {
+  if (deletePreviewBusy.value || loading.value) return
+  deletePreviewBusy.value = true
   errorMessage.value = ''
+  const monthStart = displayedMonthStart.value
   try {
-    const preview = await previewScheduleResetForMonth(displayedMonthStart.value)
+    const preview = await previewDeleteSessionsForMonth(monthStart)
     const scheduleCount = Math.max(0, Number(preview.schedule_count) || 0)
-    const recurringSessionCount = Math.max(0, Number(preview.recurring_session_count) || 0)
-    const monthManualSessionCount = Math.max(0, Number(preview.month_manual_session_count) || 0)
-    const protectedSessionCount = Math.max(0, Number(preview.protected_session_count) || 0)
-    if (protectedSessionCount > 0) {
-      const protectedMessage = `Không thể xóa lịch vì có ${protectedSessionCount} buổi SCHEDULED đã gắn dữ liệu điểm danh, chấm công hoặc lịch sử khác. Dữ liệu được giữ nguyên.`
-      errorMessage.value = protectedMessage
-      toast.error(protectedMessage)
+    const sessionCount = Math.max(0, Number(preview.session_count) || 0)
+    if (scheduleCount === 0 && sessionCount === 0) {
+      toast.info('Không có buổi học hoặc mẫu lịch lặp nào để xóa.')
       return
     }
-    if (scheduleCount === 0 && recurringSessionCount === 0 && monthManualSessionCount === 0) {
-      toast.info('Không có lịch lặp hoặc buổi SCHEDULED nào thuộc phạm vi xóa.')
-      return
-    }
-    confirmActionType.value = 'delete-schedules'
+    const statuses = [
+      ['đã lên lịch', preview.status_counts.SCHEDULED],
+      ['đang diễn ra', preview.status_counts.IN_PROGRESS],
+      ['đã hoàn tất', preview.status_counts.COMPLETED],
+      ['đã hủy', preview.status_counts.CANCELLED],
+    ].filter(([, count]) => Number(count) > 0).map(([label, count]) => count + ' ' + label).join(' · ')
+    pendingDeleteMonthStart.value = monthStart
+    confirmActionType.value = 'delete-month-sessions'
     confirmDetails.value = {
-      title: `Xóa lịch ${formatBusinessMonth(displayedMonthStart.value)}?`,
-      message: 'Thao tác áp dụng cho mọi lớp, không phụ thuộc bộ lọc lớp. Tất cả khung lịch lặp toàn trung tâm và các buổi SCHEDULED do lịch lặp sinh ra ở mọi ngày sẽ bị xóa. Buổi SCHEDULED tạo riêng chỉ bị xóa nếu thuộc tháng đang xem.',
-      itemName: `${scheduleCount} khung lịch lặp · ${recurringSessionCount} buổi từ lịch lặp · ${monthManualSessionCount} buổi riêng trong tháng`,
-      warning: 'Buổi đã hủy, đang diễn ra hoặc hoàn tất cùng điểm danh, kết quả học tập và chấm công được giữ nguyên. Nếu phát hiện dữ liệu lịch sử gắn với buổi cần xóa, thao tác sẽ bị từ chối toàn bộ.',
-      confirmLabel: 'Xóa lịch và buổi',
+      title: 'Xóa toàn bộ buổi học — ' + formatBusinessMonth(monthStart) + '?',
+      message: 'Xóa hẳn mọi buổi học của tất cả lớp thuộc tháng này, ở mọi trạng thái. Bộ lọc lớp không làm thay đổi phạm vi xóa.',
+      itemName: sessionCount + ' buổi (' + (statuses || 'không có buổi') + ') · ' + scheduleCount + ' mẫu lịch lặp · '
+        + preview.schedule_staff_count + ' phân công giáo viên trên mẫu lịch · '
+        + preview.session_student_count + ' dòng học sinh · ' + preview.session_staff_count + ' phân công · '
+        + preview.staff_replacement_count + ' thay giáo viên · ' + preview.attendance_count + ' điểm danh · '
+        + preview.assessment_count + ' kết quả · ' + preview.timesheet_count + ' chấm công · '
+        + preview.payroll_item_count + ' mục lương',
+      warning: 'XÓA VĨNH VIỄN: điểm danh, kết quả, danh sách học sinh/giáo viên, thay giáo viên, chấm công và mục lương gắn với các buổi này đều bị xóa. Toàn bộ mẫu lịch lặp và phân công giáo viên trên các mẫu của trung tâm cũng bị xóa; buổi thuộc tháng khác được giữ. Nhật ký kiểm toán được lưu lại.',
+      confirmLabel: 'Xóa vĩnh viễn',
       destructive: true,
     }
     confirmOpen.value = true
@@ -756,25 +762,31 @@ async function previewAndConfirmAllSchedulesReset() {
     errorMessage.value = userErrorMessage(error, 'Không thể xem trước phạm vi xóa lịch.')
     toast.error(errorMessage.value)
   } finally {
-    resetPreviewBusy.value = false
+    deletePreviewBusy.value = false
   }
 }
 
-async function resetSchedulesNow() {
+async function deleteMonthSessionsNow() {
   try {
-    const result = await resetScheduleForMonth(displayedMonthStart.value)
+    const result = await deleteSessionsForMonth(pendingDeleteMonthStart.value)
     confirmBusy.value = false
     confirmOpen.value = false
     selected.value = null
     selectedDetailOpen.value = false
     students.value = []
     selectedTeacherIds.value = []
-    showHistory.value = false
-    toast.success(`Đã xóa ${result.deleted_schedules || 0} khung lịch lặp, ${result.deleted_recurring_sessions || 0} buổi từ lịch lặp và ${result.deleted_month_manual_sessions || 0} buổi riêng trong tháng.`)
-    await load()
+    const sessionsLoaded = await load()
+    if (!sessionsLoaded) {
+      const refreshMessage = 'Đã xóa vĩnh viễn ' + result.deleted_sessions + ' buổi học, nhưng chưa tải lại được lịch. Hãy nhấn “Làm mới”.'
+      errorMessage.value = refreshMessage
+      toast.error(refreshMessage)
+      return
+    }
+    toast.success('Đã xóa vĩnh viễn ' + result.deleted_sessions + ' buổi học trong tháng và ' + result.deleted_schedules + ' mẫu lịch lặp của trung tâm.')
   } catch (error) {
     errorMessage.value = userErrorMessage(error, 'Không thể xóa lịch.')
     toast.error(errorMessage.value)
+    confirmBusy.value = false
   }
 }
 
@@ -836,7 +848,7 @@ async function runConfirmation() {
     if (confirmActionType.value === 'copy-week') await applyWeekNow()
     else if (confirmActionType.value === 'archive-schedule') await archiveScheduleNow()
     else if (confirmActionType.value === 'cancel-session') await cancelSessionNow()
-    else if (confirmActionType.value === 'delete-schedules') await resetSchedulesNow()
+    else if (confirmActionType.value === 'delete-month-sessions') await deleteMonthSessionsNow()
   } finally { confirmBusy.value = false }
 }
 
@@ -861,8 +873,8 @@ watch(sessionFormIsBackdated, (isBackdated) => {
   <AppPageHeader title="Buổi học" eyebrow="Lịch giảng dạy" description="Xem lịch tháng, tuần hoặc danh sách; quản lý buổi riêng và khung lịch lặp.">
     <template #actions>
       <button class="btn btn-primary" @click="scheduleEditorOpen = !scheduleEditorOpen">Chỉnh sửa lịch</button>
-      <button class="btn btn-outline-danger" :disabled="loading || resetPreviewBusy" :aria-busy="resetPreviewBusy || undefined" @click="previewAndConfirmAllSchedulesReset">
-        <span v-if="resetPreviewBusy" class="app-button__spinner" aria-hidden="true"></span>{{ resetPreviewBusy ? 'Đang kiểm tra…' : 'Xóa tất cả lịch' }}
+      <button class="btn btn-outline-danger" :disabled="loading || deletePreviewBusy" :aria-busy="deletePreviewBusy || undefined" @click="previewAndConfirmDeleteMonthSessions">
+        <span v-if="deletePreviewBusy" class="app-button__spinner" aria-hidden="true"></span>{{ deletePreviewBusy ? 'Đang kiểm tra…' : 'Xóa toàn bộ buổi trong tháng' }}
       </button>
       <button class="btn btn-outline-primary" @click="openSessionForm()">Thêm buổi</button>
       <button class="btn btn-outline-primary" :disabled="loading" @click="load">Làm mới</button>
