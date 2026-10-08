@@ -468,18 +468,38 @@ async function createSession() {
   errorMessage.value = ''
   sessionFormBusy.value = true
   try {
-    await createManualSession({
+    const createdClassId = sessionForm.value.class_id
+    const createdDateKey = sessionForm.value.date
+    const createdBackdated = sessionFormIsBackdated.value
+    const result = await createManualSession({
       class_id: sessionForm.value.class_id,
       start,
       end,
       staff_ids: sessionForm.value.staff_ids,
       room: sessionForm.value.room.trim() || null,
     })
-    toast.success(sessionFormIsBackdated.value ? 'Đã tạo buổi điểm danh bù.' : 'Đã tạo buổi học.')
+    const createdSessionId = result && typeof result === 'object' && 'session_id' in result
+      ? String((result as { session_id?: unknown }).session_id || '')
+      : ''
+    refreshTodayDateKey()
+    if (createdDateKey < todayDateKey.value) showHistory.value = true
+    if (selectedClassId.value && selectedClassId.value !== createdClassId) {
+      selectedClassId.value = createdClassId
+      selected.value = null
+      selectedDetailOpen.value = false
+      students.value = []
+      selectedTeacherIds.value = []
+    }
+    calendarAnchorDate.value = createdDateKey
+    toast.success(createdBackdated ? 'Đã tạo buổi điểm danh bù.' : 'Đã tạo buổi học.')
     sessionFormBusy.value = false
     sessionFormOpen.value = false
     sessionFormDirty.value = false
     await load()
+    if (sessionsLoaded.value && (!createdSessionId || !sessions.value.some((session) => session.id === createdSessionId))) {
+      const refreshMessage = 'Buổi học đã được tạo nhưng chưa xuất hiện sau khi tải lại. Hãy nhấn “Làm mới” để kiểm tra lại.'
+      errorMessage.value = errorMessage.value ? `${refreshMessage} ${errorMessage.value}` : refreshMessage
+    }
   } catch (error) { errorMessage.value = teacherLimitMessage(error, 'Không thể tạo buổi học.') }
   finally { sessionFormBusy.value = false }
 }
@@ -912,7 +932,7 @@ watch(sessionFormIsBackdated, (isBackdated) => {
           <Transition name="view-swap" mode="out-in">
           <div v-if="viewMode === 'list'" key="list" class="session-list">
             <div v-if="loading" class="text-center text-secondary py-4" role="status">Đang tải buổi học…</div>
-            <div v-else-if="!errorMessage && !visibleSessions.length" class="text-center text-secondary py-5">Chưa có buổi học.</div>
+            <div v-else-if="!loading && !errorMessage && !visibleSessions.length" class="text-center text-secondary py-5">Chưa có buổi học.</div>
             <div class="table-responsive">
               <table class="table align-middle mb-0">
                 <thead><tr><th>Ngày</th><th>Lớp</th><th>Thời gian</th><th>Phòng</th><th>Giáo viên</th><th>Trạng thái</th></tr></thead>
@@ -925,7 +945,7 @@ watch(sessionFormIsBackdated, (isBackdated) => {
                     <td>{{ (session.session_staff || []).map((item) => item.staff?.full_name).filter(Boolean).join(', ') || 'Chưa phân công' }}</td>
                     <td><span class="badge" :class="sessionStatusClass(session.status)">{{ session.status }}</span></td>
                   </tr>
-                  <tr v-if="!errorMessage && !visibleSessions.length"><td colspan="6" class="text-center text-secondary py-4">Chưa có buổi học.</td></tr>
+                  <tr v-if="!loading && !errorMessage && !visibleSessions.length"><td colspan="6" class="text-center text-secondary py-4">Chưa có buổi học.</td></tr>
                 </tbody>
               </table>
             </div>
@@ -984,7 +1004,7 @@ watch(sessionFormIsBackdated, (isBackdated) => {
               <p v-if="!errorMessage && !agendaSessions.length && !loading" class="text-secondary text-center py-4 mb-0">{{ visibleSessions.length ? 'Không có buổi học trong khoảng thời gian này.' : 'Chưa có buổi học.' }}</p>
             </div>
             <div v-if="loading" class="text-center text-secondary py-3" role="status">Đang tải buổi học…</div>
-            <div v-else-if="!errorMessage && !visibleCalendarSessionCount" class="session-calendar-empty text-center text-secondary py-3">
+            <div v-else-if="!loading && !errorMessage && !visibleCalendarSessionCount" class="session-calendar-empty text-center text-secondary py-3">
               {{ visibleSessions.length ? 'Không có buổi học trong khoảng thời gian này.' : 'Chưa có buổi học.' }}
             </div>
           </div>

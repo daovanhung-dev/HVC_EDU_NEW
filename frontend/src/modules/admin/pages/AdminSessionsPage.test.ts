@@ -142,6 +142,7 @@ describe('AdminSessionsPage calendar', () => {
     mockState.getSessionStudents.mockReset().mockResolvedValue([])
     mockState.getClasses.mockReset().mockResolvedValue([
       { id: 'qa-class-1', code: 'QA-CODE-1', name: 'Lớp Toán QA', status: 'ACTIVE' },
+      { id: 'qa-class-2', code: 'QA-CODE-4', name: 'Lớp khác QA', status: 'ACTIVE' },
       { id: 'qa-class-inactive', code: 'QA-CODE-2', name: 'Lớp ngừng hoạt động QA', status: 'INACTIVE' },
       { id: 'qa-class-archived', code: 'QA-CODE-3', name: 'Lớp lưu trữ QA', status: 'ARCHIVED' },
     ])
@@ -338,6 +339,23 @@ describe('AdminSessionsPage calendar', () => {
     expect(failedPage.find('.app-state--error button').text()).toBe('Thử lại')
   })
 
+  it('does not show the empty state while sessions are still loading', async () => {
+    let resolveSessions!: (rows: SessionRow[]) => void
+    mockState.getMySessions.mockImplementationOnce(() => new Promise((resolve) => { resolveSessions = resolve }))
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Đang tải buổi học…')
+    expect(wrapper.text()).not.toContain('Chưa có buổi học.')
+    await clickButtonWithText(wrapper, 'Danh sách')
+    expect(wrapper.text()).toContain('Đang tải buổi học…')
+    expect(wrapper.text()).not.toContain('Chưa có buổi học.')
+
+    resolveSessions([])
+    await flushPromises()
+    expect(wrapper.text()).toContain('Chưa có buổi học.')
+  })
+
   it('keeps class choices available when the sessions request fails', async () => {
     mockState.getMySessions.mockRejectedValue(new Error('Không thể tải buổi học.'))
     const wrapper = mountPage()
@@ -443,6 +461,82 @@ describe('AdminSessionsPage calendar', () => {
     expect(mockState.createManualSession).toHaveBeenCalledOnce()
     expect(pageAndBodyText(wrapper)).toContain('Lớp chưa có thành viên trong ngày đã chọn.')
     expect(pageAndBodyText(wrapper)).not.toContain('Không thể tạo buổi học.')
+  })
+
+  it('reveals a newly created past session and switches away from a filter that excludes it', async () => {
+    const today = getBusinessDateKey(new Date())
+    const createdDate = shiftCalendarMonth(today, -1)
+    const createdSession = {
+      ...makeSession('qa-created-past', 'Lớp mới QA', '17:30', '19:30', createdDate),
+      class_id: 'qa-class-2',
+      classes: { id: 'qa-class-2', name: 'Lớp mới QA' },
+    }
+    mockState.route.query.class_id = 'qa-class-1'
+    mockState.getMySessions.mockResolvedValueOnce([]).mockResolvedValueOnce([createdSession])
+    mockState.createManualSession.mockResolvedValue({ session_id: createdSession.id })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await clickButtonWithText(wrapper, 'Thêm buổi')
+    await getPageOrBody(wrapper, '#session-class').setValue('qa-class-2')
+    await getPageOrBody(wrapper, '#session-date').setValue(createdDate)
+    await flushPromises()
+    await chooseTeacher(wrapper, 'session-teachers', 'qa-teacher-1')
+    await getPageOrBody(wrapper, '.session-create-form').trigger('submit')
+    await flushPromises()
+
+    expect(mockState.createManualSession).toHaveBeenCalledOnce()
+    expect((wrapper.get('#session-class-filter').element as HTMLSelectElement).value).toBe('qa-class-2')
+    expect(wrapper.find('.calendar-period-title').text()).toBe(formatBusinessMonth(createdDate))
+    expect(wrapper.find('.calendar-event-name').text()).toBe('Lớp mới QA')
+    const historyButton = wrapper.findAll('button').find((button) => button.text().trim() === 'Ẩn lịch sử')
+    expect(historyButton?.attributes('aria-pressed')).toBe('true')
+    expect(wrapper.text()).not.toContain('Buổi học đã được tạo nhưng chưa xuất hiện')
+  })
+
+  it('moves the calendar to a new future session outside the displayed month', async () => {
+    const today = getBusinessDateKey(new Date())
+    const createdDate = addCalendarDays(shiftCalendarMonth(today, 2), 8)
+    const createdSession = {
+      ...makeSession('qa-created-future', 'Lớp tương lai QA', '17:30', '19:30', createdDate),
+      class_id: 'qa-class-2',
+      classes: { id: 'qa-class-2', name: 'Lớp tương lai QA' },
+    }
+    mockState.route.query.class_id = 'qa-class-1'
+    mockState.getMySessions.mockResolvedValueOnce([]).mockResolvedValueOnce([createdSession])
+    mockState.createManualSession.mockResolvedValue({ session_id: createdSession.id })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await clickButtonWithText(wrapper, 'Thêm buổi')
+    await getPageOrBody(wrapper, '#session-class').setValue('qa-class-2')
+    await getPageOrBody(wrapper, '#session-date').setValue(createdDate)
+    await flushPromises()
+    await chooseTeacher(wrapper, 'session-teachers', 'qa-teacher-1')
+    await getPageOrBody(wrapper, '.session-create-form').trigger('submit')
+    await flushPromises()
+
+    expect(mockState.createManualSession).toHaveBeenCalledOnce()
+    expect(wrapper.find('.calendar-period-title').text()).toBe(formatBusinessMonth(createdDate))
+    expect(wrapper.find('.calendar-event-name').text()).toBe('Lớp tương lai QA')
+    expect((wrapper.get('#session-class-filter').element as HTMLSelectElement).value).toBe('qa-class-2')
+    const historyButton = wrapper.findAll('button').find((button) => button.text().trim() === 'Hiện lịch sử')
+    expect(historyButton?.attributes('aria-pressed')).toBe('false')
+  })
+
+  it('shows a refresh message when creation succeeds but the new session is absent after reload', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Thêm buổi')
+    await getPageOrBody(wrapper, '#session-class').setValue('qa-class-1')
+    await getPageOrBody(wrapper, '#session-date').setValue(addCalendarDays(getBusinessDateKey(new Date()), 2))
+    await flushPromises()
+    await chooseTeacher(wrapper, 'session-teachers', 'qa-teacher-1')
+    await getPageOrBody(wrapper, '.session-create-form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.find('[role="alert"]').text()).toContain('Buổi học đã được tạo nhưng chưa xuất hiện sau khi tải lại.')
+    expect(wrapper.text()).not.toContain('Chưa có buổi học.')
   })
 
   it('creates past sessions and still rejects reversed manual session times', async () => {
