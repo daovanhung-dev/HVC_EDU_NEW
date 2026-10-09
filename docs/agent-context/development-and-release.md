@@ -41,6 +41,12 @@ Chỉ chạy `db reset` trên môi trường local có thể bỏ dữ liệu. K
 - `.github/workflows/deploy-supabase.yml`: chỉ `workflow_dispatch`; link project, `db push`, deploy functions và xóa endpoint legacy được liệt kê trong workflow. Trước khi sửa bước xóa, xác minh chính xác endpoint đang dùng.
 - Workflow tồn tại không phải sự cho phép deploy. Không áp migration, deploy, tạo tài khoản hoặc sửa/xóa dữ liệu production nếu nhiệm vụ chưa yêu cầu rõ.
 
+## Vòng đời Edge Function
+
+- Khi tạo Edge Function mới, hoàn tất công việc phải bao gồm deploy function lên Supabase project đích đã xác minh và smoke test endpoint; source, test local hoặc deploy frontend không thay cho deploy function.
+- Deploy đúng function mới/thay đổi, xác minh trạng thái `ACTIVE` và cấu hình xác thực JWT. Chỉ tắt JWT cho endpoint công khai được thiết kế rõ như login/bootstrap.
+- Nếu không thể deploy hoặc smoke test vì project, quyền, mạng hay secret cấu hình, báo rõ function và tính năng chưa hoàn tất; không ghi giá trị secret vào log hoặc context.
+
 ## Context inventory
 
 Sau khi thêm/xóa/đổi vị trí file, cập nhật danh mục và kiểm tra lại:

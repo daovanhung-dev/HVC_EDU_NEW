@@ -13,6 +13,8 @@
 
 - Dùng helper trong supabase/functions/_shared/ cho xác thực caller, CORS và response/error. Xác thực người gọi và quyền trên server trước thao tác đặc quyền.
 - Secret chỉ ở môi trường server/secret manager; không in hoặc ghi credential/token vào log, test hay context.
+- Khi tạo Edge Function mới, phải deploy lên Supabase project đích đã xác minh và smoke test endpoint trong cùng tác vụ; không coi source/test local là hoàn tất. Chỉ deploy đúng function cần thiết và giữ cấu hình JWT theo thiết kế.
+- Nếu bị chặn bởi project, quyền, mạng hoặc cấu hình secret, nêu rõ bước deploy/xác minh còn thiếu và không báo tính năng đã hoàn tất.
 
 ## Phát hành và dữ liệu thật
 
