@@ -31,7 +31,20 @@ vi.mock('@/services/commands', () => ({
   updateStaff: mocks.updateStaff,
 }))
 
-const staff = { id: 'qa-staff-1', user_id: 'qa-user-1', staff_code: 'QA-T-1', full_name: 'Giáo viên QA', staff_type: 'TEACHER', phone: null, status: 'ACTIVE' }
+const staff = {
+  id: 'qa-staff-1',
+  user_id: 'qa-user-1',
+  staff_code: 'QA-T-1',
+  full_name: 'Giáo viên QA',
+  staff_type: 'TEACHER',
+  phone: '0900000001',
+  email: 'qa-teacher@example.test',
+  address: 'Địa chỉ QA',
+  notes: 'Ghi chú QA',
+  status: 'ACTIVE',
+  created_at: '2026-01-01T00:00:00.000Z',
+  updated_at: '2026-01-02T00:00:00.000Z',
+}
 const secondActiveStaff = { id: 'qa-staff-2', user_id: 'qa-user-2', staff_code: 'QA-T-2', full_name: 'Giáo viên QA hai', staff_type: 'TEACHER', phone: null, status: 'ACTIVE' }
 const inactiveStaff = { id: 'qa-staff-3', user_id: 'qa-user-3', staff_code: 'QA-T-3', full_name: 'Giáo viên QA nghỉ', staff_type: 'TEACHER', phone: null, status: 'INACTIVE' }
 
@@ -94,11 +107,130 @@ describe('StaffPage account creation', () => {
     await flushPromises()
     await allButtons(wrapper).find((button) => button.text() === 'Sửa')?.trigger('click')
     await getPageOrBody(wrapper, '#staff-name-edit').setValue('QA Giáo viên cập nhật')
+    await getPageOrBody(wrapper, '#staff-code-edit').setValue('QA-T-UPDATED')
+    await getPageOrBody(wrapper, '#staff-phone-edit').setValue('0900000002')
+    await getPageOrBody(wrapper, '#staff-email-edit').setValue('qa-updated@example.test')
+    await getPageOrBody(wrapper, '#staff-address-edit').setValue('Địa chỉ mới')
+    await getPageOrBody(wrapper, '#staff-notes-edit').setValue('Ghi chú mới')
     await allButtons(wrapper).find((button) => button.text() === 'Lưu thay đổi')?.trigger('click')
     await flushPromises()
 
-    expect(mocks.updateStaff).toHaveBeenCalledWith('qa-staff-1', expect.objectContaining({ full_name: 'QA Giáo viên cập nhật' }))
+    expect(mocks.updateStaff).toHaveBeenCalledWith('qa-staff-1', {
+      staff_code: 'QA-T-UPDATED',
+      full_name: 'QA Giáo viên cập nhật',
+      phone: '0900000002',
+      email: 'qa-updated@example.test',
+      address: 'Địa chỉ mới',
+      notes: 'Ghi chú mới',
+    })
     expect(mocks.adminCreateUser).not.toHaveBeenCalled()
+  })
+
+  it('saves empty optional profile fields as null', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    await allButtons(wrapper).find((button) => button.text() === 'Sửa')?.trigger('click')
+    await getPageOrBody(wrapper, '#staff-code-edit').setValue(' ')
+    await getPageOrBody(wrapper, '#staff-phone-edit').setValue(' ')
+    await getPageOrBody(wrapper, '#staff-email-edit').setValue('')
+    await getPageOrBody(wrapper, '#staff-address-edit').setValue(' ')
+    await getPageOrBody(wrapper, '#staff-notes-edit').setValue(' ')
+    await allButtons(wrapper).find((button) => button.text() === 'Lưu thay đổi')?.trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateStaff).toHaveBeenCalledWith('qa-staff-1', {
+      staff_code: null,
+      full_name: 'Giáo viên QA',
+      phone: null,
+      email: null,
+      address: null,
+      notes: null,
+    })
+  })
+
+  it('shows the complete staff profile and formats timestamps in Ho Chi Minh time', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await getPageOrBody(wrapper, '[data-testid="view-staff"]').trigger('click')
+    await flushPromises()
+
+    const detail = getPageOrBody(wrapper, '[data-testid="staff-detail"]')
+    expect(detail.text()).toContain('QA-T-1')
+    expect(detail.text()).toContain('Giáo viên')
+    expect(detail.text()).toContain('0900000001')
+    expect(detail.text()).toContain('qa-teacher@example.test')
+    expect(detail.text()).toContain('Địa chỉ QA')
+    expect(detail.text()).toContain('Ghi chú QA')
+    expect(detail.text()).toContain('Đang hoạt động')
+    expect(detail.text()).toContain('07:00')
+  })
+
+  it('shows dashes for optional profile values that are empty', async () => {
+    mocks.getStaff.mockResolvedValue([{
+      ...staff,
+      staff_code: null,
+      phone: null,
+      email: null,
+      address: null,
+      notes: null,
+      created_at: null,
+      updated_at: null,
+    }])
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await getPageOrBody(wrapper, '[data-testid="view-staff"]').trigger('click')
+    await flushPromises()
+
+    const detail = getPageOrBody(wrapper, '[data-testid="staff-detail"]')
+    expect(detail.text().match(/—/gu)).toHaveLength(7)
+  })
+
+  it('opens the edit form from details with the selected profile prefilled', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await getPageOrBody(wrapper, '[data-testid="view-staff"]').trigger('click')
+    await getPageOrBody(wrapper, '[data-testid="edit-staff-from-detail"]').trigger('click')
+    await flushPromises()
+
+    expect(getPageOrBody(wrapper, '#staff-name-edit').element).toHaveProperty('value', 'Giáo viên QA')
+    expect(getPageOrBody(wrapper, '#staff-phone-edit').element).toHaveProperty('value', '0900000001')
+    expect(getPageOrBody(wrapper, '#staff-email-edit').element).toHaveProperty('value', 'qa-teacher@example.test')
+    expect(getPageOrBody(wrapper, '#staff-address-edit').element).toHaveProperty('value', 'Địa chỉ QA')
+    expect(getPageOrBody(wrapper, '#staff-notes-edit').element).toHaveProperty('value', 'Ghi chú QA')
+  })
+
+  it('rejects an invalid email and keeps edits open after a failed update', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    await allButtons(wrapper).find((button) => button.text() === 'Sửa')?.trigger('click')
+    await getPageOrBody(wrapper, '#staff-email-edit').setValue('not-an-email')
+    await allButtons(wrapper).find((button) => button.text() === 'Lưu thay đổi')?.trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateStaff).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Email không đúng định dạng.')
+
+    await getPageOrBody(wrapper, '#staff-email-edit').setValue('qa-valid@example.test')
+    mocks.updateStaff.mockRejectedValueOnce(new Error('QA update failure'))
+    await allButtons(wrapper).find((button) => button.text() === 'Lưu thay đổi')?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('QA update failure')
+    expect(getPageOrBody(wrapper, '#staff-email-edit').element).toHaveProperty('value', 'qa-valid@example.test')
+    expect(mocks.adminCreateUser).not.toHaveBeenCalled()
+  })
+
+  it('does not allow an empty staff name to be submitted', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    await allButtons(wrapper).find((button) => button.text() === 'Sửa')?.trigger('click')
+    await getPageOrBody(wrapper, '#staff-name-edit').setValue('   ')
+
+    expect(allButtons(wrapper).find((button) => button.text() === 'Lưu thay đổi')?.element).toHaveProperty('disabled', true)
+    expect(mocks.updateStaff).not.toHaveBeenCalled()
   })
 
   it('shows the fixed password after resetting a teacher account', async () => {

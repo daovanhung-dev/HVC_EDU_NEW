@@ -1,44 +1,59 @@
 # Phát triển, kiểm tra và phát hành
 
-## Môi trường local
+## Toolchain và lệnh
 
-Yêu cầu Node.js 22.x, npm 10 trở lên. Frontend là npm workspace tại frontend/.
+Yêu cầu Node.js 22.x, npm 10+; frontend là npm workspace `frontend/`. Scripts root chuyển tiếp tới workspace.
 
-- npm install
-- npm run dev
-- npm run typecheck
-- npm run test:run
-- npm run build
+```bash
+npm install
+npm run dev
+npm run typecheck
+npm run test:run
+npm run build
+npm run ui:review
+```
 
-Các script root chuyển tiếp đến frontend; build chạy vue-tsc trước Vite. Vitest dùng jsdom, test đặt cạnh source với hậu tố .test.ts.
+`build` chạy `vue-tsc --noEmit` trước Vite. Vitest dùng jsdom; test đặt cạnh source với hậu tố `.test.ts`. `ui:review` mở các Vue page thật với auth/service mocks và fixture `QA-`; harness không tạo Supabase client và không gọi dịch vụ thật.
 
-Supabase local:
+Với tác vụ coding, test hoặc sửa lỗi, dùng Chrome để mở/chạy ứng dụng hoặc kiểm tra kết quả liên quan theo `AGENTS.md`. Dùng UI review harness khi cần xem trạng thái frontend mà không đụng dữ liệu thật. Phân biệt rõ kiểm tra source, local browser, staging, production và thiết bị thật.
 
-- supabase start
-- supabase db reset
-- supabase functions serve
+## Supabase local
 
-Bootstrap ROOT dùng bash scripts/bootstrap-root.sh; cần Supabase CLI, Python 3, curl và phiên CLI phù hợp. Không truyền credential qua command argument hoặc ghi vào repo.
+```bash
+supabase start
+supabase db reset
+supabase functions serve
+```
 
-## Biến môi trường
+Chỉ chạy `db reset` trên môi trường local có thể bỏ dữ liệu. Kiểm thử database cần Supabase/Postgres local cô lập và fixture tổng hợp; không chạy reset/seed để kiểm chứng production. Bootstrap ROOT dùng `bash scripts/bootstrap-root.sh`, cần Supabase CLI/Python/curl phù hợp và nhập secret tương tác.
 
-Frontend: VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY, VITE_APP_BASE_PATH. frontend/.env.example chỉ là mẫu.
+## Biến môi trường và secret
 
-Workflow Supabase dùng SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_REF và SUPABASE_DB_PASSWORD qua GitHub Secrets. Bootstrap dùng CUSTOM_BOOTSTRAP_SECRET phía Supabase. Không đặt secret vào biến VITE_ vì Vite đưa chúng vào bundle công khai.
+- Frontend: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_APP_BASE_PATH`. `frontend/.env.example` là mẫu.
+- Workflow Supabase: `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`, `SUPABASE_DB_PASSWORD` qua GitHub Secrets.
+- Edge Function bootstrap: `CUSTOM_BOOTSTRAP_SECRET`; các API key bên ngoài chỉ ở môi trường server.
+- Không đưa secret key/database password/access token/API key vào biến `VITE_`, source, log, context hoặc output. Publishable key là public; RLS/database là lớp bảo vệ.
 
-## CI và workflow
+## CI và deploy
 
-- .github/workflows/quality-check.yml chạy Node 22, npm ci, typecheck, test:run, build và quét một số mẫu secret.
-- .github/workflows/deploy-pages.yml build frontend, kiểm tra cấu hình public, rồi deploy GitHub Pages.
-- .github/workflows/deploy-supabase.yml chỉ chạy thủ công (workflow_dispatch), link project, push migration, deploy functions và dọn danh sách function legacy đã khai báo. Không sửa danh sách function xóa nếu chưa xác minh endpoint đang dùng.
-- Workflow có sẵn không đồng nghĩa người dùng đã yêu cầu deploy.
+- `.github/workflows/quality-check.yml`: Node 22, `npm ci`, typecheck, test, build và quét một số mẫu secret.
+- `.github/workflows/deploy-pages.yml`: kiểm tra public config, build frontend và deploy artifact `frontend/dist` lên GitHub Pages.
+- `.github/workflows/deploy-supabase.yml`: chỉ `workflow_dispatch`; link project, `db push`, deploy functions và xóa endpoint legacy được liệt kê trong workflow. Trước khi sửa bước xóa, xác minh chính xác endpoint đang dùng.
+- Workflow tồn tại không phải sự cho phép deploy. Không áp migration, deploy, tạo tài khoản hoặc sửa/xóa dữ liệu production nếu nhiệm vụ chưa yêu cầu rõ.
 
-## Phát hành và trạng thái từ xa
+## Context inventory
 
-Không lưu trạng thái production, migration đã áp dụng, backup, DNS hoặc credential hiện thời trong context. Báo cáo QA và roadmap là snapshot có ngày, không phải nguồn trạng thái trực tiếp.
+Sau khi thêm/xóa/đổi vị trí file, cập nhật danh mục và kiểm tra lại:
 
-Khi có yêu cầu vận hành rõ ràng, trước thao tác phải xác minh target từ CLI/config/dịch vụ trực tiếp; kiểm tra migration hiện có, kết nối, backup và quy trình workflow; chỉ tiếp tục trong đúng phạm vi được yêu cầu. Không reset, seed, tạo tài khoản, ghi/xóa dữ liệu, áp migration hoặc deploy production như một phép thử.
+```bash
+npm run agent:context:update
+npm run agent:context:check
+```
 
-## Chọn xác minh theo phạm vi
+Script lấy file Git theo dõi và file chưa bị ignore; ignored build/cache không thuộc danh mục. Inventory ghi mục đích file, không phải nội dung source. Nội dung `docs/accounts/` và `docs/data_seed/` luôn bị bảo vệ.
 
-Khi người dùng yêu cầu test/xác minh hoặc task yêu cầu bằng chứng, dùng các script frontend hiện có cho thay đổi frontend. Với migration/Edge Function, dùng Supabase local/Deno/Postgres cô lập sẵn có và fixture tổng hợp QA-. Không dùng docs/accounts/ hoặc docs/data_seed/. Báo cáo rõ lệnh, môi trường và giới hạn; kết quả QA lịch sử không chứng minh hiện trạng.
+## Trạng thái môi trường từ xa và báo cáo kết quả
+
+Không lưu migration production, backup, DNS, deploy, credential hay phiên đăng nhập hiện tại vào context. Roadmap/log/QA report là snapshot có thời điểm, không phải bằng chứng trực tiếp hôm nay.
+
+Khi người dùng yêu cầu vận hành, trước hành động cần xác minh project đích, migration đã áp, backup/recovery và workflow trực tiếp. Báo cáo lệnh, môi trường, kết quả và giới hạn; không dùng production như nơi thử. Giữ giờ nghiệp vụ theo `Asia/Ho_Chi_Minh`.

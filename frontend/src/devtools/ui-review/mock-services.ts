@@ -15,8 +15,8 @@ export const students = [
 ]
 
 export const teachers = [
-  { id: 'qa-teacher-1', user_id: 'qa-teacher-user-1', staff_code: 'QA-T-001', full_name: 'QA- Phạm Thu Trang', staff_type: 'TEACHER', phone: '0910000001', email: 'qa.trang@example.test', address: 'QA- Đà Nẵng', status: 'ACTIVE' },
-  { id: 'qa-teacher-2', user_id: 'qa-teacher-user-2', staff_code: 'QA-T-002', full_name: 'QA- Võ Quốc Bảo', staff_type: 'TEACHER', phone: '0910000002', email: 'qa.bao@example.test', address: 'QA- Đà Nẵng', status: 'ACTIVE' },
+  { id: 'qa-teacher-1', user_id: 'qa-teacher-user-1', staff_code: 'QA-T-001', full_name: 'QA- Phạm Thu Trang', staff_type: 'TEACHER', phone: '0910000001', email: 'qa.trang@example.test', address: 'QA- Đà Nẵng', notes: 'QA- Giáo viên phụ trách Toán tư duy.', status: 'ACTIVE', created_at: at(-120, '08:30'), updated_at: at(-4, '16:15') },
+  { id: 'qa-teacher-2', user_id: 'qa-teacher-user-2', staff_code: 'QA-T-002', full_name: 'QA- Võ Quốc Bảo', staff_type: 'TEACHER', phone: '0910000002', email: 'qa.bao@example.test', address: 'QA- Đà Nẵng', notes: 'QA- Giáo viên phụ trách Tiếng Anh.', status: 'ACTIVE', created_at: at(-90, '09:00'), updated_at: at(-2, '11:45') },
 ]
 
 export const subjects = [{ id: 'qa-subject-1', name: 'QA- Toán' }, { id: 'qa-subject-2', name: 'QA- Tiếng Anh' }]

@@ -11,9 +11,23 @@ import ConfirmModal from '@/app/components/ConfirmModal.vue'
 import DetailModal from '@/app/components/DetailModal.vue'
 import BulkPasswordResetModal from '@/modules/admin/components/BulkPasswordResetModal.vue'
 import type { BulkResetDisplayResult, BulkResetPerson } from '@/modules/admin/components/bulk-password-reset.types'
+import { formatDateTime } from '@/shared/utils/format'
 
-interface Staff { id: string; user_id: string; staff_code: string | null; full_name: string; staff_type: string; phone: string | null; status: string }
-interface StaffForm { staff_code: string; full_name: string; phone: string }
+interface Staff {
+  id: string
+  user_id: string
+  staff_code: string | null
+  full_name: string
+  staff_type: string
+  phone: string | null
+  email: string | null
+  address: string | null
+  notes: string | null
+  status: string
+  created_at?: string | null
+  updated_at?: string | null
+}
+interface StaffForm { staff_code: string; full_name: string; phone: string; email: string; address: string; notes: string }
 const toast = useToastStore()
 const MAX_BULK_RESET_TARGETS = 100
 const rows = ref<Staff[]>([])
@@ -28,6 +42,9 @@ const bulkResults = ref<BulkResetDisplayResult[]>([])
 const bulkTemporaryPassword = ref('')
 const showForm = ref(false)
 const editing = ref<Staff | null>(null)
+const detailStaff = ref<Staff | null>(null)
+const showDetail = ref(false)
+const editAfterDetailClose = ref<Staff | null>(null)
 const formBusy = ref(false)
 const formDirty = ref(false)
 const loading = ref(false)
@@ -36,7 +53,7 @@ const temporaryPassword = ref('')
 const showPassword = ref(false)
 const passwordDialogAfterClose = ref<'form' | 'confirm' | null>(null)
 const form = ref({ full_name: '', staff_code: '', username: '', email: '', password: '', phone: '' })
-const editForm = ref<StaffForm>({ staff_code: '', full_name: '', phone: '' })
+const editForm = ref<StaffForm>({ staff_code: '', full_name: '', phone: '', email: '', address: '', notes: '' })
 const confirmOpen = ref(false)
 const confirmBusy = ref(false)
 const confirmDetails = ref({ title: '', message: '', itemName: '', warning: '', confirmLabel: 'Xác nhận', destructive: false })
@@ -113,22 +130,61 @@ function openCreate() {
   showForm.value = true
 }
 
+function openDetail(row: Staff) {
+  detailStaff.value = row
+  editAfterDetailClose.value = null
+  showDetail.value = true
+}
+
 function beginEdit(row: Staff) {
   editing.value = row
   formDirty.value = false
-  editForm.value = { staff_code: row.staff_code || '', full_name: row.full_name, phone: row.phone || '' }
+  editForm.value = {
+    staff_code: row.staff_code || '',
+    full_name: row.full_name,
+    phone: row.phone || '',
+    email: row.email || '',
+    address: row.address || '',
+    notes: row.notes || '',
+  }
   errorMessage.value = ''
   showForm.value = true
 }
 
+function editFromDetail() {
+  if (!detailStaff.value) return
+  editAfterDetailClose.value = detailStaff.value
+  showDetail.value = false
+}
+
+function onDetailHidden() {
+  const staff = editAfterDetailClose.value
+  editAfterDetailClose.value = null
+  if (staff) beginEdit(staff)
+}
+
 async function saveForm() {
   if (formBusy.value) return
+  if (editing.value && editForm.value.email.trim()) {
+    const emailInput = document.getElementById('staff-email-edit') as HTMLInputElement | null
+    if (emailInput && !emailInput.checkValidity()) {
+      errorMessage.value = 'Email không đúng định dạng.'
+      return
+    }
+  }
   formBusy.value = true
   errorMessage.value = ''
   let newTemporaryPassword = ''
   try {
     if (editing.value) {
-      await updateStaff(editing.value.id, { staff_code: editForm.value.staff_code || null, full_name: editForm.value.full_name, phone: editForm.value.phone || null })
+      await updateStaff(editing.value.id, {
+        staff_code: editForm.value.staff_code.trim() || null,
+        full_name: editForm.value.full_name.trim(),
+        phone: editForm.value.phone.trim() || null,
+        email: editForm.value.email.trim() || null,
+        address: editForm.value.address.trim() || null,
+        notes: editForm.value.notes.trim() || null,
+      })
       toast.success('Đã cập nhật thông tin nhân sự.')
     } else {
       const suppliedPassword = form.value.password
@@ -214,17 +270,31 @@ onMounted(load)
     <AppState v-else-if="errorMessage && !rows.length" kind="error" title="Không thể tải danh sách nhân sự" :message="errorMessage" @retry="load" />
     <AppState v-else-if="!rows.length" kind="empty" title="Chưa có nhân sự phù hợp" message="Thêm giáo viên mới hoặc điều chỉnh từ khóa tìm kiếm." />
     <div v-else class="table-responsive"><table class="table align-middle"><thead><tr><th><input type="checkbox" class="form-check-input" data-testid="select-all-active-staff" aria-label="Chọn tất cả giáo viên đang hoạt động trong kết quả lọc" :checked="allActiveSelected" :disabled="loading || !activeRows.length || tooManyActiveRows" @change="toggleAllActive(($event.target as HTMLInputElement).checked)" /></th><th>Mã</th><th>Họ tên</th><th>Vai trò</th><th>SĐT</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>
-      <tr v-for="row in rows" :key="row.id"><td><input type="checkbox" class="form-check-input" data-testid="select-staff-row" :aria-label="`Chọn ${row.full_name}`" :checked="selectedUserIds.includes(row.user_id)" :disabled="loading || row.status !== 'ACTIVE' || row.staff_type !== 'TEACHER' || (selectedUserIds.length >= MAX_BULK_RESET_TARGETS && !selectedUserIds.includes(row.user_id))" @change="toggleSelectedUser(row.user_id, ($event.target as HTMLInputElement).checked)" /></td><td>{{ row.staff_code || '—' }}</td><td class="fw-semibold">{{ row.full_name }}</td><td>Giáo viên</td><td>{{ row.phone || '—' }}</td><td><span class="badge" :class="row.status === 'ACTIVE' ? 'text-bg-success' : 'text-bg-secondary'">{{ row.status === 'ACTIVE' ? 'Đang hoạt động' : row.status === 'LOCKED' ? 'Đã khóa' : row.status }}</span></td><td><div class="d-flex flex-wrap gap-1"><button class="btn btn-sm btn-outline-secondary" type="button" @click="beginEdit(row)">Sửa</button><button v-if="row.status !== 'ARCHIVED'" class="btn btn-sm btn-outline-danger" type="button" @click="askFor(row, 'archive')">Lưu trữ</button><button v-if="row.status !== 'ARCHIVED'" class="btn btn-sm btn-outline-secondary" type="button" @click="askFor(row, 'toggle')">{{ row.status === 'ACTIVE' ? 'Khóa TK' : 'Mở TK' }}</button><button v-if="row.status !== 'ARCHIVED'" class="btn btn-sm btn-outline-primary" type="button" @click="askFor(row, 'reset')">Đặt lại mật khẩu</button></div></td></tr>
+      <tr v-for="row in rows" :key="row.id"><td><input type="checkbox" class="form-check-input" data-testid="select-staff-row" :aria-label="`Chọn ${row.full_name}`" :checked="selectedUserIds.includes(row.user_id)" :disabled="loading || row.status !== 'ACTIVE' || row.staff_type !== 'TEACHER' || (selectedUserIds.length >= MAX_BULK_RESET_TARGETS && !selectedUserIds.includes(row.user_id))" @change="toggleSelectedUser(row.user_id, ($event.target as HTMLInputElement).checked)" /></td><td>{{ row.staff_code || '—' }}</td><td class="fw-semibold">{{ row.full_name }}</td><td>Giáo viên</td><td>{{ row.phone || '—' }}</td><td><span class="badge" :class="row.status === 'ACTIVE' ? 'text-bg-success' : 'text-bg-secondary'">{{ row.status === 'ACTIVE' ? 'Đang hoạt động' : row.status === 'LOCKED' ? 'Đã khóa' : row.status }}</span></td><td><div class="d-flex flex-wrap gap-1"><button class="btn btn-sm btn-outline-primary" type="button" data-testid="view-staff" @click="openDetail(row)">Chi tiết</button><button class="btn btn-sm btn-outline-secondary" type="button" @click="beginEdit(row)">Sửa</button><button v-if="row.status !== 'ARCHIVED'" class="btn btn-sm btn-outline-danger" type="button" @click="askFor(row, 'archive')">Lưu trữ</button><button v-if="row.status !== 'ARCHIVED'" class="btn btn-sm btn-outline-secondary" type="button" @click="askFor(row, 'toggle')">{{ row.status === 'ACTIVE' ? 'Khóa TK' : 'Mở TK' }}</button><button v-if="row.status !== 'ARCHIVED'" class="btn btn-sm btn-outline-primary" type="button" @click="askFor(row, 'reset')">Đặt lại mật khẩu</button></div></td></tr>
     </tbody></table></div>
   </div></section>
 
-  <FormModal v-model="showForm" :title="modalTitle" :description="editing ? 'Cập nhật thông tin hồ sơ nhân sự.' : 'Tài khoản mới có vai trò Giáo viên; có thể nhập email và mật khẩu ban đầu.'" :busy="formBusy" :dirty="formDirty" :submit-disabled="editing ? !editForm.full_name : !form.full_name" :submit-label="editing ? 'Lưu thay đổi' : 'Tạo tài khoản'" @submit="saveForm" @cancel="showForm = false" @hidden="onFormHidden">
+  <FormModal v-model="showForm" :title="modalTitle" :description="editing ? 'Cập nhật thông tin hồ sơ nhân sự.' : 'Tài khoản mới có vai trò Giáo viên; có thể nhập email và mật khẩu ban đầu.'" :busy="formBusy" :dirty="formDirty" :submit-disabled="editing ? !editForm.full_name.trim() : !form.full_name.trim()" :submit-label="editing ? 'Lưu thay đổi' : 'Tạo tài khoản'" @submit="saveForm" @cancel="showForm = false" @hidden="onFormHidden">
     <div class="row g-3" @input="formDirty = true" @change="formDirty = true">
-      <template v-if="editing"><AppField id="staff-name-edit" class="col-md-7" label="Họ tên" required><template #default="field"><input :id="field.id" v-model="editForm.full_name" class="form-control" required data-modal-autofocus /></template></AppField><AppField id="staff-code-edit" class="col-md-5" label="Mã nhân sự"><template #default="field"><input :id="field.id" v-model="editForm.staff_code" class="form-control" /></template></AppField><AppField id="staff-phone-edit" class="col-12" label="Số điện thoại"><template #default="field"><input :id="field.id" v-model="editForm.phone" class="form-control" inputmode="tel" /></template></AppField></template>
+      <template v-if="editing"><AppField id="staff-name-edit" class="col-md-7" label="Họ tên" required><template #default="field"><input :id="field.id" v-model="editForm.full_name" class="form-control" maxlength="200" required data-modal-autofocus /></template></AppField><AppField id="staff-code-edit" class="col-md-5" label="Mã nhân sự"><template #default="field"><input :id="field.id" v-model="editForm.staff_code" class="form-control" /></template></AppField><AppField id="staff-phone-edit" class="col-md-6" label="Số điện thoại"><template #default="field"><input :id="field.id" v-model="editForm.phone" class="form-control" inputmode="tel" maxlength="50" /></template></AppField><AppField id="staff-email-edit" class="col-md-6" label="Email"><template #default="field"><input :id="field.id" v-model="editForm.email" class="form-control" type="email" maxlength="254" :aria-describedby="field.describedBy" /></template></AppField><AppField id="staff-address-edit" class="col-12" label="Địa chỉ"><template #default="field"><input :id="field.id" v-model="editForm.address" class="form-control" maxlength="500" /></template></AppField><AppField id="staff-notes-edit" class="col-12" label="Ghi chú"><template #default="field"><textarea :id="field.id" v-model="editForm.notes" class="form-control" rows="3" /></template></AppField></template>
       <template v-else><AppField id="staff-name" class="col-md-7" label="Họ tên" required><template #default="field"><input :id="field.id" v-model="form.full_name" class="form-control" required data-modal-autofocus /></template></AppField><AppField id="staff-code" class="col-md-5" label="Mã nhân sự"><template #default="field"><input :id="field.id" v-model="form.staff_code" class="form-control" /></template></AppField><AppField id="staff-username" class="col-md-6" label="Tên đăng nhập" description="Có thể để trống để hệ thống tự tạo."><template #default="field"><input :id="field.id" v-model="form.username" class="form-control" autocomplete="off" :aria-describedby="field.describedBy" /></template></AppField><AppField id="staff-email" class="col-md-6" label="Email"><template #default="field"><input :id="field.id" v-model="form.email" class="form-control" type="email" autocomplete="email" :aria-describedby="field.describedBy" /></template></AppField><AppField id="staff-password" class="col-md-6" label="Mật khẩu ban đầu" description="Để trống để hệ thống tạo mật khẩu tạm."><template #default="field"><input :id="field.id" v-model="form.password" class="form-control" type="password" autocomplete="new-password" :aria-describedby="field.describedBy" /></template></AppField><AppField id="staff-phone" class="col-md-6" label="Số điện thoại"><template #default="field"><input :id="field.id" v-model="form.phone" class="form-control" inputmode="tel" /></template></AppField><p class="col-12 mb-0 small text-secondary">Tài khoản được tạo với vai trò Giáo viên.</p></template>
     </div>
     <div v-if="errorMessage" class="alert alert-danger mt-3 mb-0" role="alert">{{ errorMessage }}</div>
   </FormModal>
+  <DetailModal v-model="showDetail" :title="detailStaff?.full_name || 'Chi tiết nhân sự'" description="Thông tin hồ sơ giáo viên." @hidden="onDetailHidden">
+    <div v-if="detailStaff" class="row g-3" data-testid="staff-detail">
+      <div class="col-sm-6"><div class="small text-secondary">Mã nhân sự</div><strong>{{ detailStaff.staff_code || '—' }}</strong></div>
+      <div class="col-sm-6"><div class="small text-secondary">Vai trò</div><strong>{{ detailStaff.staff_type === 'TEACHER' ? 'Giáo viên' : detailStaff.staff_type }}</strong></div>
+      <div class="col-sm-6"><div class="small text-secondary">Trạng thái hồ sơ</div><strong>{{ detailStaff.status === 'ACTIVE' ? 'Đang hoạt động' : detailStaff.status === 'INACTIVE' ? 'Ngừng hoạt động' : detailStaff.status === 'ARCHIVED' ? 'Đã lưu trữ' : detailStaff.status }}</strong></div>
+      <div class="col-sm-6"><div class="small text-secondary">Điện thoại</div><div>{{ detailStaff.phone || '—' }}</div></div>
+      <div class="col-sm-6"><div class="small text-secondary">Email</div><div class="text-break">{{ detailStaff.email || '—' }}</div></div>
+      <div class="col-12"><div class="small text-secondary">Địa chỉ</div><div class="text-break">{{ detailStaff.address || '—' }}</div></div>
+      <div class="col-12"><div class="small text-secondary">Ghi chú</div><div class="text-break" style="white-space: pre-wrap">{{ detailStaff.notes || '—' }}</div></div>
+      <div class="col-sm-6"><div class="small text-secondary">Ngày tạo</div><div>{{ formatDateTime(detailStaff.created_at) }}</div></div>
+      <div class="col-sm-6"><div class="small text-secondary">Cập nhật lần cuối</div><div>{{ formatDateTime(detailStaff.updated_at) }}</div></div>
+    </div>
+    <template #footer><button class="btn btn-outline-secondary" type="button" @click="showDetail = false">Đóng</button><button class="btn btn-primary" type="button" data-testid="edit-staff-from-detail" @click="editFromDetail">Sửa hồ sơ</button></template>
+  </DetailModal>
   <ConfirmModal v-model="confirmOpen" v-bind="confirmDetails" :busy="confirmBusy" @confirm="confirmAction" @hidden="onConfirmHidden" />
   <BulkPasswordResetModal v-model="bulkDialogOpen" :mode="bulkDialogMode" :people="bulkPeople" :results="bulkResults" :temporary-password="bulkTemporaryPassword" :busy="bulkBusy" :error-message="bulkErrorMessage" @confirm="confirmBulkReset" />
   <DetailModal v-model="showPassword" title="Mật khẩu tạm thời" description="Mật khẩu chỉ hiển thị trong phiên này. Hãy ghi lại và bàn giao qua kênh bảo mật." size="sm"><label class="form-label" for="staff-temporary-password">Mật khẩu tạm</label><input id="staff-temporary-password" class="form-control fw-semibold" :value="temporaryPassword" readonly data-modal-autofocus /><template #footer><button class="btn btn-primary" type="button" @click="closePassword">Đã ghi lại</button></template></DetailModal>

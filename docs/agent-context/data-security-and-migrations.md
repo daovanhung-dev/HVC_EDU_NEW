@@ -1,61 +1,71 @@
-# Dữ liệu, migrations và bảo mật
+# Mô hình dữ liệu, quyền, migrations và bảo mật
 
-## Mô hình đang dùng
+## Mô hình dữ liệu hiện hành
 
-- profiles nối auth user với role/trạng thái; students và staff lưu hồ sơ học sinh/giáo viên.
-- subjects, grades, classes, class_memberships, class_schedules và class_schedule_staff mô tả lớp, thành viên có hiệu lực theo ngày và lịch lặp.
-- sessions gắn trực tiếp class_id, snapshot phòng; session_students giữ roster của buổi; session_staff giữ giáo viên được phân công.
-- student_attendances lưu chuyên cần, điểm và nhận xét; audit logs lưu dấu vết thay đổi được cấu hình.
-- timesheets hiện chỉ hỗ trợ yêu cầu chấm công theo buổi đã hoàn tất. Database còn các bảng/migration lịch sử ClassMonth, học phí, payroll, accounting và module legacy khác; việc tồn tại không có nghĩa app được dùng lại.
+- `auth.users` là danh tính đăng nhập; `profiles` nối user với role, trạng thái và cờ đổi mật khẩu. `students`/`staff` là hồ sơ domain tương ứng.
+- `subjects`, `grades`, `classes` là danh mục lớp học. `class_memberships` nối học sinh-lớp theo ngày hiệu lực.
+- `class_schedules` và `class_schedule_staff` mô tả lịch lặp/giáo viên theo slot. `sessions` là buổi cụ thể; `session_students` lưu roster buổi; `session_staff` lưu phân công teacher và ngoại lệ.
+- `student_attendances` lưu trạng thái điểm danh, phút đi muộn, lý do, thang đánh giá riêng, feedback và nhận xét. `session_students.assessment_snapshot` cùng `sessions.import_metadata` giữ nguồn/import lịch sử.
+- `timesheets` hiện là yêu cầu chấm công theo buổi. Audit lưu vết một số thay đổi hồ sơ, membership, lịch, buổi và học tập.
+- ClassMonth, fee, payroll, accounting, notification và permission-group tables có thể còn trong database vì lịch sử/compatibility; migration 0039 khóa quyền app đối với luồng tài chính/tháng cũ. Đừng suy ra app hiện hành từ schema cũ.
 
-## Chuỗi migration
+## Nguồn quyền và ranh giới bảo mật
 
-Migration được đánh số trong supabase/migrations; repo hiện có đến 0054. Luôn đọc file liên quan và phần migration sau đó đã thay đổi cùng object.
+- RLS và grants giới hạn truy vấn Data API; PostgreSQL constraints/triggers/RPC kiểm tra trạng thái và quan hệ; Edge Function xác thực caller/role/input trước thao tác server-side.
+- Route guard, client-side role, id gửi từ browser và nút ẩn chỉ là UI. Không dùng chúng để cấp quyền dữ liệu.
+- Teacher chỉ cập nhật session khi là teacher đang hoạt động được phân công; `update_session_learning` chỉ cho session `IN_PROGRESS`. `complete_session` yêu cầu attendance record cho toàn roster.
+- Các RPC cập nhật session được gọi qua Edge Function và quyền `EXECUTE` chỉ cấp service role. Handler phải xác thực người dùng rồi mới dùng quyền server.
+- Chấm công đọc theo RLS; submit/review qua Edge Function/RPC. Không cấp ghi trực tiếp bảng timesheet cho authenticated chỉ để thuận tiện UI.
+- Học sinh bị buộc đổi mật khẩu có thể đọc profile để vào form đổi nhưng không đọc learning data cho đến khi hoàn tất. Kiểm tra cả status active và quan hệ sở hữu/roster khi thay RLS.
+- Với thay đổi quyền, lần theo toàn đồ thị: query embed → grants → policy → SECURITY DEFINER helper/search_path → RPC → Edge Function → frontend/test.
 
-- 0036–0038 thêm rồi retire vai trò PARENT; hồ sơ/liên kết lịch sử còn được giữ.
-- 0039 chuyển ứng dụng sang lịch lặp, membership liên tục, gắn session với class và chuyển ASSISTANT thành TEACHER.
-- 0040 sửa vòng lặp policy RLS bằng helper SECURITY DEFINER với search_path cố định.
-- 0041 thêm RPC lập buổi cụ thể, áp mẫu tuần vào tháng, đổi giáo viên và giữ ngoại lệ/lịch sử.
-- 0042 mở lại riêng luồng chấm công cho buổi COMPLETED; giáo viên gửi, Admin duyệt/từ chối có lý do, giáo viên có thể gửi lại sau từ chối. Không mở payroll/tài chính.
-- 0043 giới hạn tối đa 5 giáo viên duy nhất trên một lớp theo các lịch/buổi còn hiệu lực.
-- 0044 lưu phòng trên từng buổi và kiểm tra xung đột xuyên suốt tạo, sao chép và sinh buổi. Lớp khác nhau có thể trùng giờ nếu khác phòng; cùng lớp/học sinh/phòng hoặc thiếu phòng khi giao giờ thì bị chặn.
-- 0045 cho phép Admin tạo buổi điểm danh bù trong quá khứ, vẫn giữ kiểm tra quyền, roster, giới hạn giáo viên và xung đột lịch.
-- 0046 cho phép Edge Function gọi các RPC bắt đầu, hoàn thành và cập nhật kết quả buổi bằng Supabase secret key không có JWT role claim. Quyền EXECUTE vẫn chỉ cấp cho service_role; RPC vẫn xác minh giáo viên đang hoạt động được phân công.
-- 0047 thêm link YouTube tùy chọn cho buổi học và mở rộng RPC học tập mà vẫn giữ EXECUTE chỉ cho service_role; audit lưu link cũ/mới. `student-ai-tutor` chỉ phục vụ học sinh đang hoạt động, kiểm tra quyền sở hữu buổi được chọn và gửi cho Gemini câu hỏi, lịch sử chat cùng tên lớp/môn, ngày và nội dung buổi học; không gửi điểm, chuyên cần, nhận xét cá nhân hoặc video.
-- 0048 giới hạn học sinh đang bị buộc đổi mật khẩu khỏi dữ liệu học tập cho đến khi đổi xong; chỉ luồng Edge Function service-role được xóa cờ.
-- 0049 mở rộng yêu cầu đổi mật khẩu và chặn RLS của dữ liệu giảng dạy/chấm công cho giáo viên bị reset; hồ sơ vẫn đọc được để hoàn tất đổi mật khẩu.
-- 0050 ban đầu thêm RPC đặt lại lịch toàn trung tâm theo kiểu lưu trữ khung lặp và hủy buổi SCHEDULED.
-- 0051 thay thao tác reset bằng xóa có preview theo tháng Việt Nam: yêu cầu CLASS_MANAGE, đồng bộ với bộ sinh lịch, xóa khung lặp toàn trung tâm cùng buổi SCHEDULED do lịch lặp sinh ở mọi ngày và buổi tạo riêng trong tháng chọn. Buổi đã hủy/đang diễn ra/hoàn tất và lịch sử liên quan được giữ; snapshot khung lặp được lưu trên buổi còn lại trước khi xóa mẫu. Điểm danh, snapshot kết quả, nội dung buổi, chấm công hoặc payroll liên kết với buổi cần xóa sẽ chặn toàn bộ thao tác. RPC reset cũ bị thu hồi quyền EXECUTE.
-- 0052 thay RPC xóa tháng bằng xóa vật lý mọi buổi trong tháng Việt Nam đã chọn, ở mọi trạng thái và mọi lớp; xóa cả roster, phân công, thay giáo viên, điểm danh, kết quả, chấm công và payroll item liên kết. Các mẫu lịch lặp toàn trung tâm bị xóa; buổi ngoài tháng được giữ và lưu snapshot mẫu lịch trước khi FK bị xóa. RPC 0051 bị thu hồi EXECUTE; RPC mới xác minh CLASS_MANAGE, khóa đồng bộ bộ sinh lịch, preview số lượng và audit trước thao tác xóa.
-- 0053 thêm thao tác thay lịch một tháng bằng mẫu tuần tạo buổi cụ thể; generator bỏ qua tháng được thay để không tái tạo lịch lặp ở tháng đó.
-- 0054 đồng bộ học sinh có membership hiệu lực vào roster của buổi thủ công còn SCHEDULED trong tương lai, giữ kiểm tra xung đột và quyền generator; helper nội bộ không cấp EXECUTE cho app roles và migration backfill các roster còn thiếu.
+## Attendance/assessment và dữ liệu học tập
 
-Các migration cũ hơn tạo schema nền, role, RBAC, lớp tháng, buổi, điểm danh, tài chính, function, RLS và index. Không suy ra phạm vi sản phẩm hiện tại từ migration cũ.
+Schema và RPC dùng các mức riêng: BTVN nullable 0–10, understanding nullable 1–5, attitude nullable 1–5; `late_minutes` nullable nhưng không âm; feedback count nullable và không âm. Attendance status phải có khi lưu; trạng thái `LATE` có thể kèm số phút, còn lý do vắng là text tùy chọn cho `ABSENT`/`EXCUSED` ở frontend. Không có điểm tổng trong schema/code hiện hành.
 
-Khi đổi schema, thêm migration kế tiếp số hiện có; không sửa/xóa/đổi số migration đã có thể được áp dụng. Không áp migration production làm bước kiểm thử.
+Các nguồn xác minh: `frontend/src/modules/staff/attendance.ts`, `frontend/src/modules/staff/components/StaffAttendanceModal.vue`, `frontend/src/modules/student/pages/StudentPage.vue`, migrations 0009/0034/0039/0047 và test learning liên quan. Form client không thay validation database.
 
-## Phân quyền
+Import assessment có thể giữ hàng nguồn kể cả khi chưa có attendance status trong `assessment_snapshot`; không tự chuyển mọi giá trị raw sang điểm chuẩn hóa. Migration 0035 là migration dữ liệu attendance lịch sử: không chép row-level names/comments vào tài liệu hoặc fixture, và không dùng để tạo dữ liệu QA.
 
-- RLS là lớp bắt buộc cho bảng frontend truy cập. Database/RPC kiểm tra vai trò và quan hệ Admin, teacher được phân công, student sở hữu.
-- Các lệnh lập buổi/đổi giáo viên dùng RPC có kiểm tra quyền; không cấp thêm quyền ghi trực tiếp sessions/session_staff cho authenticated để tiện UI.
-- timesheets chỉ đọc qua RLS. Gửi/duyệt đi qua Edge Function kiểm tra caller/quyền và RPC service-only; không cấp INSERT/UPDATE/DELETE trực tiếp cho authenticated.
-- Edge Functions dùng requireCaller hoặc helper phù hợp; tác vụ đặc quyền phải xác thực caller, kiểm tra role/quyền và giới hạn input ở server.
-- Khi thay đổi quan hệ/policy, rà đồ thị đọc/ghi, embed query, helper SECURITY DEFINER, grants và tất cả vai trò bị ảnh hưởng.
+## Lịch sử migration trong repo
 
-Không dựa vào route guard, hidden button, id từ browser hoặc kiểm tra client để bảo vệ dữ liệu.
+Migration phải được đọc theo thứ tự và kiểm tra migration sau có `CREATE OR REPLACE`, revoke/grant hoặc thay đổi cùng object. Hiện repo có `0001–0054`:
+
+- `0001–0006`: extension, enum, Auth/profile, RBAC, hồ sơ student/staff và danh mục học thuật/lớp.
+- `0007–0019`: mô hình ClassMonth/session/attendance/timesheet và các bảng tài chính/notification/audit/function/RLS/index/seed của giai đoạn đầu. Phần tháng và tài chính hiện là lịch sử hoặc bị khóa khỏi app.
+- `0020–0035`: sửa/hardening function, RPC cốt lõi, lịch/hoàn tất, quyền Admin, khối/môn, RLS recursion, snapshot phí/phòng/giáo viên theo lịch tháng và các trường assessment/import. Đọc [inventory](repository-inventory.md) để biết vai trò từng migration.
+- `0036–0038`: thêm rồi retire Parent, giữ quan hệ lịch sử.
+- `0039`: kiến trúc hiện hành chuyển sang membership liên tục, lịch lặp và session theo ngày; Assistant chuyển thành Teacher; app quyền với ClassMonth/tài chính cũ bị gỡ.
+- `0040`: tránh RLS recursion cho mô hình liên tục bằng helper SECURITY DEFINER với search path cố định.
+- `0041–0042`: lập session cụ thể/mẫu tuần theo tháng; phục hồi riêng chấm công cho session hoàn tất.
+- `0043–0046`: giới hạn 5 teacher duy nhất/lớp, xung đột theo phòng, buổi điểm danh bù và RPC session chỉ dành service role.
+- `0047–0049`: video YouTube, AI học tập, ép học sinh/giáo viên đổi mật khẩu và chặn learning data trong lúc cờ reset còn bật.
+- `0050–0052`: các RPC quản lý/xóa lịch tháng nối tiếp nhau; 0050/0051 bị thu hồi/thay thế. 0052 là xóa buổi trong tháng đã chọn cùng dữ liệu liên kết, có preview, khóa và audit. Đây là thao tác phá hủy, không phải quy trình chỉnh lịch thông thường.
+- `0053–0054`: thay lịch tháng bằng buổi từ mẫu tuần, rồi đồng bộ membership có hiệu lực vào roster session thủ công tương lai.
+
+Không sửa, xóa hoặc đổi số migration đã có thể chạy ở môi trường khác. Thay đổi schema bằng migration tiếp theo. Migration production cần yêu cầu rõ và kiểm tra target/backup/migration history trực tiếp; local test không cần áp vào production.
+
+## Edge Functions
+
+- `supabase/functions/_shared/auth.ts`: xác thực caller/hồ sơ; `cors.ts`: preflight; `response.ts`: success/error/trace id; `password-reset.ts`: helper reset.
+- Account handlers tạo/khóa/reset tài khoản hoặc bootstrap ROOT là đường đặc quyền; chỉ trả thông tin cần thiết và giữ audit.
+- `session-start`, `session-complete`, `session-learning-update` xác thực teacher và gọi RPC service-only.
+- `timesheet-submit` và `timesheet-review` thực thi submit/review theo role và trạng thái.
+- `student-ai-tutor` kiểm tra học sinh/session; chỉ gửi prompt và ngữ cảnh học được cho phép. `teacher-comment-optimize` gửi comment giáo viên tới Gemini; coi đây là dữ liệu truyền cho dịch vụ bên ngoài.
+- Đọc handler/index/config cụ thể trước khi sửa. Không dùng danh sách function trong báo cáo cũ để kết luận endpoint production hiện còn deploy hay không.
 
 ## Dữ liệu nhạy cảm và secret
 
-- docs/accounts/ là local-only và chứa thông tin truy cập; không mở hoặc đưa nội dung vào output/context, tuyệt đối không stage/commit.
-- docs/data_seed/ là workbook nguồn chứa dữ liệu thật; không đọc/trích xuất tên, mã, điểm hoặc tạo fixture từ workbook.
-- Fixture nghiệp vụ dùng dữ liệu tổng hợp tiền tố QA-, trong môi trường đúng.
-- Secret key, database password, access token và CUSTOM_BOOTSTRAP_SECRET chỉ lưu server/secret manager. Không đặt secret trong VITE_, log, test, context hay phản hồi.
-- Bootstrap ROOT dùng scripts/bootstrap-root.sh để nhập tương tác, không lưu credential vào repo.
+- Không đọc, sao chép, hiển thị hoặc dùng nội dung `docs/accounts/` và `docs/data_seed/`. Workbook nguồn là dữ liệu bảo vệ; không trích danh tính/điểm để tạo context hoặc fixture.
+- Không đưa secret key, database password, access token, `CUSTOM_BOOTSTRAP_SECRET` hoặc thông tin đăng nhập vào `VITE_`, source, log, test, context hay output. Frontend chỉ nhận URL Supabase, publishable key và base path.
+- `docs/plans/` và báo cáo QA có thể lưu chi tiết định danh/hoạt động cũ; chỉ dùng để hiểu vai trò lịch sử, không sao chép nội dung vào context.
+- Dùng dữ liệu synthetic có tiền tố `QA-`. Không stage/commit file local-only.
+- Bootstrap ROOT dùng `scripts/bootstrap-root.sh` với nhập tương tác; không ghi credential ra file.
 
-## Trước khi đổi quyền hoặc dữ liệu
+## Trước khi thay quyền hoặc dữ liệu
 
-1. Xác định vai trò, dữ liệu và trạng thái nghiệp vụ cần cho phép.
-2. Đọc policy RLS/helper hiện hành và tất cả đường đọc/ghi.
-3. Xác minh Edge Function/RPC kiểm tra caller, role, input và search_path/grants đúng.
-4. Bảo toàn audit/lịch sử; ưu tiên lưu trữ thay cho xóa vật lý.
-5. Chỉ dùng dữ liệu tổng hợp; không áp migration production để xác minh.
+1. Xác định actor/role, trạng thái, hàng dữ liệu và luồng đọc/ghi cần thiết.
+2. Đọc policy/RPC/function đang hiệu lực trong migration history của repo; tìm mọi migration sau đó chạm cùng object.
+3. Kiểm tra caller, role, input, lock/transaction, grants, `search_path`, audit và hành vi lỗi.
+4. Bảo toàn lịch sử học tập; ưu tiên archive/soft change nếu nghiệp vụ cho phép.
+5. Dùng Supabase local/fixture QA- để kiểm tra. Production cần yêu cầu rõ, xác minh project đích và backup; không reset/seed/ghi/xóa/deploy để thử.

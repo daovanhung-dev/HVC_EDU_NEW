@@ -138,7 +138,7 @@ export async function archiveClass(id: string) {
   return data
 }
 
-export async function updateStaff(id: string, input: { staff_code?: string | null; full_name: string; phone?: string | null; email?: string | null; address?: string | null }) {
+export async function updateStaff(id: string, input: { staff_code?: string | null; full_name: string; phone?: string | null; email?: string | null; address?: string | null; notes?: string | null }) {
   const { data, error } = await supabase.from('staff').update(input).eq('id', id).select('*').single()
   if (error) throw error
   return data
