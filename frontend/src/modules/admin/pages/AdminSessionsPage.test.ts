@@ -467,7 +467,7 @@ describe('AdminSessionsPage calendar', () => {
     await wrapper.get('.calendar-event').trigger('click')
     await flushPromises()
 
-    await clickButtonWithText(wrapper, 'Lưu lịch mới')
+    await clickButtonWithText(wrapper, 'Lưu thông tin buổi học')
     expect(mockState.updateSessionOccurrence).toHaveBeenCalledWith(expect.objectContaining({ session_id: session.id, start: expect.any(String), end: expect.any(String) }))
 
     await clickButtonWithText(wrapper, 'Hủy buổi học')
@@ -841,7 +841,10 @@ describe('AdminSessionsPage calendar', () => {
   })
 
   it('shows and updates the room on a selected session', async () => {
-    const session = { ...makeSession('qa-room-session'), room: 'QA-Room-A' }
+    const session = {
+      ...makeSession('qa-room-session', 'Lớp Toán QA', '10:00', '12:00', addCalendarDays(getBusinessDateKey(new Date()), 1)),
+      room: 'QA-Room-A',
+    }
     mockState.getMySessions.mockResolvedValue([session])
     const wrapper = mountPage()
     await flushPromises()
@@ -854,7 +857,7 @@ describe('AdminSessionsPage calendar', () => {
     const roomInput = detailModal.get('input:not([type])')
     expect((roomInput.element as HTMLInputElement).value).toBe('QA-Room-A')
     await roomInput.setValue('QA-Room-B')
-    await clickButtonWithText(wrapper, 'Lưu lịch mới')
+    await clickButtonWithText(wrapper, 'Lưu thông tin buổi học')
 
     expect(mockState.updateSessionOccurrence).toHaveBeenCalledWith(expect.objectContaining({
       session_id: session.id,
