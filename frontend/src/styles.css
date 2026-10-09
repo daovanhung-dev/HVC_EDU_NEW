@@ -186,6 +186,7 @@ h2 { font-weight: 650; }
 .alert-info { color: #214f63; border-color: #b9d0da; background: var(--color-info-soft); }
 
 .app-modal { --bs-modal-zindex: 1060; }
+.app-modal.app-confirm-modal { --bs-modal-zindex: 1080; }
 .app-modal .modal-dialog { max-width: min(720px, calc(100vw - 32px)); }
 .app-modal .modal-dialog.modal-sm { max-width: min(440px, calc(100vw - 32px)); }
 .app-modal .modal-dialog.modal-xl { max-width: min(960px, calc(100vw - 32px)); }

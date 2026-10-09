@@ -5,6 +5,7 @@ import {
   addTeacherToClassSchedule,
   createClassSchedule,
   createManualSession,
+  deleteSession,
   removeTeacherFromClassSchedule,
   previewDeleteSessionsForMonth,
   deleteSessionsForMonth,
@@ -13,11 +14,14 @@ import {
   setClassScheduleStatus,
   updateClassSchedule,
   updateSessionOccurrence,
+  updateSessionStudentRoster,
+  syncSessionStudentRoster,
   updateSessionTeachers,
 } from '@/services/commands'
 import type { MonthWeekTemplateSlot } from '@/services/commands'
 import {
   getClassActiveRosterSize,
+  getClassMembershipsForSessionDate,
   getClassSchedules,
   getClasses,
   getMySessions,
@@ -62,6 +66,13 @@ const teachersList = ref<any[]>([])
 const schedules = ref<ClassScheduleRow[]>([])
 const schedulesByClass = ref<Record<string, ClassScheduleRow[]>>({})
 const students = ref<any[]>([])
+const sessionRosterCandidates = ref<any[]>([])
+const sessionRosterCandidateSessionId = ref('')
+const selectedRosterStudentIds = ref<string[]>([])
+const rosterEditorOpen = ref(false)
+const rosterEditorLoading = ref(false)
+const rosterEditorBusy = ref(false)
+const rosterEditorError = ref('')
 const selected = ref<SessionRow | null>(null)
 const selectedDetailOpen = ref(false)
 const selectedTeacherIds = ref<string[]>([])
@@ -99,7 +110,7 @@ let weeklyTemplateSlotSequence = 0
 const pendingDeleteMonthStart = ref('')
 const showHistory = ref(false)
 const confirmDetails = ref({ title: '', message: '', itemName: '', warning: '', confirmLabel: 'Xác nhận', destructive: false })
-const confirmActionType = ref<'archive-schedule' | 'cancel-session' | 'delete-month-sessions' | 'replace-month-template' | ''>('')
+const confirmActionType = ref<'archive-schedule' | 'cancel-session' | 'delete-session' | 'sync-session-roster' | 'delete-month-sessions' | 'replace-month-template' | ''>('')
 const pendingSchedule = ref<ClassScheduleRow | null>(null)
 const editingScheduleId = ref('')
 const teacherSelections = ref<Record<string, string>>({})
@@ -159,6 +170,24 @@ const selectedSessionTeacherBaseIds = computed(() => selected.value
   ? getClassTeacherIds(selected.value.class_id, Object.values(schedulesByClass.value).flat(), sessions.value, selected.value.id)
   : new Set<string>())
 const selectedSessionTeacherCount = computed(() => selectedTeacherCount(selectedSessionTeacherBaseIds.value, selectedTeacherIds.value))
+const canEditSelectedSession = computed(() => !!selected.value
+  && selected.value.status === 'SCHEDULED'
+  && Date.parse(selected.value.scheduled_start_at) > Date.now())
+const selectedSessionDate = computed(() => selected.value ? getBusinessDateKey(selected.value.scheduled_start_at) : '')
+const rosterSyncDelta = computed(() => {
+  const currentIds = new Set(students.value.map((row) => row.student_id))
+  const targetIds = new Set(sessionRosterCandidates.value.map((row) => row.student_id))
+  const additions = [...targetIds].filter((studentId) => !currentIds.has(studentId)).length
+  const staleRows = students.value.filter((row) => !targetIds.has(row.student_id))
+  const retained = staleRows.filter(sessionStudentHasHistory).length
+  return { additions, removals: staleRows.length - retained, retained }
+})
+
+function sessionStudentHasHistory(row: any) {
+  const snapshot = row.assessment_snapshot
+  const hasAssessment = snapshot && typeof snapshot === 'object' && Object.keys(snapshot).length > 0
+  return Boolean(row.student_attendances?.length || hasAssessment)
+}
 
 function refreshTodayDateKey() {
   todayDateKey.value = getBusinessDateKey(new Date())
@@ -464,6 +493,10 @@ watch(visibleSessions, (rows) => {
 async function selectSession(session: SessionRow) {
   selected.value = session
   selectedDetailOpen.value = true
+  rosterEditorOpen.value = false
+  rosterEditorError.value = ''
+  sessionRosterCandidates.value = []
+  sessionRosterCandidateSessionId.value = ''
   selectedTeacherIds.value = (session.session_staff || []).map((item) => item.staff_id)
   startInput.value = toLocalInput(session.scheduled_start_at)
   endInput.value = toLocalInput(session.scheduled_end_at)
@@ -478,6 +511,97 @@ async function selectSession(session: SessionRow) {
   if (schedulesResult.status === 'rejected') {
     scheduleLoadErrors.value = { ...scheduleLoadErrors.value, [session.class_id]: true }
     if (!errorMessage.value) errorMessage.value = schedulesResult.reason instanceof Error ? schedulesResult.reason.message : 'Không thể tải phân công giáo viên của lớp.'
+  }
+}
+
+async function loadSessionRosterCandidates(session: SessionRow, force = false) {
+  if (!force && sessionRosterCandidateSessionId.value === session.id) return
+  sessionRosterCandidates.value = await getClassMembershipsForSessionDate(
+    session.class_id,
+    getBusinessDateKey(session.scheduled_start_at),
+  )
+  sessionRosterCandidateSessionId.value = session.id
+}
+
+async function openRosterEditor() {
+  if (!selected.value || !canEditSelectedSession.value) return
+  const session = selected.value
+  rosterEditorLoading.value = true
+  rosterEditorError.value = ''
+  try {
+    await loadSessionRosterCandidates(session, true)
+    const eligibleIds = new Set(sessionRosterCandidates.value.map((row) => row.student_id))
+    selectedRosterStudentIds.value = students.value
+      .map((row) => row.student_id)
+      .filter((studentId) => eligibleIds.has(studentId))
+    rosterEditorOpen.value = true
+  } catch (error) {
+    rosterEditorError.value = userErrorMessage(error, 'Không thể tải thành viên có hiệu lực của lớp trong ngày này.')
+  } finally {
+    rosterEditorLoading.value = false
+  }
+}
+
+async function refreshSelectedRoster(sessionId: string) {
+  const refreshed = await getSessionStudents(sessionId)
+  if (selected.value?.id === sessionId) students.value = refreshed as any[]
+}
+
+async function saveSelectedRoster() {
+  if (!selected.value || rosterEditorBusy.value || !canEditSelectedSession.value) return
+  rosterEditorBusy.value = true
+  rosterEditorError.value = ''
+  try {
+    const result = await updateSessionStudentRoster({
+      session_id: selected.value.id,
+      student_ids: selectedRosterStudentIds.value,
+    })
+    rosterEditorOpen.value = false
+    await refreshSelectedRoster(selected.value.id)
+    toast.success(`Đã lưu danh sách: thêm ${result.added}, gỡ ${result.removed}, giữ ${result.retained_with_history} dòng có lịch sử.`)
+  } catch (error) {
+    rosterEditorError.value = userErrorMessage(error, 'Không thể lưu danh sách học sinh. Dữ liệu đang chọn vẫn được giữ.')
+  } finally {
+    rosterEditorBusy.value = false
+  }
+}
+
+async function prepareSessionRosterSync() {
+  if (!selected.value || !canEditSelectedSession.value) return
+  rosterEditorError.value = ''
+  try {
+    await loadSessionRosterCandidates(selected.value, true)
+    confirmActionType.value = 'sync-session-roster'
+    confirmDetails.value = {
+      title: 'Đồng bộ học sinh của buổi học?',
+      message: `Danh sách sẽ khớp với thành viên ACTIVE có membership hiệu lực trong lớp vào ngày ${formatBusinessDate(selectedSessionDate.value)}.`,
+      itemName: `${className(selected.value)} · ${formatDateTime(selected.value.scheduled_start_at)}`,
+      warning: `Ước tính thêm ${rosterSyncDelta.value.additions}, gỡ ${rosterSyncDelta.value.removals}. Buổi học sẽ giữ nguyên mọi dòng đã có điểm danh, đánh giá hoặc dữ liệu được bảo vệ.`,
+      confirmLabel: 'Đồng bộ danh sách',
+      destructive: rosterSyncDelta.value.removals > 0,
+    }
+    deleteError.value = ''
+    confirmOpen.value = true
+  } catch (error) {
+    errorMessage.value = userErrorMessage(error, 'Không thể tải thành viên có hiệu lực của lớp trong ngày này.')
+  }
+}
+
+async function syncSelectedSessionRoster() {
+  if (!selected.value) return
+  const sessionId = selected.value.id
+  try {
+    const result = await syncSessionStudentRoster(sessionId)
+    confirmBusy.value = false
+    confirmOpen.value = false
+    rosterEditorOpen.value = false
+    selectedRosterStudentIds.value = []
+    toast.success(`Đã đồng bộ: thêm ${result.added}, gỡ ${result.removed}, giữ ${result.retained_with_history} dòng có lịch sử.`)
+    await refreshSelectedRoster(sessionId)
+    sessionRosterCandidates.value = []
+    sessionRosterCandidateSessionId.value = ''
+  } catch (error) {
+    deleteError.value = userErrorMessage(error, 'Không thể đồng bộ danh sách học sinh. Danh sách buổi học chưa được thay đổi.')
   }
 }
 
@@ -951,6 +1075,41 @@ async function cancel() {
   confirmOpen.value = true
 }
 
+function confirmDeleteSession() {
+  if (!selected.value || !canEditSelectedSession.value) return
+  confirmActionType.value = 'delete-session'
+  confirmDetails.value = {
+    title: 'Xóa buổi học?',
+    message: 'Buổi học chỉ được xóa khi chưa diễn ra và chưa có điểm danh, đánh giá, bài học hoặc chấm công.',
+    itemName: `${className(selected.value)} · ${formatDateTime(selected.value.scheduled_start_at)}`,
+    warning: selected.value.recurrence_schedule_id
+      ? 'Buổi thuộc lịch lặp. Hệ thống sẽ xóa buổi hiện tại và ghi nhận ngày này để lịch lặp không tạo lại.'
+      : 'Buổi riêng sẽ bị xóa khỏi lịch. Buổi đã có lịch sử sẽ bị từ chối và cần dùng thao tác Hủy buổi học.',
+    confirmLabel: 'Xóa buổi học',
+    destructive: true,
+  }
+  deleteError.value = ''
+  confirmOpen.value = true
+}
+
+async function deleteSelectedSession() {
+  if (!selected.value) return
+  const sessionId = selected.value.id
+  try {
+    await deleteSession(sessionId)
+    confirmBusy.value = false
+    confirmOpen.value = false
+    selectedDetailOpen.value = false
+    selected.value = null
+    students.value = []
+    sessionRosterCandidates.value = []
+    toast.success('Đã xóa buổi học khỏi lịch.')
+    await load()
+  } catch (error) {
+    deleteError.value = userErrorMessage(error, 'Không thể xóa buổi học. Nếu buổi đã có dữ liệu, hãy dùng thao tác hủy để giữ lịch sử.')
+  }
+}
+
 async function cancelSessionNow() {
   if (!selected.value) return
   const sessionId = selected.value.id
@@ -972,11 +1131,13 @@ async function runConfirmation() {
   if (confirmBusy.value) return
   confirmBusy.value = true
   errorMessage.value = ''
-  if (confirmActionType.value === 'delete-month-sessions') deleteError.value = ''
+  deleteError.value = ''
   try {
     if (confirmActionType.value === 'replace-month-template') await replaceMonthTemplateNow()
     else if (confirmActionType.value === 'archive-schedule') await archiveScheduleNow()
     else if (confirmActionType.value === 'cancel-session') await cancelSessionNow()
+    else if (confirmActionType.value === 'delete-session') await deleteSelectedSession()
+    else if (confirmActionType.value === 'sync-session-roster') await syncSelectedSessionRoster()
     else if (confirmActionType.value === 'delete-month-sessions') await deleteMonthSessionsNow()
   } finally { confirmBusy.value = false }
 }
@@ -1165,7 +1326,7 @@ watch(sessionFormIsBackdated, (isBackdated) => {
     </form>
     <div v-if="errorMessage" class="alert alert-danger mt-3 mb-0" role="alert">{{ errorMessage }}</div>
   </FormModal>
-  <ConfirmModal v-model="confirmOpen" v-bind="confirmDetails" :busy="confirmBusy" :error="confirmActionType === 'delete-month-sessions' ? deleteError : ''" @confirm="runConfirmation" />
+  <ConfirmModal v-model="confirmOpen" v-bind="confirmDetails" :busy="confirmBusy" :error="['delete-month-sessions', 'delete-session', 'sync-session-roster'].includes(confirmActionType) ? deleteError : ''" @confirm="runConfirmation" />
 
   <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
@@ -1289,22 +1450,49 @@ watch(sessionFormIsBackdated, (isBackdated) => {
       <DetailModal v-if="selected" v-model="selectedDetailOpen" :title="className(selected)" :description="`${formatDateTime(selected.scheduled_start_at)} · ${selected.status}`" size="xl">
           <h2 class="h5">{{ className(selected) }}</h2>
           <div class="text-secondary mb-3">Giáo viên: {{ teachers }} · {{ selected.status }} · {{ sessionRoomInput || 'Chưa xếp phòng' }}</div>
-          <div v-if="selected.status === 'SCHEDULED'" class="row g-2 align-items-end mb-3">
+          <div v-if="canEditSelectedSession" class="row g-2 align-items-end mb-3">
             <div class="col-md-8"><label class="form-label" for="session-detail-teachers">Giáo viên được phân công cho buổi này ({{ teacherCountLabel(selected.class_id, selectedTeacherIds, selected.id) }})</label><TeacherPicker id="session-detail-teachers" :model-value="selectedTeacherIds" :teachers="activeTeachers" multiple placeholder="Tìm theo tên hoặc mã giáo viên" :disabled-ids="activeTeachers.filter((teacher) => !canSelectSessionTeacher(teacher.id)).map((teacher) => teacher.id)" @update:model-value="updateSelectedTeacherSelection" /></div>
             <div class="col-md-4"><button class="btn btn-outline-primary" :disabled="selectedSessionTeacherCount > MAX_CLASS_TEACHERS" @click="saveTeachers">Lưu phân công buổi này</button></div>
           </div>
           <div class="row g-2 mb-3">
-            <div class="col-md-4"><label class="form-label">Bắt đầu</label><input v-model="startInput" class="form-control" type="datetime-local" :disabled="selected.status !== 'SCHEDULED'" /></div>
-            <div class="col-md-4"><label class="form-label">Kết thúc</label><input v-model="endInput" class="form-control" type="datetime-local" :disabled="selected.status !== 'SCHEDULED'" /></div>
-            <div class="col-md-4"><label class="form-label">Phòng</label><input v-model="sessionRoomInput" class="form-control" :disabled="selected.status !== 'SCHEDULED'" /></div>
+            <div class="col-md-4"><label class="form-label">Bắt đầu</label><input v-model="startInput" class="form-control" type="datetime-local" :disabled="!canEditSelectedSession" /></div>
+            <div class="col-md-4"><label class="form-label">Kết thúc</label><input v-model="endInput" class="form-control" type="datetime-local" :disabled="!canEditSelectedSession" /></div>
+            <div class="col-md-4"><label class="form-label">Phòng</label><input v-model="sessionRoomInput" class="form-control" :disabled="!canEditSelectedSession" /></div>
           </div>
-          <div v-if="selected.status === 'SCHEDULED'" class="d-flex gap-2 mb-4">
-            <button class="btn btn-primary btn-sm" @click="saveSchedule">Lưu lịch mới</button>
+          <div v-if="canEditSelectedSession" class="d-flex flex-wrap gap-2 mb-4">
+            <button class="btn btn-primary btn-sm" @click="saveSchedule">Lưu thông tin buổi học</button>
             <button class="btn btn-outline-danger btn-sm" @click="cancel">Hủy buổi học</button>
+            <button class="btn btn-danger btn-sm" @click="confirmDeleteSession">Xóa buổi học</button>
           </div>
           <p v-if="selected.session_note" class="border-start border-3 ps-3">{{ selected.session_note }}</p>
           <YouTubePlayer v-if="selected.lesson_youtube_url" class="mb-3" :url="selected.lesson_youtube_url" :title="`Video bài học ${className(selected)}`" />
-          <h3 class="h6 mt-3">Học sinh và kết quả</h3>
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3 mb-2">
+            <h3 class="h6 mb-0">Học sinh và kết quả</h3>
+            <div v-if="canEditSelectedSession" class="d-flex gap-2">
+              <button class="btn btn-outline-primary btn-sm" :disabled="rosterEditorLoading || rosterEditorBusy" @click="openRosterEditor">{{ rosterEditorLoading ? 'Đang tải lớp…' : 'Sửa danh sách học sinh' }}</button>
+              <button class="btn btn-outline-success btn-sm" :disabled="rosterEditorLoading || rosterEditorBusy || rosterEditorOpen" @click="prepareSessionRosterSync">Đồng bộ học sinh theo lớp</button>
+            </div>
+          </div>
+          <div v-if="rosterEditorError" class="alert alert-danger py-2" role="alert">{{ rosterEditorError }}</div>
+          <section v-if="rosterEditorOpen" class="border rounded p-3 mb-3" aria-label="Sửa danh sách học sinh của buổi học">
+            <div class="fw-semibold mb-1">Thành viên lớp có hiệu lực ngày {{ formatBusinessDate(selectedSessionDate) }}</div>
+            <p class="small text-secondary">Chỉ thêm học sinh cùng lớp có membership hiệu lực đúng ngày này. Dòng đã có điểm danh, đánh giá hoặc dữ liệu được bảo vệ sẽ được giữ nguyên.</p>
+            <div v-if="!sessionRosterCandidates.length" class="text-secondary small mb-3">Không có thành viên đang hoạt động trong lớp vào ngày buổi học.</div>
+            <div v-for="membership in sessionRosterCandidates" :key="membership.student_id" class="form-check py-1">
+              <input :id="`session-roster-student-${membership.student_id}`" v-model="selectedRosterStudentIds" class="form-check-input" type="checkbox" :value="membership.student_id" :disabled="sessionStudentHasHistory(students.find((row) => row.student_id === membership.student_id) || {})" />
+              <label class="form-check-label" :for="`session-roster-student-${membership.student_id}`">
+                {{ membership.students?.full_name }} <span class="text-secondary">{{ membership.students?.student_code }}</span>
+                <span v-if="sessionStudentHasHistory(students.find((row) => row.student_id === membership.student_id) || {})" class="badge text-bg-light ms-1">Đã có dữ liệu, giữ nguyên</span>
+              </label>
+            </div>
+            <div v-for="row in students.filter((item) => !sessionRosterCandidates.some((membership) => membership.student_id === item.student_id))" :key="`outside-membership-${row.student_id}`" class="small text-secondary mt-2">
+              {{ row.students?.full_name || row.student_id }} · {{ sessionStudentHasHistory(row) ? 'được giữ vì đã có điểm danh hoặc dữ liệu đánh giá.' : 'không còn membership hiệu lực; chỉ gỡ khi không có dữ liệu cần bảo toàn.' }}
+            </div>
+            <div class="d-flex gap-2 mt-3">
+              <button class="btn btn-primary btn-sm" :disabled="rosterEditorBusy" @click="saveSelectedRoster">{{ rosterEditorBusy ? 'Đang lưu…' : 'Lưu danh sách' }}</button>
+              <button class="btn btn-outline-secondary btn-sm" :disabled="rosterEditorBusy" @click="rosterEditorOpen = false">Đóng</button>
+            </div>
+          </section>
           <div v-for="row in students" :key="row.student_id" class="border rounded p-3 mb-2">
             <div class="fw-semibold">{{ row.students?.full_name }} <small class="text-secondary">{{ row.students?.student_code }}</small></div>
             <div class="small text-secondary">

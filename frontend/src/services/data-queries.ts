@@ -51,6 +51,30 @@ export async function getClassActiveMemberships(classId: string): Promise<ClassM
   return rows.map((row) => ({ ...row, students: oneRelation(row.students) }) as ClassMembershipDetailRow)
 }
 
+export async function getClassMembershipsForSessionDate(classId: string, sessionDate: string): Promise<ClassMembershipDetailRow[]> {
+  const rows = await unwrap<any[]>(supabase.from('class_memberships')
+    .select('id,class_id,student_id,start_date,end_date,status,students(id,student_code,full_name,status)')
+    .eq('class_id', classId)
+    .eq('status', 'ACTIVE')
+    .lte('start_date', sessionDate)
+    .or(`end_date.is.null,end_date.gte.${sessionDate}`)
+    .order('start_date')
+    .order('created_at'))
+
+  const studentsById = new Map<string, ClassMembershipDetailRow>()
+  for (const row of rows) {
+    const student = oneRelation<any>(row.students)
+    if (!student || student.status !== 'ACTIVE' || row.start_date > sessionDate || (row.end_date && row.end_date < sessionDate)) continue
+    if (!studentsById.has(student.id)) {
+      studentsById.set(student.id, {
+        ...row,
+        students: { id: student.id, student_code: student.student_code, full_name: student.full_name, status: student.status },
+      } as ClassMembershipDetailRow)
+    }
+  }
+  return [...studentsById.values()].sort((a, b) => (a.students?.full_name || '').localeCompare(b.students?.full_name || '', 'vi'))
+}
+
 export interface ClassRosterExportStudent {
   id: string
   student_code: string | null

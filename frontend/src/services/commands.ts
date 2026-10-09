@@ -352,6 +352,35 @@ export async function updateSessionOccurrence(input: { session_id: string; start
   return data
 }
 
+export interface SessionRosterMutationResult {
+  session_id: string
+  added: number
+  removed: number
+  retained_with_history: number
+  student_count: number
+}
+
+export async function updateSessionStudentRoster(input: { session_id: string; student_ids: string[] }): Promise<SessionRosterMutationResult> {
+  const { data, error } = await supabase.rpc('admin_update_session_student_roster', {
+    p_session_id: input.session_id,
+    p_student_ids: input.student_ids,
+  })
+  if (error) throw error
+  return data as SessionRosterMutationResult
+}
+
+export async function syncSessionStudentRoster(sessionId: string): Promise<SessionRosterMutationResult> {
+  const { data, error } = await supabase.rpc('admin_sync_session_student_roster', { p_session_id: sessionId })
+  if (error) throw error
+  return data as SessionRosterMutationResult
+}
+
+export async function deleteSession(sessionId: string): Promise<{ session_id: string; deleted: boolean; excluded_occurrence: boolean }> {
+  const { data, error } = await supabase.rpc('admin_delete_session', { p_session_id: sessionId })
+  if (error) throw error
+  return data as { session_id: string; deleted: boolean; excluded_occurrence: boolean }
+}
+
 export async function createManualSession(input: {
   class_id: string
   start: string

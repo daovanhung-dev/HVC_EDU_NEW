@@ -97,7 +97,7 @@
 | frontend/src/modules/admin/components/TeacherPicker.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho Teacher Picker trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/admin/components/TeacherPicker.vue | Frontend / Admin | Vue SFC | Chọn hoặc chỉnh danh sách teacher được giao cho lịch/buổi. |
 | frontend/src/modules/admin/pages/AdminSessionsPage.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho Admin Sessions Page trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
-| frontend/src/modules/admin/pages/AdminSessionsPage.vue | Frontend / Admin | Vue SFC | Màn hình Admin lập buổi, sửa/hủy buổi tương lai và quản lý mẫu lịch theo tháng. |
+| frontend/src/modules/admin/pages/AdminSessionsPage.vue | Frontend / Admin | Vue SFC | Màn hình Admin lập/sửa buổi, quản lý roster học sinh, hủy/xóa buổi tương lai và quản lý mẫu lịch theo tháng. |
 | frontend/src/modules/admin/pages/AdminTimesheetsPage.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho Admin Timesheets Page trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/admin/pages/AdminTimesheetsPage.vue | Frontend / Admin | Vue SFC | Màn hình Admin duyệt hoặc từ chối yêu cầu chấm công theo buổi. |
 | frontend/src/modules/admin/pages/ClassDetailPage.vue | Frontend / Admin | Vue SFC | Chi tiết lớp, membership, lịch lặp và giáo viên theo lịch. |
@@ -255,6 +255,7 @@
 | supabase/migrations/0052_delete_all_sessions_in_month.sql | Supabase / migrations | SQL | Thay RPC xóa tháng bằng thao tác xóa buổi trong tháng có preview và audit. |
 | supabase/migrations/0053_month_week_template_replacement.sql | Supabase / migrations | SQL | Thay lịch của một tháng bằng mẫu tuần tạo các buổi cụ thể. |
 | supabase/migrations/0054_sync_manual_session_student_rosters.sql | Supabase / migrations | SQL | Đồng bộ membership hiệu lực vào roster các buổi thủ công SCHEDULED trong tương lai. |
+| supabase/migrations/0055_session_management_and_rosters.sql | Supabase / migrations | SQL | Cho Admin sửa roster buổi tương lai theo membership hiệu lực, bảo toàn dữ liệu học tập/tài chính, xóa buổi trống và chặn tái sinh buổi lặp đã xóa. |
 | supabase/seed.sql | Supabase / cấu hình và seed | SQL | Seed cho database local; không dùng làm căn cứ dữ liệu production. |
 | supabase/tests/admin_monthly_session_planning.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra admin monthly session planning bằng fixture database cô lập. |
 | supabase/tests/backdated_session_creation.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra backdated session creation bằng fixture database cô lập. |
@@ -267,4 +268,4 @@
 | supabase/tests/student_future_session_roster_sync.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra student future session roster sync bằng fixture database cô lập. |
 | supabase/tests/timesheet_workflow.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra timesheet workflow bằng fixture database cô lập. |
 
-Tổng: 260 đường dẫn có trong inventory.
+Tổng: 261 đường dẫn có trong inventory.

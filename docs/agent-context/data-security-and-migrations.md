@@ -13,7 +13,7 @@
 
 - RLS và grants giới hạn truy vấn Data API; PostgreSQL constraints/triggers/RPC kiểm tra trạng thái và quan hệ; Edge Function xác thực caller/role/input trước thao tác server-side.
 - Route guard, client-side role, id gửi từ browser và nút ẩn chỉ là UI. Không dùng chúng để cấp quyền dữ liệu.
-- Teacher chỉ cập nhật session khi là teacher đang hoạt động được phân công; `update_session_learning` chỉ cho session `IN_PROGRESS`. `complete_session` yêu cầu attendance record cho toàn roster.
+- Teacher chỉ cập nhật session khi là teacher đang hoạt động được phân công; `update_session_learning` chỉ cho session `IN_PROGRESS`. `complete_session` yêu cầu attendance record cho toàn roster. RPC Admin ở migration 0055 sửa roster chỉ cho buổi `SCHEDULED` trong tương lai, kiểm tra `CLASS_MANAGE`, membership hiệu lực và xung đột; dòng đã có attendance/assessment/financial snapshot được bảo toàn.
 - Các RPC cập nhật session được gọi qua Edge Function và quyền `EXECUTE` chỉ cấp service role. Handler phải xác thực người dùng rồi mới dùng quyền server.
 - Chấm công đọc theo RLS; submit/review qua Edge Function/RPC. Không cấp ghi trực tiếp bảng timesheet cho authenticated chỉ để thuận tiện UI.
 - Học sinh bị buộc đổi mật khẩu có thể đọc profile để vào form đổi nhưng không đọc learning data cho đến khi hoàn tất. Kiểm tra cả status active và quan hệ sở hữu/roster khi thay RLS.
@@ -29,7 +29,7 @@ Import assessment có thể giữ hàng nguồn kể cả khi chưa có attendan
 
 ## Lịch sử migration trong repo
 
-Migration phải được đọc theo thứ tự và kiểm tra migration sau có `CREATE OR REPLACE`, revoke/grant hoặc thay đổi cùng object. Hiện repo có `0001–0054`:
+Migration phải được đọc theo thứ tự và kiểm tra migration sau có `CREATE OR REPLACE`, revoke/grant hoặc thay đổi cùng object. Hiện repo có `0001–0055`:
 
 - `0001–0006`: extension, enum, Auth/profile, RBAC, hồ sơ student/staff và danh mục học thuật/lớp.
 - `0007–0019`: mô hình ClassMonth/session/attendance/timesheet và các bảng tài chính/notification/audit/function/RLS/index/seed của giai đoạn đầu. Phần tháng và tài chính hiện là lịch sử hoặc bị khóa khỏi app.
@@ -42,6 +42,7 @@ Migration phải được đọc theo thứ tự và kiểm tra migration sau c�
 - `0047–0049`: video YouTube, AI học tập, ép học sinh/giáo viên đổi mật khẩu và chặn learning data trong lúc cờ reset còn bật.
 - `0050–0052`: các RPC quản lý/xóa lịch tháng nối tiếp nhau; 0050/0051 bị thu hồi/thay thế. 0052 là xóa buổi trong tháng đã chọn cùng dữ liệu liên kết, có preview, khóa và audit. Đây là thao tác phá hủy, không phải quy trình chỉnh lịch thông thường.
 - `0053–0054`: thay lịch tháng bằng buổi từ mẫu tuần, rồi đồng bộ membership có hiệu lực vào roster session thủ công tương lai.
+- `0055`: sửa roster buổi theo membership hiệu lực/ngày buổi, bảo toàn dòng có lịch sử, xóa cứng buổi tương lai trống có quyền Admin và ghi tombstone cho ngày của buổi lặp.
 
 Không sửa, xóa hoặc đổi số migration đã có thể chạy ở môi trường khác. Thay đổi schema bằng migration tiếp theo. Migration production cần yêu cầu rõ và kiểm tra target/backup/migration history trực tiếp; local test không cần áp vào production.
 

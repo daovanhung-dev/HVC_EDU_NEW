@@ -12,6 +12,7 @@ export const students = [
   { id: 'qa-student-1', user_id: 'qa-user-1', student_code: 'QA-S-001', full_name: 'QA- Nguyễn Minh An', phone: '0900000001', email: 'qa.an@example.test', parent_name: 'QA- Nguyễn Thu Hà', parent_phone: '0900000011', address: 'QA- Quận Hải Châu', status: 'ACTIVE', created_at: at(-35, '08:00') },
   { id: 'qa-student-2', user_id: 'qa-user-2', student_code: 'QA-S-002', full_name: 'QA- Trần Gia Linh', phone: '0900000002', email: 'qa.linh@example.test', parent_name: 'QA- Trần Minh Đức', parent_phone: '0900000022', address: 'QA- Quận Thanh Khê', status: 'ACTIVE', created_at: at(-20, '09:30') },
   { id: 'qa-student-3', user_id: 'qa-user-3', student_code: 'QA-S-003', full_name: 'QA- Lê Hoàng Nam', phone: '0900000003', email: null, parent_name: 'QA- Lê Thị Lan', parent_phone: '0900000033', address: 'QA- Quận Sơn Trà', status: 'LOCKED', created_at: at(-8, '14:15') },
+  { id: 'qa-student-4', user_id: 'qa-user-4', student_code: 'QA-S-004', full_name: 'QA- Phan Bảo Ngọc', phone: null, email: null, parent_name: null, parent_phone: null, address: null, status: 'ACTIVE', created_at: at(0, '09:00') },
 ]
 
 export const teachers = [
@@ -30,6 +31,7 @@ export const classes: any[] = [
 export const memberships: any[] = [
   { id: 'qa-membership-1', class_id: 'qa-class-1', student_id: 'qa-student-1', start_date: dayOffset(-55), end_date: null, status: 'ACTIVE', students: students[0] },
   { id: 'qa-membership-2', class_id: 'qa-class-1', student_id: 'qa-student-2', start_date: dayOffset(-25), end_date: null, status: 'ACTIVE', students: students[1] },
+  { id: 'qa-membership-3', class_id: 'qa-class-1', student_id: 'qa-student-4', start_date: today, end_date: null, status: 'ACTIVE', students: students[3] },
 ]
 
 export const schedules: any[] = [
@@ -37,7 +39,7 @@ export const schedules: any[] = [
 ]
 
 export const sessions: any[] = [
-  { id: 'qa-session-1', class_id: 'qa-class-1', recurrence_schedule_id: 'qa-schedule-1', manual_schedule: false, scheduled_start_at: at(1, '17:30'), scheduled_end_at: at(1, '19:00'), status: 'SCHEDULED', room: 'QA-A1', session_note: null, classes: classes[0], class_schedules: schedules[0], session_staff: [{ staff_id: 'qa-teacher-1', assignment_role: 'TEACHER', staff: teachers[0] }], session_students: memberships.map((item) => ({ student_id: item.student_id })) },
+  { id: 'qa-session-1', class_id: 'qa-class-1', recurrence_schedule_id: 'qa-schedule-1', manual_schedule: false, scheduled_start_at: at(1, '17:30'), scheduled_end_at: at(1, '19:00'), status: 'SCHEDULED', room: 'QA-A1', session_note: null, classes: classes[0], class_schedules: schedules[0], session_staff: [{ staff_id: 'qa-teacher-1', assignment_role: 'TEACHER', staff: teachers[0] }], session_students: memberships.filter((item) => item.student_id !== 'qa-student-4').map((item) => ({ student_id: item.student_id })) },
   { id: 'qa-session-2', class_id: 'qa-class-1', recurrence_schedule_id: 'qa-schedule-1', manual_schedule: false, scheduled_start_at: at(0, '10:00'), scheduled_end_at: at(0, '11:30'), status: 'IN_PROGRESS', room: 'QA-A1', session_note: 'Phân số và bài tập ứng dụng.', classes: classes[0], class_schedules: schedules[0], session_staff: [{ staff_id: 'qa-teacher-1', assignment_role: 'TEACHER', staff: teachers[0] }], session_students: memberships.map((item) => ({ student_id: item.student_id })) },
   { id: 'qa-session-3', class_id: 'qa-class-2', scheduled_start_at: at(-1, '15:00'), scheduled_end_at: at(-1, '16:30'), status: 'COMPLETED', room: 'QA-B2', session_note: 'Ôn tập từ vựng.', lesson_youtube_url: 'https://youtu.be/dQw4w9WgXcQ', classes: classes[1], class_schedules: null, session_staff: [{ staff_id: 'qa-teacher-2', assignment_role: 'TEACHER', staff: teachers[1] }], session_students: [] },
   { id: 'qa-session-4', class_id: 'qa-class-1', recurrence_schedule_id: 'qa-schedule-1', manual_schedule: false, scheduled_start_at: at(-3, '17:30'), scheduled_end_at: at(-3, '19:00'), status: 'COMPLETED', room: 'QA-A1', session_note: 'Phép chia và luyện tập.', classes: classes[0], class_schedules: schedules[0], session_staff: [{ staff_id: 'qa-teacher-1', assignment_role: 'TEACHER', staff: teachers[0] }], session_students: [] },
@@ -95,9 +97,29 @@ export function getClassRosterForExport(classId: string) {
   return query([...studentsById.values()].sort((left, right) => left.full_name.localeCompare(right.full_name, 'vi')))
 }
 export function getClassActiveRosterSize(id: string) { return query(memberships.filter((row) => row.class_id === id && row.status === 'ACTIVE').length) }
+export function getClassMembershipsForSessionDate(classId: string, sessionDate: string) {
+  return query(memberships.filter((row) => row.class_id === classId && row.status === 'ACTIVE'
+    && row.start_date <= sessionDate && (!row.end_date || row.end_date >= sessionDate)
+    && row.students?.status === 'ACTIVE'))
+}
 export function getClassSchedules(id: string) { return query(schedules.filter((row) => row.class_id === id)) }
 export function getMySessions() { return query(sessions) }
-export function getSessionStudents(sessionId: string) { return query(memberships.filter((row) => row.class_id === sessions.find((item) => item.id === sessionId)?.class_id).map((row) => ({ ...row, student_attendances: attendance.filter((item) => item.student_id === row.student_id && item.session_id === sessionId), assessment_snapshot: null }))) }
+export function getSessionStudents(sessionId: string) {
+  const session = sessions.find((item) => item.id === sessionId)
+  return query((session?.session_students || []).map((item: any) => {
+    const membership = memberships.find((row) => row.class_id === session?.class_id && row.student_id === item.student_id)
+    const student = membership?.students || students.find((row) => row.id === item.student_id)
+    return {
+      ...item,
+      student_id: item.student_id,
+      students: student ? { student_code: student.student_code, full_name: student.full_name } : null,
+      student_attendances: attendance.filter((row) => row.student_id === item.student_id && row.session_id === sessionId),
+      assessment_snapshot: item.assessment_snapshot || {},
+      monthly_fee_snapshot: item.monthly_fee_snapshot ?? null,
+      session_unit_value: item.session_unit_value ?? null,
+    }
+  }))
+}
 export function getTimesheets() { return query(timesheets) }
 export function getMyTimesheets() { return query(timesheets.filter((row) => row.staff_id === 'qa-teacher-1')) }
 export function getMyStaff() { return query(teachers[0]) }
@@ -216,6 +238,34 @@ export async function addTeacherToClassSchedule(id: string, staffId: string) { c
 export async function removeTeacherFromClassSchedule(id: string, staffId: string) { const row = schedules.find((item) => item.id === id); if (row) row.class_schedule_staff = row.class_schedule_staff.filter((item: any) => item.staff_id !== staffId); return {} }
 export async function createManualSession(input: any) { const row = { id: `qa-session-${Date.now()}`, class_id: input.class_id, recurrence_schedule_id: null, recurrence_occurrence_date: null, manual_schedule: true, scheduled_start_at: input.start, scheduled_end_at: input.end, room: input.room, status: 'SCHEDULED', session_note: null, classes: classes.find((item) => item.id === input.class_id), session_staff: input.staff_ids.map((id: string) => ({ staff_id: id, assignment_role: 'TEACHER', staff: teachers.find((item) => item.id === id) })) }; sessions.unshift(row); return { session_id: row.id } }
 export async function updateSessionOccurrence(input: any) { const row = sessions.find((item) => item.id === input.session_id); if (row) { if (input.start) row.scheduled_start_at = input.start; if (input.end) row.scheduled_end_at = input.end; if (input.cancel) row.status = 'CANCELLED'; row.room = input.room } }
+export async function updateSessionStudentRoster(input: any) {
+  await query(true)
+  const session = sessions.find((row) => row.id === input.session_id)
+  if (!session) throw new Error('SESSION_NOT_FOUND')
+  const previous = session.session_students || []
+  const requested = new Set(input.student_ids)
+  const protectedIds = new Set(previous.filter((row: any) => attendance.some((item) => item.session_id === session.id && item.student_id === row.student_id)
+    || Object.keys(row.assessment_snapshot || {}).length > 0).map((row: any) => row.student_id))
+  const nextIds = new Set([...requested, ...protectedIds])
+  const removed = previous.filter((row: any) => !nextIds.has(row.student_id))
+  session.session_students = [...nextIds].map((student_id) => ({ student_id }))
+  return { session_id: session.id, added: [...nextIds].filter((id) => !previous.some((row: any) => row.student_id === id)).length, removed: removed.length, retained_with_history: [...protectedIds].filter((id) => !requested.has(id)).length, student_count: session.session_students.length }
+}
+export async function syncSessionStudentRoster(sessionId: string) {
+  const session = sessions.find((row) => row.id === sessionId)
+  if (!session) throw new Error('SESSION_NOT_FOUND')
+  const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(session.scheduled_start_at))
+  const target = memberships.filter((row) => row.class_id === session.class_id && row.status === 'ACTIVE'
+    && row.start_date <= date && (!row.end_date || row.end_date >= date)
+    && row.students?.status === 'ACTIVE').map((row) => row.student_id)
+  return updateSessionStudentRoster({ session_id: sessionId, student_ids: target })
+}
+export async function deleteSession(sessionId: string) {
+  await query(true)
+  const index = sessions.findIndex((row) => row.id === sessionId)
+  if (index >= 0) sessions.splice(index, 1)
+  return { session_id: sessionId, deleted: true, excluded_occurrence: false }
+}
 export async function applyWeekToMonth() { return { created: 3 } }
 export async function previewMonthWeekTemplateReplacement(monthStart: string, slots: any[]) {
   const month = monthStart.slice(0, 7)
