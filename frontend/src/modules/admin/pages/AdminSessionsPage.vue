@@ -11,6 +11,8 @@ import {
   deleteSessionsForMonth,
   previewMonthWeekTemplateReplacement,
   replaceMonthWithWeekTemplate,
+  correctSessionSchedule,
+  correctSessionLearning,
   setClassScheduleStatus,
   updateClassSchedule,
   updateSessionOccurrence,
@@ -29,6 +31,15 @@ import {
   getStaff,
 } from '@/services/data-queries'
 import type { ClassDetailRow, ClassScheduleRow, SessionRow } from '@/shared/types/domain'
+import {
+  attendanceIsDirty,
+  attendanceStatuses,
+  attendanceStatusLabel,
+  attendanceValidationError,
+  createAttendanceValue,
+  toAttendanceSaveInput,
+  type AttendanceStudentRow,
+} from '@/modules/staff/attendance'
 import { formatDateTime } from '@/shared/utils/format'
 import { canSelectClassTeacher, getClassTeacherIds, MAX_CLASS_TEACHERS, selectedTeacherCount } from '@/shared/utils/class-teacher-limit'
 import { deleteRpcErrorMessage, userErrorMessage } from '@/shared/utils/errors'
@@ -66,6 +77,12 @@ const teachersList = ref<any[]>([])
 const schedules = ref<ClassScheduleRow[]>([])
 const schedulesByClass = ref<Record<string, ClassScheduleRow[]>>({})
 const students = ref<any[]>([])
+const learningRows = ref<AttendanceStudentRow[]>([])
+const learningEditorOpen = ref(false)
+const learningBusy = ref(false)
+const learningValidationErrors = ref<Record<string, string>>({})
+const sessionNoteInput = ref('')
+const lessonYoutubeInput = ref('')
 const sessionRosterCandidates = ref<any[]>([])
 const sessionRosterCandidateSessionId = ref('')
 const selectedRosterStudentIds = ref<string[]>([])
@@ -76,6 +93,8 @@ const rosterEditorError = ref('')
 const selected = ref<SessionRow | null>(null)
 const selectedDetailOpen = ref(false)
 const selectedTeacherIds = ref<string[]>([])
+const teacherSaveBusy = ref(false)
+const scheduleSaveBusy = ref(false)
 const selectedClassId = ref(typeof route.query.class_id === 'string' ? route.query.class_id : '')
 const loading = ref(false)
 const scheduleLoading = ref(false)
@@ -170,9 +189,19 @@ const selectedSessionTeacherBaseIds = computed(() => selected.value
   ? getClassTeacherIds(selected.value.class_id, Object.values(schedulesByClass.value).flat(), sessions.value, selected.value.id)
   : new Set<string>())
 const selectedSessionTeacherCount = computed(() => selectedTeacherCount(selectedSessionTeacherBaseIds.value, selectedTeacherIds.value))
-const canEditSelectedSession = computed(() => !!selected.value
+const canEditSelectedSession = computed(() => !!selected.value && selected.value.status !== 'CANCELLED')
+const canEditSelectedLearning = computed(() => !!selected.value
+  && selected.value.status !== 'CANCELLED'
+  && (selected.value.status !== 'SCHEDULED' || Date.parse(selected.value.scheduled_start_at) <= Date.now()))
+const canCancelOrDeleteSelectedSession = computed(() => !!selected.value
   && selected.value.status === 'SCHEDULED'
   && Date.parse(selected.value.scheduled_start_at) > Date.now())
+const dirtyLearningRows = computed(() => learningRows.value.filter(attendanceIsDirty))
+const learningDirty = computed(() => !!selected.value && (
+  sessionNoteInput.value.trim() !== (selected.value.session_note || '').trim()
+  || lessonYoutubeInput.value.trim() !== (selected.value.lesson_youtube_url || '').trim()
+  || dirtyLearningRows.value.length > 0
+))
 const selectedSessionDate = computed(() => selected.value ? getBusinessDateKey(selected.value.scheduled_start_at) : '')
 const rosterSyncDelta = computed(() => {
   const currentIds = new Set(students.value.map((row) => row.student_id))
@@ -187,6 +216,24 @@ function sessionStudentHasHistory(row: any) {
   const snapshot = row.assessment_snapshot
   const hasAssessment = snapshot && typeof snapshot === 'object' && Object.keys(snapshot).length > 0
   return Boolean(row.student_attendances?.length || hasAssessment)
+}
+
+function attendanceRowFromSource(row: any): AttendanceStudentRow {
+  const saved = row.student_attendances?.[0]
+  const snapshot = row.assessment_snapshot || {}
+  const value = createAttendanceValue(saved || {
+    status: null,
+    late_minutes: null,
+    absence_reason: null,
+    homework_score: null,
+    homework_note: snapshot.homework_note,
+    understanding_score: snapshot.understanding_raw,
+    attitude_score: snapshot.attitude_raw,
+    positive_feedback_count: null,
+    positive_feedback_raw: snapshot.positive_feedback_raw,
+    comment: snapshot.comment_raw,
+  })
+  return { student_id: row.student_id, students: row.students, attendance: value, initialAttendance: { ...value } }
 }
 
 function refreshTodayDateKey() {
@@ -494,20 +541,30 @@ async function selectSession(session: SessionRow) {
   selected.value = session
   selectedDetailOpen.value = true
   rosterEditorOpen.value = false
+  learningEditorOpen.value = false
   rosterEditorError.value = ''
+  learningValidationErrors.value = {}
   sessionRosterCandidates.value = []
   sessionRosterCandidateSessionId.value = ''
   selectedTeacherIds.value = (session.session_staff || []).map((item) => item.staff_id)
   startInput.value = toLocalInput(session.scheduled_start_at)
   endInput.value = toLocalInput(session.scheduled_end_at)
   sessionRoomInput.value = session.room ?? session.class_schedules?.room ?? ''
+  sessionNoteInput.value = session.session_note || ''
+  lessonYoutubeInput.value = session.lesson_youtube_url || ''
   errorMessage.value = ''
   const [studentsResult, schedulesResult] = await Promise.allSettled([
     getSessionStudents(session.id),
     loadClassSchedules(session.class_id),
   ])
-  if (studentsResult.status === 'fulfilled') students.value = studentsResult.value as any[]
-  else errorMessage.value = studentsResult.reason instanceof Error ? studentsResult.reason.message : 'Không thể tải chi tiết buổi học.'
+  if (studentsResult.status === 'fulfilled') {
+    students.value = studentsResult.value as any[]
+    learningRows.value = students.value.map(attendanceRowFromSource)
+  } else {
+    students.value = []
+    learningRows.value = []
+    errorMessage.value = studentsResult.reason instanceof Error ? studentsResult.reason.message : 'Không thể tải chi tiết buổi học.'
+  }
   if (schedulesResult.status === 'rejected') {
     scheduleLoadErrors.value = { ...scheduleLoadErrors.value, [session.class_id]: true }
     if (!errorMessage.value) errorMessage.value = schedulesResult.reason instanceof Error ? schedulesResult.reason.message : 'Không thể tải phân công giáo viên của lớp.'
@@ -544,11 +601,21 @@ async function openRosterEditor() {
 
 async function refreshSelectedRoster(sessionId: string) {
   const refreshed = await getSessionStudents(sessionId)
-  if (selected.value?.id === sessionId) students.value = refreshed as any[]
+  if (selected.value?.id === sessionId) {
+    students.value = refreshed as any[]
+    learningRows.value = students.value.map(attendanceRowFromSource)
+  }
+}
+
+function blockRosterSaveWithPendingLearningEdits() {
+  if (!learningDirty.value) return false
+  rosterEditorError.value = 'Hãy lưu nội dung, điểm danh và đánh giá đang sửa trước khi thay đổi danh sách học sinh.'
+  return true
 }
 
 async function saveSelectedRoster() {
   if (!selected.value || rosterEditorBusy.value || !canEditSelectedSession.value) return
+  if (blockRosterSaveWithPendingLearningEdits()) return
   rosterEditorBusy.value = true
   rosterEditorError.value = ''
   try {
@@ -568,6 +635,7 @@ async function saveSelectedRoster() {
 
 async function prepareSessionRosterSync() {
   if (!selected.value || !canEditSelectedSession.value) return
+  if (blockRosterSaveWithPendingLearningEdits()) return
   rosterEditorError.value = ''
   try {
     await loadSessionRosterCandidates(selected.value, true)
@@ -589,6 +657,10 @@ async function prepareSessionRosterSync() {
 
 async function syncSelectedSessionRoster() {
   if (!selected.value) return
+  if (blockRosterSaveWithPendingLearningEdits()) {
+    deleteError.value = rosterEditorError.value
+    return
+  }
   const sessionId = selected.value.id
   try {
     const result = await syncSessionStudentRoster(sessionId)
@@ -834,7 +906,8 @@ async function replaceMonthTemplateNow() {
 }
 
 async function saveTeachers() {
-  if (!selected.value || !selectedTeacherIds.value.length) {
+  if (teacherSaveBusy.value) return
+  if (!selected.value || !canEditSelectedSession.value || !selectedTeacherIds.value.length) {
     errorMessage.value = 'Mỗi buổi cần có ít nhất một giáo viên được phân công.'
     return
   }
@@ -843,13 +916,19 @@ async function saveTeachers() {
     return
   }
   errorMessage.value = ''
+  const sessionId = selected.value.id
+  teacherSaveBusy.value = true
   try {
-    await updateSessionTeachers({ session_id: selected.value.id, staff_ids: selectedTeacherIds.value })
+    await updateSessionTeachers({ session_id: sessionId, staff_ids: selectedTeacherIds.value })
     toast.success('Đã cập nhật giáo viên cho buổi học.')
     await load()
-    const refreshed = sessions.value.find((row) => row.id === selected.value?.id)
-    if (refreshed) await selectSession(refreshed)
+    const refreshed = sessions.value.find((row) => row.id === sessionId)
+    if (refreshed && selected.value?.id === sessionId) {
+      selected.value = refreshed
+      selectedTeacherIds.value = (refreshed.session_staff || []).map((item) => item.staff_id)
+    }
   } catch (error) { errorMessage.value = teacherLimitMessage(error, 'Không thể cập nhật giáo viên.') }
+  finally { teacherSaveBusy.value = false }
 }
 
 async function createSchedule() {
@@ -1057,26 +1136,120 @@ async function archiveScheduleNow() {
 }
 
 async function saveSchedule() {
-  if (!selected.value || !startInput.value || !endInput.value) return
+  if (!selected.value || !canEditSelectedSession.value || scheduleSaveBusy.value || !startInput.value || !endInput.value) return
+  const start = fromLocalInput(startInput.value)
+  const end = fromLocalInput(endInput.value)
+  const startAt = Date.parse(start)
+  const endAt = Date.parse(end)
+  if (!Number.isFinite(startAt) || !Number.isFinite(endAt) || endAt <= startAt
+      || getBusinessDateKey(new Date(startAt)) !== getBusinessDateKey(new Date(endAt))) {
+    errorMessage.value = 'Giờ kết thúc phải sau giờ bắt đầu và cùng ngày với giờ bắt đầu.'
+    return
+  }
+  if (selected.value.status !== 'SCHEDULED' && endAt > Date.now()) {
+    errorMessage.value = 'Buổi đang diễn ra hoặc đã hoàn tất chỉ được hiệu chỉnh về thời điểm đã qua.'
+    return
+  }
   const sessionId = selected.value.id
+  scheduleSaveBusy.value = true
   try {
-    await updateSessionOccurrence({ session_id: sessionId, start: fromLocalInput(startInput.value), end: fromLocalInput(endInput.value), room: sessionRoomInput.value.trim() || null })
+    await correctSessionSchedule({ session_id: sessionId, start, end, room: sessionRoomInput.value.trim() || null })
     toast.success('Đã đổi lịch buổi học.')
     await load()
     const refreshed = sessions.value.find((item) => item.id === sessionId)
-    if (refreshed) await selectSession(refreshed)
+    if (refreshed && selected.value?.id === sessionId) {
+      selected.value = refreshed
+      startInput.value = toLocalInput(refreshed.scheduled_start_at)
+      endInput.value = toLocalInput(refreshed.scheduled_end_at)
+      sessionRoomInput.value = refreshed.room ?? refreshed.class_schedules?.room ?? ''
+    }
   } catch (error) { errorMessage.value = userErrorMessage(error, 'Không thể đổi lịch buổi học.') }
+  finally { scheduleSaveBusy.value = false }
+}
+
+function isYoutubeLessonLink(value: string) {
+  if (!value.trim()) return true
+  try {
+    const url = new URL(value.trim())
+    if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.port) return false
+    const host = url.hostname.toLowerCase().replace(/^www\./, '')
+    const path = url.pathname
+    let videoId = ''
+    if (host === 'youtu.be') videoId = path.split('/').filter(Boolean)[0] || ''
+    else if (['youtube.com', 'm.youtube.com', 'youtube-nocookie.com'].includes(host)) {
+      if (path === '/watch') videoId = url.searchParams.get('v') || ''
+      else videoId = path.match(/^\/(?:embed|shorts|live)\/([^/?#]+)/)?.[1] || ''
+    }
+    return /^[A-Za-z0-9_-]{11}$/.test(videoId)
+  } catch {
+    return false
+  }
+}
+
+async function saveSelectedLearning() {
+  if (!selected.value || !canEditSelectedLearning.value || learningBusy.value || !learningDirty.value) return
+  errorMessage.value = ''
+  learningValidationErrors.value = {}
+  if (!isYoutubeLessonLink(lessonYoutubeInput.value)) {
+    errorMessage.value = 'Chỉ chấp nhận link video YouTube hợp lệ.'
+    return
+  }
+
+  const rowErrors: Record<string, string> = {}
+  for (const row of dirtyLearningRows.value) {
+    const error = attendanceValidationError(row.attendance)
+    if (error) rowErrors[row.student_id] = error
+  }
+  if (Object.keys(rowErrors).length) {
+    learningValidationErrors.value = rowErrors
+    return
+  }
+
+  const session = selected.value
+  const sessionNote = sessionNoteInput.value.trim() || null
+  const lessonYoutubeUrl = lessonYoutubeInput.value.trim() || null
+  learningBusy.value = true
+  try {
+    await correctSessionLearning({
+      session_id: session.id,
+      session_note: sessionNote,
+      lesson_youtube_url: lessonYoutubeUrl,
+      students: dirtyLearningRows.value.map(toAttendanceSaveInput),
+    })
+    const updatedSession = { ...session, session_note: sessionNote, lesson_youtube_url: lessonYoutubeUrl }
+    selected.value = updatedSession
+    sessions.value = sessions.value.map((row) => row.id === session.id ? updatedSession : row)
+    sessionNoteInput.value = sessionNote || ''
+    lessonYoutubeInput.value = lessonYoutubeUrl || ''
+    learningEditorOpen.value = false
+    toast.success('Đã lưu nội dung buổi học, điểm danh và đánh giá.')
+    try {
+      students.value = await getSessionStudents(session.id) as any[]
+      learningRows.value = students.value.map(attendanceRowFromSource)
+    } catch {
+      learningRows.value = learningRows.value.map((row) => ({
+        ...row,
+        attendance: createAttendanceValue(row.attendance as unknown as Record<string, unknown>),
+        initialAttendance: createAttendanceValue(row.attendance as unknown as Record<string, unknown>),
+      }))
+      errorMessage.value = 'Đã lưu thay đổi nhưng không tải lại được kết quả. Hãy nhấn “Làm mới” để kiểm tra dữ liệu.'
+    }
+  } catch (error) {
+    errorMessage.value = userErrorMessage(error, 'Không thể lưu nội dung buổi học, điểm danh và đánh giá. Dữ liệu đang nhập vẫn được giữ.')
+  } finally {
+    learningBusy.value = false
+  }
 }
 
 async function cancel() {
-  if (!selected.value) return
+  if (!selected.value || !canCancelOrDeleteSelectedSession.value) return
   confirmActionType.value = 'cancel-session'
   confirmDetails.value = { title: 'Hủy buổi học?', message: 'Buổi học sẽ được đánh dấu đã hủy. Thông tin và kết quả đã lưu vẫn được giữ.', itemName: `${className(selected.value)} · ${formatDateTime(selected.value.scheduled_start_at)}`, warning: 'Giáo viên và học sinh sẽ thấy trạng thái buổi học đã hủy.', confirmLabel: 'Hủy buổi học', destructive: true }
   confirmOpen.value = true
 }
 
 function confirmDeleteSession() {
-  if (!selected.value || !canEditSelectedSession.value) return
+  if (!selected.value || !canCancelOrDeleteSelectedSession.value) return
   confirmActionType.value = 'delete-session'
   confirmDetails.value = {
     title: 'Xóa buổi học?',
@@ -1451,21 +1624,68 @@ watch(sessionFormIsBackdated, (isBackdated) => {
           <h2 class="h5">{{ className(selected) }}</h2>
           <div class="text-secondary mb-3">Giáo viên: {{ teachers }} · {{ selected.status }} · {{ sessionRoomInput || 'Chưa xếp phòng' }}</div>
           <div v-if="canEditSelectedSession" class="row g-2 align-items-end mb-3">
-            <div class="col-md-8"><label class="form-label" for="session-detail-teachers">Giáo viên được phân công cho buổi này ({{ teacherCountLabel(selected.class_id, selectedTeacherIds, selected.id) }})</label><TeacherPicker id="session-detail-teachers" :model-value="selectedTeacherIds" :teachers="activeTeachers" multiple placeholder="Tìm theo tên hoặc mã giáo viên" :disabled-ids="activeTeachers.filter((teacher) => !canSelectSessionTeacher(teacher.id)).map((teacher) => teacher.id)" @update:model-value="updateSelectedTeacherSelection" /></div>
-            <div class="col-md-4"><button class="btn btn-outline-primary" :disabled="selectedSessionTeacherCount > MAX_CLASS_TEACHERS" @click="saveTeachers">Lưu phân công buổi này</button></div>
+            <div class="col-md-8"><label class="form-label" for="session-detail-teachers">Giáo viên được phân công cho buổi này ({{ teacherCountLabel(selected.class_id, selectedTeacherIds, selected.id) }})</label><TeacherPicker id="session-detail-teachers" :model-value="selectedTeacherIds" :teachers="activeTeachers" multiple placeholder="Tìm theo tên hoặc mã giáo viên" :disabled="teacherSaveBusy" :disabled-ids="activeTeachers.filter((teacher) => !canSelectSessionTeacher(teacher.id)).map((teacher) => teacher.id)" @update:model-value="updateSelectedTeacherSelection" /></div>
+            <div class="col-md-4"><button class="btn btn-outline-primary" :disabled="teacherSaveBusy || selectedSessionTeacherCount > MAX_CLASS_TEACHERS" @click="saveTeachers">{{ teacherSaveBusy ? 'Đang lưu…' : 'Lưu phân công buổi này' }}</button></div>
           </div>
           <div class="row g-2 mb-3">
-            <div class="col-md-4"><label class="form-label">Bắt đầu</label><input v-model="startInput" class="form-control" type="datetime-local" :disabled="!canEditSelectedSession" /></div>
-            <div class="col-md-4"><label class="form-label">Kết thúc</label><input v-model="endInput" class="form-control" type="datetime-local" :disabled="!canEditSelectedSession" /></div>
-            <div class="col-md-4"><label class="form-label">Phòng</label><input v-model="sessionRoomInput" class="form-control" :disabled="!canEditSelectedSession" /></div>
+            <div class="col-md-4"><label class="form-label">Bắt đầu</label><input v-model="startInput" class="form-control" type="datetime-local" :disabled="!canEditSelectedSession || scheduleSaveBusy" /></div>
+            <div class="col-md-4"><label class="form-label">Kết thúc</label><input v-model="endInput" class="form-control" type="datetime-local" :disabled="!canEditSelectedSession || scheduleSaveBusy" /></div>
+            <div class="col-md-4"><label class="form-label">Phòng</label><input v-model="sessionRoomInput" class="form-control" :disabled="!canEditSelectedSession || scheduleSaveBusy" /></div>
           </div>
           <div v-if="canEditSelectedSession" class="d-flex flex-wrap gap-2 mb-4">
-            <button class="btn btn-primary btn-sm" @click="saveSchedule">Lưu thông tin buổi học</button>
-            <button class="btn btn-outline-danger btn-sm" @click="cancel">Hủy buổi học</button>
-            <button class="btn btn-danger btn-sm" @click="confirmDeleteSession">Xóa buổi học</button>
+            <button class="btn btn-primary btn-sm" :disabled="scheduleSaveBusy" @click="saveSchedule">{{ scheduleSaveBusy ? 'Đang lưu…' : 'Lưu thông tin buổi học' }}</button>
+            <button v-if="canCancelOrDeleteSelectedSession" class="btn btn-outline-danger btn-sm" @click="cancel">Hủy buổi học</button>
+            <button v-if="canCancelOrDeleteSelectedSession" class="btn btn-danger btn-sm" @click="confirmDeleteSession">Xóa buổi học</button>
           </div>
-          <p v-if="selected.session_note" class="border-start border-3 ps-3">{{ selected.session_note }}</p>
-          <YouTubePlayer v-if="selected.lesson_youtube_url" class="mb-3" :url="selected.lesson_youtube_url" :title="`Video bài học ${className(selected)}`" />
+          <p v-if="selected.session_note && (!canEditSelectedLearning || !learningEditorOpen)" class="border-start border-3 ps-3">{{ selected.session_note }}</p>
+          <YouTubePlayer v-if="selected.lesson_youtube_url && (!canEditSelectedLearning || !learningEditorOpen)" class="mb-3" :url="selected.lesson_youtube_url" :title="`Video bài học ${className(selected)}`" />
+          <div v-if="canEditSelectedLearning" class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3 mb-2">
+            <h3 class="h6 mb-0">Nội dung và kết quả học tập</h3>
+            <button class="btn btn-outline-primary btn-sm" type="button" @click="learningEditorOpen = !learningEditorOpen">
+              {{ learningEditorOpen ? 'Ẩn biểu mẫu chỉnh sửa' : 'Sửa nội dung, điểm danh và đánh giá' }}
+            </button>
+          </div>
+          <section v-if="learningEditorOpen && canEditSelectedLearning" class="border rounded p-3 mb-4" aria-label="Chỉnh sửa nội dung và kết quả buổi học">
+            <div class="row g-3 mb-3">
+              <div class="col-md-6">
+                <label class="form-label" for="admin-session-note">Ghi chú buổi học</label>
+                <textarea id="admin-session-note" v-model="sessionNoteInput" class="form-control" rows="3" maxlength="4000" :disabled="learningBusy || rosterEditorBusy" placeholder="Ghi chú nội dung buổi học"></textarea>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="admin-session-youtube">Video YouTube</label>
+                <input id="admin-session-youtube" v-model="lessonYoutubeInput" class="form-control" type="url" :disabled="learningBusy || rosterEditorBusy" placeholder="https://youtu.be/..." />
+                <small class="text-secondary">Để trống nếu buổi học không có video.</small>
+              </div>
+            </div>
+            <p class="small text-secondary">Mỗi học sinh có một bản ghi điểm danh; trạng thái bắt buộc khi lưu. Điểm bài tập 0–10, hiểu bài và thái độ 1–5; các điểm được phép để trống.</p>
+            <div v-for="row in learningRows" :key="row.student_id" class="border rounded p-3 mb-3">
+              <div class="fw-semibold mb-2">{{ row.students?.full_name || 'Học sinh' }} <small class="text-secondary">{{ row.students?.student_code }}</small></div>
+              <div class="row g-2">
+                <div class="col-md-3">
+                  <label class="form-label" :for="`admin-attendance-status-${row.student_id}`">Điểm danh</label>
+                  <select :id="`admin-attendance-status-${row.student_id}`" v-model="row.attendance.status" class="form-select" :disabled="learningBusy || rosterEditorBusy" :aria-label="`Trạng thái điểm danh của ${row.students?.full_name || 'học sinh'}`">
+                    <option :value="null">Chọn trạng thái</option>
+                    <option v-for="status in attendanceStatuses" :key="status" :value="status">{{ attendanceStatusLabel(status) }}</option>
+                  </select>
+                  <small v-if="learningValidationErrors[row.student_id]" class="text-danger" role="alert">{{ learningValidationErrors[row.student_id] }}</small>
+                </div>
+                <div class="col-md-2"><label class="form-label" :for="`admin-late-${row.student_id}`">Phút đi muộn</label><input :id="`admin-late-${row.student_id}`" v-model.number="row.attendance.late_minutes" class="form-control" type="number" min="0" :disabled="learningBusy || rosterEditorBusy || row.attendance.status !== 'LATE'" placeholder="—" /></div>
+                <div class="col-md-3"><label class="form-label" :for="`admin-absence-${row.student_id}`">Lý do vắng</label><input :id="`admin-absence-${row.student_id}`" v-model="row.attendance.absence_reason" class="form-control" :disabled="learningBusy || rosterEditorBusy || !['ABSENT', 'EXCUSED'].includes(row.attendance.status || '')" placeholder="Không bắt buộc" /></div>
+                <div class="col-md-2"><label class="form-label" :for="`admin-homework-${row.student_id}`">BTVN /10</label><input :id="`admin-homework-${row.student_id}`" v-model.number="row.attendance.homework_score" class="form-control" type="number" min="0" max="10" step="0.1" :disabled="learningBusy || rosterEditorBusy" placeholder="—" /></div>
+                <div class="col-md-2"><label class="form-label" :for="`admin-understanding-${row.student_id}`">Hiểu bài /5</label><input :id="`admin-understanding-${row.student_id}`" v-model.number="row.attendance.understanding_score" class="form-control" type="number" min="1" max="5" step="1" :disabled="learningBusy || rosterEditorBusy" placeholder="—" /></div>
+                <div class="col-md-2"><label class="form-label" :for="`admin-attitude-${row.student_id}`">Thái độ /5</label><input :id="`admin-attitude-${row.student_id}`" v-model.number="row.attendance.attitude_score" class="form-control" type="number" min="1" max="5" step="1" :disabled="learningBusy || rosterEditorBusy" placeholder="—" /></div>
+                <div class="col-md-2"><label class="form-label" :for="`admin-feedback-count-${row.student_id}`">Điểm cộng</label><input :id="`admin-feedback-count-${row.student_id}`" v-model.number="row.attendance.positive_feedback_count" class="form-control" type="number" min="0" step="1" :disabled="learningBusy || rosterEditorBusy" placeholder="—" /></div>
+                <div class="col-md-4"><label class="form-label" :for="`admin-homework-note-${row.student_id}`">Ghi chú BTVN</label><input :id="`admin-homework-note-${row.student_id}`" v-model="row.attendance.homework_note" class="form-control" :disabled="learningBusy || rosterEditorBusy" /></div>
+                <div class="col-md-4"><label class="form-label" :for="`admin-feedback-raw-${row.student_id}`">Ghi nhận điểm cộng</label><input :id="`admin-feedback-raw-${row.student_id}`" v-model="row.attendance.positive_feedback_raw" class="form-control" :disabled="learningBusy || rosterEditorBusy" /></div>
+                <div class="col-12"><label class="form-label" :for="`admin-attendance-comment-${row.student_id}`">Nhận xét</label><textarea :id="`admin-attendance-comment-${row.student_id}`" v-model="row.attendance.comment" class="form-control" rows="2" maxlength="2000" :disabled="learningBusy || rosterEditorBusy"></textarea></div>
+              </div>
+            </div>
+            <div v-if="!learningRows.length" class="text-secondary small mb-3">Chưa có học sinh trong roster buổi học.</div>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+              <button class="btn btn-primary btn-sm" type="button" :disabled="learningBusy || rosterEditorBusy || !learningDirty" @click="saveSelectedLearning">{{ learningBusy ? 'Đang lưu…' : 'Lưu nội dung và kết quả' }}</button>
+              <span v-if="dirtyLearningRows.length" class="small text-secondary">{{ dirtyLearningRows.length }} học sinh có thay đổi.</span>
+            </div>
+          </section>
           <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3 mb-2">
             <h3 class="h6 mb-0">Học sinh và kết quả</h3>
             <div v-if="canEditSelectedSession" class="d-flex gap-2">

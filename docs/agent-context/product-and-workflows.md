@@ -24,7 +24,7 @@
 
 - `class_schedules` lưu lịch lặp theo ISO weekday (1 = Thứ Hai, 7 = Chủ Nhật); `class_schedule_staff` lưu giáo viên theo slot.
 - Lịch chuyển từ dữ liệu ClassMonth cũ sang trạng thái `INACTIVE`; Admin rà membership/giáo viên rồi mới bật. Lịch `ACTIVE` tạo buổi cụ thể trong 30 ngày tới theo `Asia/Ho_Chi_Minh`; generator có khóa chống chạy đồng thời và unique key chống trùng. Buổi đã bắt đầu/hoàn tất và override không bị lịch lặp ghi đè.
-- Admin có thể tạo buổi theo ngày, sửa giờ/phòng, phân công giáo viên, sửa roster, hủy hoặc xóa buổi `SCHEDULED` trong tương lai. Buổi có dữ liệu học tập/chấm công không được xóa; dùng thao tác hủy để giữ lịch sử. Buổi lặp bị xóa có tombstone ngày để generator không tạo lại. Có thể dùng mẫu bảy ngày để thay lịch một tháng; kết quả là các buổi ngày cụ thể, không phải một kỳ ClassMonth vận hành. Generator bỏ qua tháng đã thay mẫu.
+- Admin có thể tạo buổi theo ngày; sửa giờ/phòng, giáo viên và roster trên buổi chưa hủy, gồm buổi điểm danh bù, buổi `SCHEDULED` đã quá hạn, `IN_PROGRESS` và `COMPLETED`. Với `IN_PROGRESS`/`COMPLETED`, lịch sửa phải vẫn ở quá khứ; buổi `SCHEDULED` quá hạn có thể dời tới tương lai mà vẫn giữ trạng thái. Ngày/giờ lưu theo `Asia/Ho_Chi_Minh`; đổi lịch giữ nguyên roster đến khi Admin chạy đồng bộ riêng theo membership hiệu lực ngày mới. Dòng attendance, assessment snapshot hoặc financial snapshot được bảo toàn. Buổi hủy không mở lại; quy tắc xóa cứng chỉ áp dụng cho buổi tương lai trống. Buổi lặp bị xóa có tombstone ngày để generator không tạo lại. Có thể dùng mẫu bảy ngày để thay lịch một tháng; kết quả là các buổi ngày cụ thể, không phải một kỳ ClassMonth vận hành. Generator bỏ qua tháng đã thay mẫu.
 - Từ migration 0054, membership còn hiệu lực được đồng bộ vào roster của buổi thủ công `SCHEDULED` trong tương lai; thao tác vẫn kiểm tra conflict.
 - Từ migration 0055, Admin có thể khớp roster thủ công với membership `ACTIVE` và hồ sơ học sinh `ACTIVE` có hiệu lực đúng ngày buổi học; có thể chọn danh sách thành viên cùng lớp. Dòng roster có attendance, assessment snapshot hoặc financial snapshot được giữ lại. Mọi bổ sung học sinh mới vẫn kiểm tra xung đột lịch.
 - Buổi của lớp khác có thể giao giờ nếu phòng khác và không có học sinh trùng. Cùng lớp, học sinh trùng, phòng trùng hoặc thiếu phòng khi giao giờ thì bị chặn. Tên phòng so sánh không phân biệt hoa thường và bỏ khoảng trắng đầu/cuối. Teacher có thể được phân công hai buổi giao giờ nếu các rule khác cho phép.
@@ -32,7 +32,7 @@
 
 ## Trạng thái buổi và kết quả học tập
 
-Trạng thái: `SCHEDULED` → `IN_PROGRESS` → `COMPLETED`; buổi tương lai có thể thành `CANCELLED`. Teacher được phân công bắt đầu buổi, cập nhật nội dung/attendance trong lúc `IN_PROGRESS`, rồi hoàn tất. Sau hoàn tất, learning record và video chỉ đọc trong UI. RPC kiểm tra người gọi đúng teacher đang hoạt động và có assignment.
+Trạng thái: `SCHEDULED` → `IN_PROGRESS` → `COMPLETED`; buổi tương lai có thể thành `CANCELLED`. Teacher được phân công bắt đầu buổi, cập nhật nội dung/attendance trong lúc `IN_PROGRESS`, rồi hoàn tất. Sau hoàn tất, learning record và video chỉ đọc với Teacher. Admin có thể hiệu chỉnh ghi chú, video, điểm danh và đánh giá trên buổi chưa hủy đã diễn ra; `ACADEMIC_MANAGE` được kiểm tra trong RPC và mỗi hiệu chỉnh được audit. RPC Teacher tiếp tục kiểm tra người gọi là teacher đang hoạt động có assignment.
 
 Hoàn tất yêu cầu mỗi học sinh trong roster có một bản ghi attendance với trạng thái. Không đòi mọi điểm hoặc nhận xét phải có giá trị.
 
@@ -51,7 +51,7 @@ Hoàn tất yêu cầu mỗi học sinh trong roster có một bản ghi attenda
 | `positive_feedback_count` | nullable, số nguyên không âm ở DB | Số feedback tích cực; học sinh có thể thấy trường này. Không phải thang điểm chung. |
 | `positive_feedback_raw` | nullable text | Giữ nguyên giá trị nguồn không chuẩn hóa. |
 
-Các điểm riêng được phép để trống; không tìm thấy công thức tính điểm tổng hay trọng số trong code/RPC hiện hành. `positive_feedback_count/raw` cùng `assessment_snapshot` lưu giá trị nhập/import lịch sử; modal giáo viên hiện không cung cấp ô nhập feedback count/raw riêng. Không suy ra rằng giáo viên có thể sửa mọi trường chỉ vì chúng có trong schema hoặc type.
+Các điểm riêng được phép để trống; không tìm thấy công thức tính điểm tổng hay trọng số trong code/RPC hiện hành. `positive_feedback_count/raw` cùng `assessment_snapshot` lưu giá trị nhập/import lịch sử; modal giáo viên hiện không cung cấp ô nhập feedback count/raw riêng. Từ migration 0056, Admin hiệu chỉnh attendance qua `admin_correct_session_learning`; RPC ghi dữ liệu trước/sau vào audit và chỉ nhận học sinh thuộc roster của buổi.
 
 Học sinh chỉ xem learning result của mình theo chính sách dữ liệu; giao diện hiện có bảng kết quả với chuyên cần, BTVN, hiểu bài, thái độ, feedback và nhận xét. Database/RLS quyết định session/result nào được đọc, không dựa vào việc ẩn hàng ở UI.
 

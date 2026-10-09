@@ -42,7 +42,7 @@ export const sessions: any[] = [
   { id: 'qa-session-1', class_id: 'qa-class-1', recurrence_schedule_id: 'qa-schedule-1', manual_schedule: false, scheduled_start_at: at(1, '17:30'), scheduled_end_at: at(1, '19:00'), status: 'SCHEDULED', room: 'QA-A1', session_note: null, classes: classes[0], class_schedules: schedules[0], session_staff: [{ staff_id: 'qa-teacher-1', assignment_role: 'TEACHER', staff: teachers[0] }], session_students: memberships.filter((item) => item.student_id !== 'qa-student-4').map((item) => ({ student_id: item.student_id })) },
   { id: 'qa-session-2', class_id: 'qa-class-1', recurrence_schedule_id: 'qa-schedule-1', manual_schedule: false, scheduled_start_at: at(0, '10:00'), scheduled_end_at: at(0, '11:30'), status: 'IN_PROGRESS', room: 'QA-A1', session_note: 'Phân số và bài tập ứng dụng.', classes: classes[0], class_schedules: schedules[0], session_staff: [{ staff_id: 'qa-teacher-1', assignment_role: 'TEACHER', staff: teachers[0] }], session_students: memberships.map((item) => ({ student_id: item.student_id })) },
   { id: 'qa-session-3', class_id: 'qa-class-2', scheduled_start_at: at(-1, '15:00'), scheduled_end_at: at(-1, '16:30'), status: 'COMPLETED', room: 'QA-B2', session_note: 'Ôn tập từ vựng.', lesson_youtube_url: 'https://youtu.be/dQw4w9WgXcQ', classes: classes[1], class_schedules: null, session_staff: [{ staff_id: 'qa-teacher-2', assignment_role: 'TEACHER', staff: teachers[1] }], session_students: [] },
-  { id: 'qa-session-4', class_id: 'qa-class-1', recurrence_schedule_id: 'qa-schedule-1', manual_schedule: false, scheduled_start_at: at(-3, '17:30'), scheduled_end_at: at(-3, '19:00'), status: 'COMPLETED', room: 'QA-A1', session_note: 'Phép chia và luyện tập.', classes: classes[0], class_schedules: schedules[0], session_staff: [{ staff_id: 'qa-teacher-1', assignment_role: 'TEACHER', staff: teachers[0] }], session_students: [] },
+  { id: 'qa-session-4', class_id: 'qa-class-1', recurrence_schedule_id: 'qa-schedule-1', manual_schedule: false, scheduled_start_at: at(-3, '17:30'), scheduled_end_at: at(-3, '19:00'), status: 'COMPLETED', room: 'QA-A1', session_note: 'Phép chia và luyện tập.', classes: classes[0], class_schedules: schedules[0], session_staff: [{ staff_id: 'qa-teacher-1', assignment_role: 'TEACHER', staff: teachers[0] }], session_students: [{ student_id: 'qa-student-1' }, { student_id: 'qa-student-2' }] },
   { id: 'qa-session-5', class_id: 'qa-class-2', recurrence_schedule_id: null, manual_schedule: true, scheduled_start_at: at(3, '15:00'), scheduled_end_at: at(3, '16:30'), status: 'SCHEDULED', room: 'QA-B2', session_note: null, classes: classes[1], class_schedules: null, session_staff: [{ staff_id: 'qa-teacher-2', assignment_role: 'TEACHER', staff: teachers[1] }], session_students: [] },
   { id: 'qa-session-6', class_id: 'qa-class-2', recurrence_schedule_id: null, manual_schedule: true, scheduled_start_at: at(-2, '15:00'), scheduled_end_at: at(-2, '16:30'), status: 'CANCELLED', room: 'QA-B2', session_note: null, classes: classes[1], class_schedules: null, session_staff: [], session_students: [] },
 ]
@@ -238,6 +238,30 @@ export async function addTeacherToClassSchedule(id: string, staffId: string) { c
 export async function removeTeacherFromClassSchedule(id: string, staffId: string) { const row = schedules.find((item) => item.id === id); if (row) row.class_schedule_staff = row.class_schedule_staff.filter((item: any) => item.staff_id !== staffId); return {} }
 export async function createManualSession(input: any) { const row = { id: `qa-session-${Date.now()}`, class_id: input.class_id, recurrence_schedule_id: null, recurrence_occurrence_date: null, manual_schedule: true, scheduled_start_at: input.start, scheduled_end_at: input.end, room: input.room, status: 'SCHEDULED', session_note: null, classes: classes.find((item) => item.id === input.class_id), session_staff: input.staff_ids.map((id: string) => ({ staff_id: id, assignment_role: 'TEACHER', staff: teachers.find((item) => item.id === id) })) }; sessions.unshift(row); return { session_id: row.id } }
 export async function updateSessionOccurrence(input: any) { const row = sessions.find((item) => item.id === input.session_id); if (row) { if (input.start) row.scheduled_start_at = input.start; if (input.end) row.scheduled_end_at = input.end; if (input.cancel) row.status = 'CANCELLED'; row.room = input.room } }
+export async function correctSessionSchedule(input: any) {
+  await query(true)
+  const row = sessions.find((item) => item.id === input.session_id)
+  if (row) {
+    row.scheduled_start_at = input.start
+    row.scheduled_end_at = input.end
+    row.room = input.room
+  }
+  return { session_id: input.session_id, status: row?.status, room: input.room }
+}
+export async function correctSessionLearning(input: any) {
+  await query(true)
+  const session = sessions.find((item) => item.id === input.session_id)
+  if (session) {
+    session.session_note = input.session_note
+    session.lesson_youtube_url = input.lesson_youtube_url
+  }
+  for (const change of input.students || []) {
+    const existing = attendance.find((item) => item.session_id === input.session_id && item.student_id === change.student_id)
+    if (existing) Object.assign(existing, change)
+    else attendance.push({ id: `qa-attendance-${Date.now()}-${change.student_id}`, session_id: input.session_id, ...change })
+  }
+  return { session_id: input.session_id, students_updated: (input.students || []).length }
+}
 export async function updateSessionStudentRoster(input: any) {
   await query(true)
   const session = sessions.find((row) => row.id === input.session_id)

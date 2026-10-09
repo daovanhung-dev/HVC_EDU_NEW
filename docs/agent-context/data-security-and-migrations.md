@@ -13,8 +13,8 @@
 
 - RLS và grants giới hạn truy vấn Data API; PostgreSQL constraints/triggers/RPC kiểm tra trạng thái và quan hệ; Edge Function xác thực caller/role/input trước thao tác server-side.
 - Route guard, client-side role, id gửi từ browser và nút ẩn chỉ là UI. Không dùng chúng để cấp quyền dữ liệu.
-- Teacher chỉ cập nhật session khi là teacher đang hoạt động được phân công; `update_session_learning` chỉ cho session `IN_PROGRESS`. `complete_session` yêu cầu attendance record cho toàn roster. RPC Admin ở migration 0055 sửa roster chỉ cho buổi `SCHEDULED` trong tương lai, kiểm tra `CLASS_MANAGE`, membership hiệu lực và xung đột; dòng đã có attendance/assessment/financial snapshot được bảo toàn.
-- Các RPC cập nhật session được gọi qua Edge Function và quyền `EXECUTE` chỉ cấp service role. Handler phải xác thực người dùng rồi mới dùng quyền server.
+- Teacher chỉ cập nhật session khi là teacher đang hoạt động được phân công; `update_session_learning` chỉ cho session `IN_PROGRESS`. `complete_session` yêu cầu attendance record cho toàn roster. Từ migration 0056, Admin có thể hiệu chỉnh lịch, giáo viên, roster và kết quả học tập cho session chưa hủy; lịch của buổi `IN_PROGRESS`/`COMPLETED` phải còn trong quá khứ, còn `SCHEDULED` quá hạn có thể được dời tới tương lai. RPC kiểm tra `ACADEMIC_MANAGE` hoặc `CLASS_MANAGE` theo nhóm thao tác, kiểm tra membership hiệu lực và xung đột, ghi audit và bảo toàn giờ thực tế, timesheet, financial snapshot cùng dòng roster có lịch sử.
+- RPC Teacher `start_session`, `complete_session` và `update_session_learning` được gọi qua Edge Function với `EXECUTE` chỉ cấp service role; handler xác thực caller trước khi dùng quyền server. RPC quản trị lịch/buổi được gọi bằng authenticated client nhưng tự kiểm tra `ACADEMIC_MANAGE`/`CLASS_MANAGE` trong PostgreSQL.
 - Chấm công đọc theo RLS; submit/review qua Edge Function/RPC. Không cấp ghi trực tiếp bảng timesheet cho authenticated chỉ để thuận tiện UI.
 - Học sinh bị buộc đổi mật khẩu có thể đọc profile để vào form đổi nhưng không đọc learning data cho đến khi hoàn tất. Kiểm tra cả status active và quan hệ sở hữu/roster khi thay RLS.
 - Với thay đổi quyền, lần theo toàn đồ thị: query embed → grants → policy → SECURITY DEFINER helper/search_path → RPC → Edge Function → frontend/test.
@@ -29,7 +29,7 @@ Import assessment có thể giữ hàng nguồn kể cả khi chưa có attendan
 
 ## Lịch sử migration trong repo
 
-Migration phải được đọc theo thứ tự và kiểm tra migration sau có `CREATE OR REPLACE`, revoke/grant hoặc thay đổi cùng object. Hiện repo có `0001–0055`:
+Migration phải được đọc theo thứ tự và kiểm tra migration sau có `CREATE OR REPLACE`, revoke/grant hoặc thay đổi cùng object. Hiện repo có `0001–0056`:
 
 - `0001–0006`: extension, enum, Auth/profile, RBAC, hồ sơ student/staff và danh mục học thuật/lớp.
 - `0007–0019`: mô hình ClassMonth/session/attendance/timesheet và các bảng tài chính/notification/audit/function/RLS/index/seed của giai đoạn đầu. Phần tháng và tài chính hiện là lịch sử hoặc bị khóa khỏi app.
@@ -43,6 +43,7 @@ Migration phải được đọc theo thứ tự và kiểm tra migration sau c�
 - `0050–0052`: các RPC quản lý/xóa lịch tháng nối tiếp nhau; 0050/0051 bị thu hồi/thay thế. 0052 là xóa buổi trong tháng đã chọn cùng dữ liệu liên kết, có preview, khóa và audit. Đây là thao tác phá hủy, không phải quy trình chỉnh lịch thông thường.
 - `0053–0054`: thay lịch tháng bằng buổi từ mẫu tuần, rồi đồng bộ membership có hiệu lực vào roster session thủ công tương lai.
 - `0055`: sửa roster buổi theo membership hiệu lực/ngày buổi, bảo toàn dòng có lịch sử, xóa cứng buổi tương lai trống có quyền Admin và ghi tombstone cho ngày của buổi lặp.
+- `0056`: cho phép Admin hiệu chỉnh lịch/giáo viên/roster và nội dung/điểm danh của buổi chưa hủy; giữ trạng thái, giờ thực tế và dữ liệu chấm công/tài chính, kiểm tra quyền, xung đột và audit trước/sau.
 
 Không sửa, xóa hoặc đổi số migration đã có thể chạy ở môi trường khác. Thay đổi schema bằng migration tiếp theo. Migration production cần yêu cầu rõ và kiểm tra target/backup/migration history trực tiếp; local test không cần áp vào production.
 

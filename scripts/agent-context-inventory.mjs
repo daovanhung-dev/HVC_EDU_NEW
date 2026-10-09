@@ -132,6 +132,7 @@ const migrationPurposes = {
   '0053_month_week_template_replacement.sql': 'Thay lịch của một tháng bằng mẫu tuần tạo các buổi cụ thể.',
   '0054_sync_manual_session_student_rosters.sql': 'Đồng bộ membership hiệu lực vào roster các buổi thủ công SCHEDULED trong tương lai.',
   '0055_session_management_and_rosters.sql': 'Cho Admin sửa roster buổi tương lai theo membership hiệu lực, bảo toàn dữ liệu học tập/tài chính, xóa buổi trống và chặn tái sinh buổi lặp đã xóa.',
+  '0056_historical_session_edits.sql': 'Cho Admin hiệu chỉnh buổi chưa hủy: lịch, giáo viên, roster, nội dung và attendance; kiểm tra quyền/xung đột, ghi audit và giữ nguyên giờ thực tế cùng snapshot tài chính.',
 }
 
 const filePurposes = {
@@ -196,7 +197,7 @@ const filePurposes = {
   'frontend/src/modules/staff/pages/SessionsPage.vue': 'Màn hình giáo viên xem buổi được giao, cập nhật nội dung/đánh giá và hoàn tất buổi.',
   'frontend/src/modules/staff/pages/StaffTimesheetsPage.vue': 'Màn hình giáo viên gửi/xem yêu cầu chấm công theo buổi.',
   'frontend/src/modules/staff/pages/StaffProfilePage.vue': 'Màn hình giáo viên xem/sửa thông tin liên hệ cá nhân.',
-  'frontend/src/modules/admin/pages/AdminSessionsPage.vue': 'Màn hình Admin lập/sửa buổi, quản lý roster học sinh, hủy/xóa buổi tương lai và quản lý mẫu lịch theo tháng.',
+  'frontend/src/modules/admin/pages/AdminSessionsPage.vue': 'Màn hình Admin lập/sửa buổi kể cả buổi đã qua, quản lý roster, attendance/đánh giá, hủy/xóa buổi tương lai và mẫu lịch theo tháng.',
   'frontend/src/modules/admin/pages/AdminTimesheetsPage.vue': 'Màn hình Admin duyệt hoặc từ chối yêu cầu chấm công theo buổi.',
   'frontend/src/modules/admin/pages/ClassesPage.vue': 'Danh sách/quản lý lớp và cấu hình chính sách sĩ số.',
   'frontend/src/modules/admin/pages/ClassDetailPage.vue': 'Chi tiết lớp, membership, lịch lặp và giáo viên theo lịch.',

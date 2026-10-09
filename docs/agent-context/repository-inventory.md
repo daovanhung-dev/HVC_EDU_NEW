@@ -97,7 +97,7 @@
 | frontend/src/modules/admin/components/TeacherPicker.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho Teacher Picker trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/admin/components/TeacherPicker.vue | Frontend / Admin | Vue SFC | Chọn hoặc chỉnh danh sách teacher được giao cho lịch/buổi. |
 | frontend/src/modules/admin/pages/AdminSessionsPage.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho Admin Sessions Page trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
-| frontend/src/modules/admin/pages/AdminSessionsPage.vue | Frontend / Admin | Vue SFC | Màn hình Admin lập/sửa buổi, quản lý roster học sinh, hủy/xóa buổi tương lai và quản lý mẫu lịch theo tháng. |
+| frontend/src/modules/admin/pages/AdminSessionsPage.vue | Frontend / Admin | Vue SFC | Màn hình Admin lập/sửa buổi kể cả buổi đã qua, quản lý roster, attendance/đánh giá, hủy/xóa buổi tương lai và mẫu lịch theo tháng. |
 | frontend/src/modules/admin/pages/AdminTimesheetsPage.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho Admin Timesheets Page trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/admin/pages/AdminTimesheetsPage.vue | Frontend / Admin | Vue SFC | Màn hình Admin duyệt hoặc từ chối yêu cầu chấm công theo buổi. |
 | frontend/src/modules/admin/pages/ClassDetailPage.vue | Frontend / Admin | Vue SFC | Chi tiết lớp, membership, lịch lặp và giáo viên theo lịch. |
@@ -256,11 +256,13 @@
 | supabase/migrations/0053_month_week_template_replacement.sql | Supabase / migrations | SQL | Thay lịch của một tháng bằng mẫu tuần tạo các buổi cụ thể. |
 | supabase/migrations/0054_sync_manual_session_student_rosters.sql | Supabase / migrations | SQL | Đồng bộ membership hiệu lực vào roster các buổi thủ công SCHEDULED trong tương lai. |
 | supabase/migrations/0055_session_management_and_rosters.sql | Supabase / migrations | SQL | Cho Admin sửa roster buổi tương lai theo membership hiệu lực, bảo toàn dữ liệu học tập/tài chính, xóa buổi trống và chặn tái sinh buổi lặp đã xóa. |
+| supabase/migrations/0056_historical_session_edits.sql | Supabase / migrations | SQL | Cho Admin hiệu chỉnh buổi chưa hủy: lịch, giáo viên, roster, nội dung và attendance; kiểm tra quyền/xung đột, ghi audit và giữ nguyên giờ thực tế cùng snapshot tài chính. |
 | supabase/seed.sql | Supabase / cấu hình và seed | SQL | Seed cho database local; không dùng làm căn cứ dữ liệu production. |
 | supabase/tests/admin_monthly_session_planning.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra admin monthly session planning bằng fixture database cô lập. |
 | supabase/tests/backdated_session_creation.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra backdated session creation bằng fixture database cô lập. |
 | supabase/tests/class_teacher_limit.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra class teacher limit bằng fixture database cô lập. |
 | supabase/tests/continuous_learning_rls.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra continuous learning rls bằng fixture database cô lập. |
+| supabase/tests/historical_session_edits.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra historical session edits bằng fixture database cô lập. |
 | supabase/tests/month_week_template_replacement.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra month week template replacement bằng fixture database cô lập. |
 | supabase/tests/parallel_session_rooms.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra parallel session rooms bằng fixture database cô lập. |
 | supabase/tests/schedule_reset.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra schedule reset bằng fixture database cô lập. |
@@ -268,4 +270,4 @@
 | supabase/tests/student_future_session_roster_sync.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra student future session roster sync bằng fixture database cô lập. |
 | supabase/tests/timesheet_workflow.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra timesheet workflow bằng fixture database cô lập. |
 
-Tổng: 261 đường dẫn có trong inventory.
+Tổng: 263 đường dẫn có trong inventory.

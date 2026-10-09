@@ -1,5 +1,6 @@
 import { invokeFunction } from './edge-functions'
 import { supabase } from './supabase'
+import type { AttendanceStatus } from '@/shared/types/domain'
 
 export interface CreateUserInput {
   role: 'ADMIN' | 'TEACHER' | 'STUDENT'
@@ -350,6 +351,52 @@ export async function updateSessionOccurrence(input: { session_id: string; start
   })
   if (error) throw error
   return data
+}
+
+export async function correctSessionSchedule(input: {
+  session_id: string
+  start: string
+  end: string
+  room?: string | null
+}) {
+  const { data, error } = await supabase.rpc('admin_update_session_schedule', {
+    p_session_id: input.session_id,
+    p_scheduled_start_at: input.start,
+    p_scheduled_end_at: input.end,
+    p_room: input.room || null,
+  })
+  if (error) throw error
+  return data
+}
+
+export interface AdminSessionAttendanceInput {
+  student_id: string
+  status: AttendanceStatus
+  late_minutes: number | null
+  absence_reason: string | null
+  homework_score: number | null
+  homework_note: string | null
+  understanding_score: number | null
+  attitude_score: number | null
+  positive_feedback_count: number | null
+  positive_feedback_raw: string | null
+  comment: string | null
+}
+
+export async function correctSessionLearning(input: {
+  session_id: string
+  session_note: string | null
+  lesson_youtube_url: string | null
+  students: AdminSessionAttendanceInput[]
+}) {
+  const { data, error } = await supabase.rpc('admin_correct_session_learning', {
+    p_session_id: input.session_id,
+    p_session_note: input.session_note,
+    p_lesson_youtube_url: input.lesson_youtube_url,
+    p_students: input.students,
+  })
+  if (error) throw error
+  return data as { session_id: string; students_updated: number }
 }
 
 export interface SessionRosterMutationResult {
