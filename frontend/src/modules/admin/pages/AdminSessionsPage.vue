@@ -491,6 +491,13 @@ function teacherLimitMessage(error: unknown, fallback: string) {
   return userErrorMessage(error, fallback)
 }
 
+function monthScheduleExcelErrorMessage(error: unknown, fallback: string) {
+  if (error && typeof error === 'object' && 'code' in error && error.code === 'PGRST202') {
+    return 'Máy chủ chưa cập nhật chức năng Excel lịch tháng (migration 0058). Hãy cập nhật backend trước khi nhập biểu mẫu.'
+  }
+  return userErrorMessage(error, fallback)
+}
+
 function teacherIdsFrom(value: string | string[]) {
   return Array.isArray(value) ? value : value ? [value] : []
 }
@@ -827,7 +834,15 @@ function openWeeklyTemplate() {
 async function downloadMonthScheduleWorkbook() {
   try {
     let slots: MonthWeekScheduleSlot[] = []
-    const savedTemplate = await getMonthWeekScheduleTemplate(displayedMonthStart.value)
+    let savedTemplate: Awaited<ReturnType<typeof getMonthWeekScheduleTemplate>> = null
+    let templateStorageUnavailable = false
+    try {
+      savedTemplate = await getMonthWeekScheduleTemplate(displayedMonthStart.value)
+    } catch (error) {
+      if (!(error && typeof error === 'object' && 'code' in error && error.code === 'PGRST202')) throw error
+      // Before migration 0058, create the first workbook from the active weekly schedules.
+      templateStorageUnavailable = true
+    }
     if (savedTemplate) {
       slots = savedTemplate.slots.map((slot) => ({
         ...slot,
@@ -884,8 +899,11 @@ async function downloadMonthScheduleWorkbook() {
     })
     await downloadMonthWeekScheduleTemplate(displayedMonthStart.value, exportSlots)
     toast.success(`Đã tải biểu mẫu lịch tuần cho ${formatBusinessMonth(displayedMonthStart.value)}.`)
+    if (templateStorageUnavailable) {
+      toast.info('Biểu mẫu được tạo từ lịch tuần đang bật. Máy chủ cần migration 0058 trước khi có thể nhập lịch Excel.')
+    }
   } catch (error) {
-    excelScheduleError.value = userErrorMessage(error, 'Không thể tải biểu mẫu Excel lịch tháng.')
+    excelScheduleError.value = monthScheduleExcelErrorMessage(error, 'Không thể tải biểu mẫu Excel lịch tháng.')
     toast.error(excelScheduleError.value)
   }
 }
@@ -934,7 +952,7 @@ async function readExcelScheduleFile(event: Event) {
     if (parsed.issues.length) return
     excelSchedulePreview.value = await previewMonthWeekScheduleImport(parsed.month_start, parsed.slots.map(({ source_row_number: _sourceRowNumber, ...slot }) => slot))
   } catch (error) {
-    excelScheduleError.value = userErrorMessage(error, 'Không thể đọc hoặc kiểm tra biểu mẫu Excel.')
+    excelScheduleError.value = monthScheduleExcelErrorMessage(error, 'Không thể đọc hoặc kiểm tra biểu mẫu Excel.')
   } finally {
     excelSchedulePreviewBusy.value = false
   }
@@ -969,7 +987,7 @@ async function applyExcelScheduleImport() {
         // Keep the last preview and the original apply error visible if refresh also fails.
       }
     }
-    excelScheduleError.value = userErrorMessage(error, 'Không thể áp dụng biểu mẫu lịch tháng. Hãy xem lại preview và thử lại.')
+    excelScheduleError.value = monthScheduleExcelErrorMessage(error, 'Không thể áp dụng biểu mẫu lịch tháng. Hãy xem lại preview và thử lại.')
   } finally {
     excelScheduleBusy.value = false
   }
