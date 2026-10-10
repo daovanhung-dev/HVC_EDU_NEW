@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { AttendanceHistoryRow, ClassDetailRow, ClassMembershipDetailRow, ClassScheduleRow, SessionRow, StudentHistoryRow, TimesheetRow } from '@/shared/types/domain'
+import type { AttendanceHistoryRow, ClassDetailRow, ClassMembershipDetailRow, ClassScheduleRow, SessionRow, StudentCurrentClass, StudentCurrentClassSummary, StudentHistoryRow, TimesheetRow } from '@/shared/types/domain'
 
 async function unwrap<T>(request: PromiseLike<{ data: T | null; error: Error | null }>): Promise<T> {
   const { data, error } = await request
@@ -10,6 +10,33 @@ async function unwrap<T>(request: PromiseLike<{ data: T | null; error: Error | n
 function oneRelation<T>(value: T | T[] | null | undefined): T | null {
   if (Array.isArray(value)) return value[0] || null
   return value || null
+}
+
+function todayInVietnam(): string {
+  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date())
+}
+
+function isEffectiveMembership(row: any, today: string): boolean {
+  return row.status === 'ACTIVE' && typeof row.start_date === 'string' && row.start_date <= today &&
+    (!row.end_date || row.end_date >= today)
+}
+
+async function getCurrentMembershipRows(studentIds: string[], columns: string[], today: string): Promise<any[]> {
+  const uniqueStudentIds = [...new Set(studentIds)].filter(Boolean)
+  const pages: any[][] = []
+  for (let offset = 0; offset < uniqueStudentIds.length; offset += 200) {
+    const studentIdPage = uniqueStudentIds.slice(offset, offset + 200)
+    const rows = await unwrap<any[]>(supabase.from('class_memberships')
+      .select(columns.join(','))
+      .in('student_id', studentIdPage)
+      .eq('status', 'ACTIVE')
+      .lte('start_date', today)
+      .or(`end_date.is.null,end_date.gte.${today}`)
+      .order('start_date')
+      .order('created_at'))
+    pages.push(rows.filter((row) => studentIdPage.includes(row.student_id) && isEffectiveMembership(row, today)))
+  }
+  return pages.flat()
 }
 
 export function getStudents(search = '') {
@@ -98,7 +125,7 @@ export interface ClassRosterExportStudent {
 }
 
 export async function getClassRosterForExport(classId: string): Promise<ClassRosterExportStudent[]> {
-  const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date())
+  const today = todayInVietnam()
   const rows = await unwrap<any[]>(supabase.from('class_memberships')
     .select('class_id,student_id,start_date,end_date,status,students(id,student_code,full_name,phone,parent_name,status,created_at)')
     .eq('class_id', classId)
@@ -127,8 +154,96 @@ export async function getClassRosterForExport(classId: string): Promise<ClassRos
   return [...studentsById.values()].sort((a, b) => a.full_name.localeCompare(b.full_name, 'vi'))
 }
 
+export async function getStudentsCurrentClassSummaries(studentIds: string[]): Promise<Record<string, StudentCurrentClassSummary[]>> {
+  const today = todayInVietnam()
+  const studentIdsUnique = [...new Set(studentIds)].filter(Boolean)
+  const result: Record<string, StudentCurrentClassSummary[]> = Object.fromEntries(studentIdsUnique.map((id) => [id, []]))
+  if (!studentIdsUnique.length) return result
+
+  const rows = await getCurrentMembershipRows(studentIdsUnique, [
+    'student_id',
+    'class_id',
+    'start_date',
+    'end_date',
+    'status',
+    'classes(id,code,name)',
+  ], today)
+  const classesByStudent = new Map<string, Map<string, StudentCurrentClassSummary>>()
+  for (const row of rows) {
+    const classRow = oneRelation<any>(row.classes)
+    if (!classRow || !studentIdsUnique.includes(row.student_id)) continue
+    const classesById = classesByStudent.get(row.student_id) || new Map<string, StudentCurrentClassSummary>()
+    classesById.set(classRow.id, { id: classRow.id, code: classRow.code, name: classRow.name })
+    classesByStudent.set(row.student_id, classesById)
+  }
+
+  for (const [studentId, classesById] of classesByStudent) {
+    result[studentId] = [...classesById.values()].sort((left, right) =>
+      left.code.localeCompare(right.code, 'vi') || left.name.localeCompare(right.name, 'vi'))
+  }
+  return result
+}
+
+export async function getStudentCurrentClasses(studentId: string): Promise<StudentCurrentClass[]> {
+  const today = todayInVietnam()
+  const rows = await getCurrentMembershipRows([studentId], [
+    'id',
+    'student_id',
+    'class_id',
+    'start_date',
+    'end_date',
+    'status',
+    'classes(id,code,name,status,subjects(name),grades(name))',
+  ], today)
+
+  const membershipsByClass = new Map<string, { membership_id: string; start_date: string; classRow: any }>()
+  for (const row of rows) {
+    const classRow = oneRelation<any>(row.classes)
+    if (!classRow) continue
+    const current = membershipsByClass.get(classRow.id)
+    if (!current || row.start_date >= current.start_date) {
+      membershipsByClass.set(classRow.id, { membership_id: row.id, start_date: row.start_date, classRow })
+    }
+  }
+
+  const memberships = [...membershipsByClass.values()]
+  if (!memberships.length) return []
+
+  const classIds = memberships.map(({ classRow }) => classRow.id)
+  const scheduleRows = await unwrap<any[]>(supabase.from('class_schedules')
+    .select('id,class_id,day_of_week,start_time,end_time,room,status,reviewed_at,class_schedule_staff(staff_id,staff(id,staff_code,full_name))')
+    .in('class_id', classIds)
+    .eq('status', 'ACTIVE')
+    .order('day_of_week')
+    .order('start_time'))
+  const schedulesByClass = new Map<string, ClassScheduleRow[]>()
+  for (const row of scheduleRows) {
+    if (row.status !== 'ACTIVE' || !classIds.includes(row.class_id)) continue
+    const schedule: ClassScheduleRow = {
+      ...row,
+      class_schedule_staff: (row.class_schedule_staff || []).map((assignment: any) => ({
+        ...assignment,
+        staff: oneRelation(assignment.staff),
+      })),
+    }
+    schedulesByClass.set(row.class_id, [...(schedulesByClass.get(row.class_id) || []), schedule])
+  }
+
+  return memberships.map(({ membership_id, start_date, classRow }) => ({
+    id: classRow.id,
+    code: classRow.code,
+    name: classRow.name,
+    membership_id,
+    start_date,
+    status: classRow.status,
+    subject_name: oneRelation<any>(classRow.subjects)?.name || null,
+    grade_name: oneRelation<any>(classRow.grades)?.name || null,
+    schedules: schedulesByClass.get(classRow.id) || [],
+  })).sort((left, right) => left.code.localeCompare(right.code, 'vi') || left.name.localeCompare(right.name, 'vi'))
+}
+
 export async function getClassActiveRosterSize(classId: string): Promise<number> {
-  const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date())
+  const today = todayInVietnam()
   const rows = await unwrap<Array<{ id: string }>>(supabase.from('class_memberships').select('id').eq('class_id', classId).eq('status', 'ACTIVE').lte('start_date', today).or(`end_date.is.null,end_date.gte.${today}`).limit(1))
   return rows.length
 }

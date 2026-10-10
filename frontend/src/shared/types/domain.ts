@@ -63,6 +63,21 @@ export interface ClassScheduleRow {
   class_schedule_staff?: Array<{ staff_id: string; staff?: { id: string; staff_code: string | null; full_name: string } | null }>
 }
 
+export interface StudentCurrentClassSummary {
+  id: string
+  code: string
+  name: string
+}
+
+export interface StudentCurrentClass extends StudentCurrentClassSummary {
+  membership_id: string
+  start_date: string
+  status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED'
+  subject_name: string | null
+  grade_name: string | null
+  schedules: ClassScheduleRow[]
+}
+
 export interface SessionStaffRow {
   staff_id: string
   assignment_role?: 'TEACHER'

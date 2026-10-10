@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   getStudentIntakeDuplicateIdentities: vi.fn(),
   getClasses: vi.fn(),
   getClassRosterForExport: vi.fn(),
+  getStudentsCurrentClassSummaries: vi.fn(),
   adminCreateUser: vi.fn(),
   adminEnrollStudents: vi.fn(),
   adminExportStudentLogins: vi.fn(),
@@ -33,6 +34,7 @@ vi.mock('@/services/data-queries', () => ({
   getStudentIntakeDuplicateIdentities: mocks.getStudentIntakeDuplicateIdentities,
   getClasses: mocks.getClasses,
   getClassRosterForExport: mocks.getClassRosterForExport,
+  getStudentsCurrentClassSummaries: mocks.getStudentsCurrentClassSummaries,
 }))
 vi.mock('@/services/commands', () => ({
   adminCreateUser: mocks.adminCreateUser,
@@ -53,7 +55,9 @@ import { downloadStudentClassRosterExport } from '@/modules/admin/utils/student-
 const student = { id: 'qa-student-1', user_id: 'qa-user-1', student_code: 'QA-S-1', full_name: 'Học sinh QA', phone: null, parent_name: null, parent_phone: null, status: 'ACTIVE', created_at: '2026-09-30T08:00:00Z' }
 const secondActiveStudent = { id: 'qa-student-3', user_id: 'qa-user-3', student_code: 'QA-S-3', full_name: 'Học sinh QA hai', phone: null, parent_name: null, parent_phone: null, status: 'ACTIVE', created_at: '2026-09-30T08:00:00Z' }
 const inactiveStudent = { id: 'qa-student-2', user_id: 'qa-user-2', student_code: 'QA-S-2', full_name: 'Học sinh QA nghỉ', phone: null, parent_name: null, parent_phone: null, status: 'INACTIVE', created_at: '2026-09-30T08:00:00Z' }
+const lockedStudent = { ...inactiveStudent, id: 'qa-student-locked', user_id: 'qa-user-locked', student_code: 'QA-S-LOCKED', full_name: 'Học sinh QA khóa', status: 'LOCKED' }
 const qaClass = { id: 'qa-class-1', code: 'QA-CLASS-1', name: 'Lớp QA', status: 'ACTIVE' }
+const qaSecondClass = { id: 'qa-class-2', code: 'QA-CLASS-2', name: 'Lớp QA hai', status: 'ACTIVE' }
 const qaClassStudent = { id: student.id, student_code: student.student_code, full_name: student.full_name, phone: student.phone, parent_name: student.parent_name, status: student.status, created_at: student.created_at }
 
 const mountedWrappers: Array<{ unmount: () => void }> = []
@@ -107,6 +111,9 @@ describe('StudentsPage dialogs', () => {
     mocks.getStudentIntakeDuplicateIdentities.mockReset().mockResolvedValue([student])
     mocks.getClasses.mockReset().mockResolvedValue([qaClass])
     mocks.getClassRosterForExport.mockReset().mockResolvedValue([qaClassStudent])
+    mocks.getStudentsCurrentClassSummaries.mockReset().mockResolvedValue({
+      [student.id]: [{ id: qaClass.id, code: qaClass.code, name: qaClass.name }],
+    })
     mocks.adminCreateUser.mockReset().mockResolvedValue({ temporary_password: 'QA-temp-pass-42' })
     mocks.adminEnrollStudents.mockReset().mockResolvedValue({ results: [] })
     mocks.adminExportStudentLogins.mockReset().mockResolvedValue({
@@ -133,6 +140,43 @@ describe('StudentsPage dialogs', () => {
     await wrapper.find('.app-state--error button').trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain(student.full_name)
+    wrapper.unmount()
+  })
+
+  it('shows every current class, including for a locked student, in the class column', async () => {
+    mocks.getStudents.mockResolvedValue([student, lockedStudent])
+    mocks.getStudentsCurrentClassSummaries.mockResolvedValue({
+      [student.id]: [
+        { id: qaClass.id, code: qaClass.code, name: qaClass.name },
+        { id: qaSecondClass.id, code: qaSecondClass.code, name: qaSecondClass.name },
+      ],
+      [lockedStudent.id]: [{ id: qaSecondClass.id, code: qaSecondClass.code, name: qaSecondClass.name }],
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.findAll('th').map((cell) => cell.text())).toContain('Lớp đang học')
+    expect(wrapper.text()).toContain(`${qaClass.code} · ${qaClass.name}`)
+    expect(wrapper.text()).toContain(`${qaSecondClass.code} · ${qaSecondClass.name}`)
+    expect(wrapper.text()).toContain(lockedStudent.full_name)
+    expect(wrapper.find('[data-testid="student-classes-error"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('keeps student rows visible when current class lookup fails and retries that lookup', async () => {
+    mocks.getStudentsCurrentClassSummaries.mockRejectedValueOnce(new Error('QA class lookup failed'))
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(student.full_name)
+    expect(wrapper.text()).toContain('Chưa tải được')
+    expect(wrapper.text()).not.toContain('Chưa xếp lớp')
+    expect(wrapper.find('[data-testid="student-classes-error"]').text()).toContain('QA class lookup failed')
+
+    await wrapper.find('[data-testid="student-classes-error"] button').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain(`${qaClass.code} · ${qaClass.name}`)
+    expect(wrapper.find('[data-testid="student-classes-error"]').exists()).toBe(false)
     wrapper.unmount()
   })
 

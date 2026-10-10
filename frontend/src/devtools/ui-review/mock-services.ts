@@ -32,6 +32,8 @@ export const memberships: any[] = [
   { id: 'qa-membership-1', class_id: 'qa-class-1', student_id: 'qa-student-1', start_date: dayOffset(-55), end_date: null, status: 'ACTIVE', students: students[0] },
   { id: 'qa-membership-2', class_id: 'qa-class-1', student_id: 'qa-student-2', start_date: dayOffset(-25), end_date: null, status: 'ACTIVE', students: students[1] },
   { id: 'qa-membership-3', class_id: 'qa-class-1', student_id: 'qa-student-4', start_date: today, end_date: null, status: 'ACTIVE', students: students[3] },
+  { id: 'qa-membership-4', class_id: 'qa-class-2', student_id: 'qa-student-1', start_date: dayOffset(-4), end_date: null, status: 'ACTIVE', students: students[0] },
+  { id: 'qa-membership-5', class_id: 'qa-class-2', student_id: 'qa-student-3', start_date: dayOffset(-10), end_date: null, status: 'ACTIVE', students: students[2] },
 ]
 
 export const schedules: any[] = [
@@ -39,8 +41,8 @@ export const schedules: any[] = [
 ]
 
 export const sessions: any[] = [
-  { id: 'qa-session-1', class_id: 'qa-class-1', recurrence_schedule_id: 'qa-schedule-1', manual_schedule: false, scheduled_start_at: at(1, '17:30'), scheduled_end_at: at(1, '19:00'), status: 'SCHEDULED', room: 'QA-A1', session_note: null, classes: classes[0], class_schedules: schedules[0], session_staff: [{ staff_id: 'qa-teacher-1', assignment_role: 'TEACHER', staff: teachers[0] }], session_students: memberships.filter((item) => item.student_id !== 'qa-student-4').map((item) => ({ student_id: item.student_id })) },
-  { id: 'qa-session-2', class_id: 'qa-class-1', recurrence_schedule_id: 'qa-schedule-1', manual_schedule: false, scheduled_start_at: at(0, '10:00'), scheduled_end_at: at(0, '11:30'), status: 'IN_PROGRESS', room: 'QA-A1', session_note: 'Phân số và bài tập ứng dụng.', classes: classes[0], class_schedules: schedules[0], session_staff: [{ staff_id: 'qa-teacher-1', assignment_role: 'TEACHER', staff: teachers[0] }], session_students: memberships.map((item) => ({ student_id: item.student_id })) },
+  { id: 'qa-session-1', class_id: 'qa-class-1', recurrence_schedule_id: 'qa-schedule-1', manual_schedule: false, scheduled_start_at: at(1, '17:30'), scheduled_end_at: at(1, '19:00'), status: 'SCHEDULED', room: 'QA-A1', session_note: null, classes: classes[0], class_schedules: schedules[0], session_staff: [{ staff_id: 'qa-teacher-1', assignment_role: 'TEACHER', staff: teachers[0] }], session_students: memberships.filter((item) => item.class_id === 'qa-class-1' && item.student_id !== 'qa-student-4').map((item) => ({ student_id: item.student_id })) },
+  { id: 'qa-session-2', class_id: 'qa-class-1', recurrence_schedule_id: 'qa-schedule-1', manual_schedule: false, scheduled_start_at: at(0, '10:00'), scheduled_end_at: at(0, '11:30'), status: 'IN_PROGRESS', room: 'QA-A1', session_note: 'Phân số và bài tập ứng dụng.', classes: classes[0], class_schedules: schedules[0], session_staff: [{ staff_id: 'qa-teacher-1', assignment_role: 'TEACHER', staff: teachers[0] }], session_students: memberships.filter((item) => item.class_id === 'qa-class-1').map((item) => ({ student_id: item.student_id })) },
   { id: 'qa-session-3', class_id: 'qa-class-2', scheduled_start_at: at(-1, '15:00'), scheduled_end_at: at(-1, '16:30'), status: 'COMPLETED', room: 'QA-B2', session_note: 'Ôn tập từ vựng.', lesson_youtube_url: 'https://youtu.be/dQw4w9WgXcQ', classes: classes[1], class_schedules: null, session_staff: [{ staff_id: 'qa-teacher-2', assignment_role: 'TEACHER', staff: teachers[1] }], session_students: [] },
   { id: 'qa-session-4', class_id: 'qa-class-1', recurrence_schedule_id: 'qa-schedule-1', manual_schedule: false, scheduled_start_at: at(-3, '17:30'), scheduled_end_at: at(-3, '19:00'), status: 'COMPLETED', room: 'QA-A1', session_note: 'Phép chia và luyện tập.', classes: classes[0], class_schedules: schedules[0], session_staff: [{ staff_id: 'qa-teacher-1', assignment_role: 'TEACHER', staff: teachers[0] }], session_students: [{ student_id: 'qa-student-1' }, { student_id: 'qa-student-2' }] },
   { id: 'qa-session-5', class_id: 'qa-class-2', recurrence_schedule_id: null, manual_schedule: true, scheduled_start_at: at(3, '15:00'), scheduled_end_at: at(3, '16:30'), status: 'SCHEDULED', room: 'QA-B2', session_note: null, classes: classes[1], class_schedules: null, session_staff: [{ staff_id: 'qa-teacher-2', assignment_role: 'TEACHER', staff: teachers[1] }], session_students: [] },
@@ -73,6 +75,47 @@ export function getStudentIntakeDuplicateIdentities() {
 }
 export function getStudent(id: string) { return query(students.find((row) => row.id === id) || null) }
 export function getStudentHistory() { return query(attendance.map((row) => ({ ...row, scheduled_start_at: row.sessions.scheduled_start_at, scheduled_end_at: row.sessions.scheduled_end_at, classes: row.sessions.classes, teachers: row.sessions.session_staff.map((item: any) => item.staff.full_name), status: row.sessions.status, session_note: row.sessions.session_note, attendance: row }))) }
+export function getStudentsCurrentClassSummaries(studentIds: string[]) {
+  const todayKey = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date())
+  const selectedIds = new Set(studentIds)
+  const result: Record<string, Array<{ id: string; code: string; name: string }>> = Object.fromEntries(studentIds.map((id) => [id, []]))
+  for (const membership of memberships) {
+    if (!selectedIds.has(membership.student_id) || membership.status !== 'ACTIVE'
+      || membership.start_date > todayKey || (membership.end_date && membership.end_date < todayKey)) continue
+    const classRow = classes.find((row) => row.id === membership.class_id)
+    if (!classRow || result[membership.student_id].some((row) => row.id === classRow.id)) continue
+    result[membership.student_id].push({ id: classRow.id, code: classRow.code, name: classRow.name })
+  }
+  Object.values(result).forEach((classRows) => classRows.sort((left, right) => left.code.localeCompare(right.code, 'vi')))
+  return query(result)
+}
+export function getStudentCurrentClasses(studentId: string) {
+  const todayKey = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date())
+  const currentMemberships = memberships.filter((membership) => membership.student_id === studentId
+    && membership.status === 'ACTIVE' && membership.start_date <= todayKey
+    && (!membership.end_date || membership.end_date >= todayKey))
+  const membershipByClass = new Map<string, any>()
+  for (const membership of currentMemberships) {
+    const previous = membershipByClass.get(membership.class_id)
+    if (!previous || membership.start_date >= previous.start_date) membershipByClass.set(membership.class_id, membership)
+  }
+  const result = [...membershipByClass.values()].flatMap((membership) => {
+    const classRow = classes.find((row) => row.id === membership.class_id)
+    if (!classRow) return []
+    return [{
+      id: classRow.id,
+      code: classRow.code,
+      name: classRow.name,
+      membership_id: membership.id,
+      start_date: membership.start_date,
+      status: classRow.status,
+      subject_name: classRow.subjects?.name || null,
+      grade_name: classRow.grades?.name || null,
+      schedules: schedules.filter((schedule) => schedule.class_id === classRow.id && schedule.status === 'ACTIVE'),
+    }]
+  }).sort((left, right) => left.code.localeCompare(right.code, 'vi'))
+  return query(result)
+}
 export function getStaff(search = '') { const term = search.trim().toLowerCase(); return query(term ? teachers.filter((row) => `${row.full_name} ${row.staff_code}`.toLowerCase().includes(term)) : teachers) }
 export function getClasses() { return query(classes) }
 export function getSubjects() { return query(subjects) }

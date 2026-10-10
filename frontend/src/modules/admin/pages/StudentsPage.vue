@@ -2,8 +2,9 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { adminCreateUser, adminExportStudentLogins, adminResetPassword, adminResetPasswordBulk, archiveStudent, setAccountStatus, updateStudent } from '@/services/commands'
-import { getClassRosterForExport, getClasses, getStudents } from '@/services/data-queries'
+import { getClassRosterForExport, getClasses, getStudents, getStudentsCurrentClassSummaries } from '@/services/data-queries'
 import { formatDateTime } from '@/shared/utils/format'
+import type { StudentCurrentClassSummary } from '@/shared/types/domain'
 import { useToastStore } from '@/stores/toast.store'
 import AppPageHeader from '@/app/components/AppPageHeader.vue'
 import AppField from '@/app/components/AppField.vue'
@@ -41,8 +42,13 @@ const classRosterExportBusy = ref(false)
 const classRosterStudentIds = ref<Set<string>>(new Set())
 const classRosterLoading = ref(false)
 const classRosterError = ref('')
+const studentClassesById = ref<Record<string, StudentCurrentClassSummary[]>>({})
+const studentClassesLoading = ref(false)
+const studentClassesError = ref('')
 const quickEnrollmentOpen = ref(false)
 let classRosterRequestId = 0
+let studentListRequestId = 0
+let studentClassesRequestId = 0
 const loading = ref(false)
 const showForm = ref(false)
 const editing = ref<Student | null>(null)
@@ -68,6 +74,10 @@ const activeRows = computed(() => visibleRows.value.filter((row) => row.status =
 const allActiveSelected = computed(() => activeRows.value.length > 0 && activeRows.value.length <= MAX_BULK_RESET_TARGETS && activeRows.value.every((row) => selectedUserIds.value.includes(row.user_id)))
 const tooManyActiveRows = computed(() => activeRows.value.length > MAX_BULK_RESET_TARGETS)
 const selectedClassForRoster = computed(() => classOptions.value.find((classRow) => classRow.id === classRosterClassId.value) || null)
+
+function currentClassesFor(student: Student): StudentCurrentClassSummary[] {
+  return studentClassesById.value[student.id] || []
+}
 
 async function loadClassOptions() {
   classOptionsLoading.value = true
@@ -146,12 +156,48 @@ async function exportClassRoster() {
 }
 
 async function load() {
+  const requestId = ++studentListRequestId
   selectedUserIds.value = []
+  studentClassesById.value = {}
+  studentClassesError.value = ''
+  studentClassesLoading.value = false
   loading.value = true
   errorMessage.value = ''
-  try { rows.value = await getStudents(search.value) as Student[] }
-  catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể tải học sinh' }
-  finally { loading.value = false }
+  try {
+    const students = await getStudents(search.value) as Student[]
+    if (requestId !== studentListRequestId) return
+    rows.value = students
+    loading.value = false
+    await loadStudentClasses(students.map((student) => student.id))
+  } catch (error) {
+    if (requestId === studentListRequestId) {
+      errorMessage.value = error instanceof Error ? error.message : 'Không thể tải học sinh'
+    }
+  } finally {
+    if (requestId === studentListRequestId) loading.value = false
+  }
+}
+
+async function loadStudentClasses(studentIds: string[] = rows.value.map((student) => student.id)) {
+  const requestId = ++studentClassesRequestId
+  studentClassesById.value = {}
+  studentClassesError.value = ''
+  if (!studentIds.length) {
+    studentClassesLoading.value = false
+    return
+  }
+
+  studentClassesLoading.value = true
+  try {
+    const classes = await getStudentsCurrentClassSummaries(studentIds)
+    if (requestId === studentClassesRequestId) studentClassesById.value = classes
+  } catch (error) {
+    if (requestId === studentClassesRequestId) {
+      studentClassesError.value = error instanceof Error ? error.message : 'Không thể tải thông tin lớp đang học.'
+    }
+  } finally {
+    if (requestId === studentClassesRequestId) studentClassesLoading.value = false
+  }
 }
 
 async function refreshAfterQuickEnrollment() {
@@ -310,6 +356,9 @@ onMounted(() => { void load(); void loadClassOptions() })
   <div v-if="classOptionsError" class="alert alert-danger" role="alert">
     {{ classOptionsError }} <button class="btn btn-sm btn-outline-danger ms-2" type="button" :disabled="classOptionsLoading" @click="loadClassOptions">Thử tải lại danh sách lớp</button>
   </div>
+  <div v-if="studentClassesError" class="alert alert-danger" role="alert" data-testid="student-classes-error">
+    Không thể tải thông tin lớp đang học: {{ studentClassesError }} <button class="btn btn-sm btn-outline-danger ms-2" type="button" :disabled="studentClassesLoading" @click="loadStudentClasses()">Thử tải lại</button>
+  </div>
   <div v-if="errorMessage && rows.length" class="alert alert-danger" role="alert">{{ errorMessage }} <button class="btn btn-sm btn-outline-danger ms-2" type="button" @click="load">Thử tải lại</button></div>
   <section class="card"><div class="card-body">
     <form class="app-list-search d-flex flex-wrap gap-2 mb-3" role="search" @submit.prevent="load"><label class="visually-hidden" for="student-search">Tìm học sinh</label><input id="student-search" v-model="search" class="form-control flex-grow-1" placeholder="Tìm theo tên hoặc mã học sinh" /><button class="btn btn-outline-primary" type="submit" :disabled="loading">Tìm</button></form>
@@ -332,8 +381,8 @@ onMounted(() => { void load(); void loadClassOptions() })
     <AppState v-else-if="classRosterError" kind="error" title="Không thể tải danh sách lớp" :message="classRosterError" @retry="loadSelectedClassRoster" />
     <AppState v-else-if="errorMessage && !rows.length" kind="error" title="Không thể tải danh sách học sinh" :message="errorMessage" @retry="load" />
     <AppState v-else-if="!visibleRows.length" kind="empty" :title="selectedClassForRoster ? 'Chưa có học sinh phù hợp trong lớp' : 'Chưa có học sinh phù hợp'" :message="selectedClassForRoster ? 'Lớp chưa có membership hiệu lực hôm nay hoặc từ khóa tìm kiếm không khớp.' : 'Thêm hồ sơ mới hoặc điều chỉnh từ khóa tìm kiếm.'" />
-    <div v-else class="table-responsive"><table class="table align-middle"><thead><tr><th><input type="checkbox" class="form-check-input" data-testid="select-all-active-students" aria-label="Chọn tất cả học sinh đang hoạt động trong kết quả lọc" :checked="allActiveSelected" :disabled="loading || !activeRows.length || tooManyActiveRows" @change="toggleAllActive(($event.target as HTMLInputElement).checked)" /></th><th>Mã</th><th>Họ tên</th><th>SĐT</th><th>Phụ huynh</th><th>Trạng thái</th><th>Ngày tạo</th><th>Thao tác</th></tr></thead><tbody>
-      <tr v-for="row in visibleRows" :key="row.id"><td><input type="checkbox" class="form-check-input" data-testid="select-student-row" :aria-label="`Chọn ${row.full_name}`" :checked="selectedUserIds.includes(row.user_id)" :disabled="loading || row.status !== 'ACTIVE' || (selectedUserIds.length >= MAX_BULK_RESET_TARGETS && !selectedUserIds.includes(row.user_id))" @change="toggleSelectedUser(row.user_id, ($event.target as HTMLInputElement).checked)" /></td><td><code>{{ row.student_code }}</code></td><td class="fw-semibold">{{ row.full_name }}</td><td>{{ row.phone || '—' }}</td><td>{{ row.parent_name || '—' }}</td><td><span class="badge" :class="row.status === 'ACTIVE' ? 'text-bg-success' : 'text-bg-secondary'">{{ row.status === 'ACTIVE' ? 'Đang hoạt động' : row.status === 'LOCKED' ? 'Đã khóa' : row.status }}</span></td><td>{{ formatDateTime(row.created_at) }}</td><td><div class="d-flex flex-wrap gap-1"><RouterLink class="btn btn-sm btn-outline-primary" :to="`/admin/students/${row.id}`">Chi tiết</RouterLink><button class="btn btn-sm btn-outline-secondary" type="button" @click="beginEdit(row)">Sửa</button><button v-if="row.status !== 'ARCHIVED'" class="btn btn-sm btn-outline-danger" type="button" @click="askFor(row, 'archive')">Lưu trữ</button><button v-if="row.status !== 'ARCHIVED'" class="btn btn-sm btn-outline-secondary" type="button" @click="askFor(row, 'toggle')">{{ row.status === 'ACTIVE' ? 'Khóa TK' : 'Mở TK' }}</button><button v-if="row.status !== 'ARCHIVED'" class="btn btn-sm btn-outline-primary" type="button" @click="askFor(row, 'reset')">Đặt lại mật khẩu</button></div></td></tr>
+    <div v-else class="table-responsive"><table class="table align-middle"><thead><tr><th><input type="checkbox" class="form-check-input" data-testid="select-all-active-students" aria-label="Chọn tất cả học sinh đang hoạt động trong kết quả lọc" :checked="allActiveSelected" :disabled="loading || !activeRows.length || tooManyActiveRows" @change="toggleAllActive(($event.target as HTMLInputElement).checked)" /></th><th>Mã</th><th>Họ tên</th><th>SĐT</th><th>Phụ huynh</th><th>Lớp đang học</th><th>Trạng thái</th><th>Ngày tạo</th><th>Thao tác</th></tr></thead><tbody>
+      <tr v-for="row in visibleRows" :key="row.id"><td><input type="checkbox" class="form-check-input" data-testid="select-student-row" :aria-label="`Chọn ${row.full_name}`" :checked="selectedUserIds.includes(row.user_id)" :disabled="loading || row.status !== 'ACTIVE' || (selectedUserIds.length >= MAX_BULK_RESET_TARGETS && !selectedUserIds.includes(row.user_id))" @change="toggleSelectedUser(row.user_id, ($event.target as HTMLInputElement).checked)" /></td><td><code>{{ row.student_code }}</code></td><td class="fw-semibold">{{ row.full_name }}</td><td>{{ row.phone || '—' }}</td><td>{{ row.parent_name || '—' }}</td><td class="student-current-classes"><span v-if="studentClassesLoading" class="small text-secondary">Đang tải lớp…</span><span v-else-if="studentClassesError" class="small text-danger">Chưa tải được</span><template v-else-if="currentClassesFor(row).length"><RouterLink v-for="classRow in currentClassesFor(row)" :key="classRow.id" class="d-block" :to="`/admin/classes/${classRow.id}`">{{ classRow.code }} · {{ classRow.name }}</RouterLink></template><span v-else class="small text-secondary">Chưa xếp lớp</span></td><td><span class="badge" :class="row.status === 'ACTIVE' ? 'text-bg-success' : 'text-bg-secondary'">{{ row.status === 'ACTIVE' ? 'Đang hoạt động' : row.status === 'LOCKED' ? 'Đã khóa' : row.status }}</span></td><td>{{ formatDateTime(row.created_at) }}</td><td><div class="d-flex flex-wrap gap-1"><RouterLink class="btn btn-sm btn-outline-primary" :to="`/admin/students/${row.id}`">Chi tiết</RouterLink><button class="btn btn-sm btn-outline-secondary" type="button" @click="beginEdit(row)">Sửa</button><button v-if="row.status !== 'ARCHIVED'" class="btn btn-sm btn-outline-danger" type="button" @click="askFor(row, 'archive')">Lưu trữ</button><button v-if="row.status !== 'ARCHIVED'" class="btn btn-sm btn-outline-secondary" type="button" @click="askFor(row, 'toggle')">{{ row.status === 'ACTIVE' ? 'Khóa TK' : 'Mở TK' }}</button><button v-if="row.status !== 'ARCHIVED'" class="btn btn-sm btn-outline-primary" type="button" @click="askFor(row, 'reset')">Đặt lại mật khẩu</button></div></td></tr>
     </tbody></table></div>
   </div></section>
 

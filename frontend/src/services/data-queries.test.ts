@@ -16,6 +16,7 @@ vi.mock('./supabase', () => ({
           return query
         },
         eq(...args: unknown[]) { mockState.calls.push({ table, method: 'eq', args }); return query },
+        in(...args: unknown[]) { mockState.calls.push({ table, method: 'in', args }); return query },
         lte(...args: unknown[]) { mockState.calls.push({ table, method: 'lte', args }); return query },
         or(...args: unknown[]) { mockState.calls.push({ table, method: 'or', args }); return query },
         order(...args: unknown[]) { mockState.calls.push({ table, method: 'order', args }); return query },
@@ -35,7 +36,7 @@ vi.mock('./supabase', () => ({
   },
 }))
 
-import { getClassActiveRosterSize, getClassRosterForExport, getMyAttendance, getMySessions, getMyTimesheets, getStudentHistory, getStudentIntakeDuplicateIdentities, getTimesheets } from './data-queries'
+import { getClassActiveRosterSize, getClassRosterForExport, getMyAttendance, getMySessions, getMyTimesheets, getStudentCurrentClasses, getStudentHistory, getStudentIntakeDuplicateIdentities, getStudentsCurrentClassSummaries, getTimesheets } from './data-queries'
 
 const assignedStaffRelation = 'staff!session_staff_staff_id_fkey('
 
@@ -132,6 +133,71 @@ describe('class roster summary query', () => {
       expect(mockState.calls).toContainEqual({ table: 'class_memberships', method: 'or', args: ['end_date.is.null,end_date.gte.2026-10-08'] })
       expect(mockState.selections.find((item) => item.table === 'class_memberships')?.columns)
         .toContain('students(id,student_code,full_name,phone,parent_name,status,created_at)')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe('current student classes', () => {
+  beforeEach(() => {
+    mockState.selections.length = 0
+    mockState.calls.length = 0
+    mockState.responses = {}
+  })
+
+  it('loads multiple effective class summaries and ignores future, ended, or inactive memberships', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-09T17:30:00.000Z'))
+    mockState.responses.class_memberships = [
+      { id: 'qa-membership-a', student_id: 'qa-student-1', class_id: 'qa-class-1', start_date: '2026-10-10', end_date: '2026-10-10', status: 'ACTIVE', classes: { id: 'qa-class-1', code: 'QA-A', name: 'QA Toán' } },
+      { id: 'qa-membership-b', student_id: 'qa-student-1', class_id: 'qa-class-2', start_date: '2026-10-01', end_date: null, status: 'ACTIVE', classes: [{ id: 'qa-class-2', code: 'QA-B', name: 'QA Anh' }] },
+      { id: 'qa-membership-duplicate', student_id: 'qa-student-1', class_id: 'qa-class-1', start_date: '2026-10-02', end_date: null, status: 'ACTIVE', classes: { id: 'qa-class-1', code: 'QA-A', name: 'QA Toán' } },
+      { id: 'qa-membership-future', student_id: 'qa-student-1', class_id: 'qa-future', start_date: '2026-10-11', end_date: null, status: 'ACTIVE', classes: { id: 'qa-future', code: 'QA-F', name: 'QA Tương lai' } },
+      { id: 'qa-membership-ended', student_id: 'qa-student-1', class_id: 'qa-ended', start_date: '2026-10-01', end_date: '2026-10-09', status: 'ACTIVE', classes: { id: 'qa-ended', code: 'QA-E', name: 'QA Đã kết thúc' } },
+      { id: 'qa-membership-inactive', student_id: 'qa-student-1', class_id: 'qa-inactive', start_date: '2026-10-01', end_date: null, status: 'INACTIVE', classes: { id: 'qa-inactive', code: 'QA-I', name: 'QA Không hoạt động' } },
+      { id: 'qa-membership-other', student_id: 'qa-student-outside', class_id: 'qa-other', start_date: '2026-10-01', end_date: null, status: 'ACTIVE', classes: { id: 'qa-other', code: 'QA-O', name: 'QA Ngoài truy vấn' } },
+    ]
+
+    try {
+      const result = await getStudentsCurrentClassSummaries(['qa-student-1', 'qa-student-2'])
+      expect(result['qa-student-1']).toEqual([
+        { id: 'qa-class-1', code: 'QA-A', name: 'QA Toán' },
+        { id: 'qa-class-2', code: 'QA-B', name: 'QA Anh' },
+      ])
+      expect(result['qa-student-2']).toEqual([])
+      expect(mockState.calls).toContainEqual({ table: 'class_memberships', method: 'in', args: ['student_id', ['qa-student-1', 'qa-student-2']] })
+      expect(mockState.calls).toContainEqual({ table: 'class_memberships', method: 'eq', args: ['status', 'ACTIVE'] })
+      expect(mockState.calls).toContainEqual({ table: 'class_memberships', method: 'lte', args: ['start_date', '2026-10-10'] })
+      expect(mockState.calls).toContainEqual({ table: 'class_memberships', method: 'or', args: ['end_date.is.null,end_date.gte.2026-10-10'] })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('includes current enrollment date and active schedules with assigned teachers in the detail result', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-10T03:00:00.000Z'))
+    mockState.responses.class_memberships = [{
+      id: 'qa-membership-1', student_id: 'qa-student-1', class_id: 'qa-class-1',
+      start_date: '2026-10-01', end_date: null, status: 'ACTIVE',
+      classes: { id: 'qa-class-1', code: 'QA-MATH', name: 'QA Toán', status: 'ACTIVE', subjects: [{ name: 'QA Môn Toán' }], grades: { name: 'QA Khối 7' } },
+    }]
+    mockState.responses.class_schedules = [
+      { id: 'qa-schedule-active', class_id: 'qa-class-1', day_of_week: 2, start_time: '17:30:00', end_time: '19:00:00', room: 'QA-A1', status: 'ACTIVE', reviewed_at: null, class_schedule_staff: [{ staff_id: 'qa-teacher-1', staff: [{ id: 'qa-teacher-1', staff_code: 'QA-T-1', full_name: 'QA Giáo viên' }] }] },
+      { id: 'qa-schedule-inactive', class_id: 'qa-class-1', day_of_week: 4, start_time: '17:30:00', end_time: '19:00:00', room: null, status: 'INACTIVE', reviewed_at: null, class_schedule_staff: [] },
+    ]
+
+    try {
+      const [classRow] = await getStudentCurrentClasses('qa-student-1')
+      expect(classRow).toMatchObject({
+        id: 'qa-class-1', code: 'QA-MATH', name: 'QA Toán', membership_id: 'qa-membership-1',
+        start_date: '2026-10-01', subject_name: 'QA Môn Toán', grade_name: 'QA Khối 7',
+      })
+      expect(classRow.schedules).toHaveLength(1)
+      expect(classRow.schedules[0].class_schedule_staff?.[0].staff?.full_name).toBe('QA Giáo viên')
+      expect(mockState.calls).toContainEqual({ table: 'class_schedules', method: 'in', args: ['class_id', ['qa-class-1']] })
+      expect(mockState.calls).toContainEqual({ table: 'class_schedules', method: 'eq', args: ['status', 'ACTIVE'] })
     } finally {
       vi.useRealTimers()
     }
