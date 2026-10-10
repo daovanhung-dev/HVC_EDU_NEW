@@ -18,6 +18,18 @@ export function getStudents(search = '') {
   return unwrap(query)
 }
 
+export async function getStudentIntakeDuplicateIdentities() {
+  const pageSize = 1000
+  const students: Array<{ id: string; student_code: string | null; full_name: string; phone: string | null }> = []
+  for (let offset = 0; ; offset += pageSize) {
+    const page = await unwrap<Array<{ id: string; student_code: string | null; full_name: string; phone: string | null }>>(
+      supabase.from('students').select('id,student_code,full_name,phone').order('id').range(offset, offset + pageSize - 1),
+    )
+    students.push(...page)
+    if (page.length < pageSize) return students
+  }
+}
+
 export function getStudent(studentId: string) {
   return unwrap(supabase.from('students').select('*').eq('id', studentId).maybeSingle())
 }

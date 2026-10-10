@@ -68,6 +68,9 @@ export function getStudents(search = '') {
   const term = search.trim().toLowerCase()
   return query(term ? students.filter((row) => `${row.full_name} ${row.student_code}`.toLowerCase().includes(term)) : students)
 }
+export function getStudentIntakeDuplicateIdentities() {
+  return query(students.map(({ id, student_code, full_name, phone }) => ({ id, student_code, full_name, phone })))
+}
 export function getStudent(id: string) { return query(students.find((row) => row.id === id) || null) }
 export function getStudentHistory() { return query(attendance.map((row) => ({ ...row, scheduled_start_at: row.sessions.scheduled_start_at, scheduled_end_at: row.sessions.scheduled_end_at, classes: row.sessions.classes, teachers: row.sessions.session_staff.map((item: any) => item.staff.full_name), status: row.sessions.status, session_note: row.sessions.session_note, attendance: row }))) }
 export function getStaff(search = '') { const term = search.trim().toLowerCase(); return query(term ? teachers.filter((row) => `${row.full_name} ${row.staff_code}`.toLowerCase().includes(term)) : teachers) }
@@ -130,6 +133,44 @@ export async function adminCreateUser(input: any) {
   if (input.role === 'STUDENT') students.unshift({ ...input.student, id: `qa-student-${Date.now()}`, user_id: `qa-user-${Date.now()}`, student_code: input.student.student_code || 'QA-S-NEW', phone: input.phone || null, email: null, address: null, status: 'ACTIVE', created_at: new Date().toISOString() })
   else teachers.unshift({ id: `qa-teacher-${Date.now()}`, user_id: `qa-user-${Date.now()}`, staff_code: input.staff?.staff_code || 'QA-T-NEW', full_name: input.staff.full_name, staff_type: 'TEACHER', phone: input.phone || null, status: 'ACTIVE' })
   return { temporary_password: 'QA-temp-pass-46' }
+}
+export async function adminEnrollStudents(input: any) {
+  await query(true)
+  const results = []
+  for (const candidate of input.students || []) {
+    const rowNumber = candidate.row_number
+    const studentId = `qa-student-intake-${rowNumber}-${Date.now()}`
+    const userId = `qa-user-intake-${rowNumber}-${Date.now()}`
+    const studentCode = candidate.student_code || `QA-S-NEW-${rowNumber}`
+    const student = {
+      ...candidate,
+      id: studentId,
+      user_id: userId,
+      student_code: studentCode,
+      email: null,
+      address: null,
+      status: 'ACTIVE',
+      created_at: new Date().toISOString(),
+    }
+    students.unshift(student)
+    memberships.push({
+      id: `qa-membership-intake-${rowNumber}-${Date.now()}`,
+      class_id: input.class_id,
+      student_id: studentId,
+      start_date: input.start_date,
+      end_date: null,
+      status: 'ACTIVE',
+      students: student,
+    })
+    results.push({
+      row_number: rowNumber,
+      status: 'CREATED',
+      student_code: studentCode,
+      username: `qa-student-${rowNumber}`,
+      temporary_password: `QA-temp-${rowNumber}`,
+    })
+  }
+  return { results }
 }
 export async function adminResetPassword() { return { temporary_password: '12345678' } }
 export async function adminResetPasswordBulk(userIds: string[]) {

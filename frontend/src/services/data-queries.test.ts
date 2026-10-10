@@ -10,6 +10,7 @@ vi.mock('./supabase', () => ({
   supabase: {
     from(table: string) {
       const query: any = {
+        rangeArgs: null as [number, number] | null,
         select(columns: string) {
           mockState.selections.push({ table, columns })
           return query
@@ -18,10 +19,15 @@ vi.mock('./supabase', () => ({
         lte(...args: unknown[]) { mockState.calls.push({ table, method: 'lte', args }); return query },
         or(...args: unknown[]) { mockState.calls.push({ table, method: 'or', args }); return query },
         order(...args: unknown[]) { mockState.calls.push({ table, method: 'order', args }); return query },
+        range(...args: [number, number]) { query.rangeArgs = args; mockState.calls.push({ table, method: 'range', args }); return query },
         limit() { return query },
         maybeSingle() { return query },
         then(resolve: (value: { data: unknown; error: null }) => unknown, reject?: (reason: unknown) => unknown) {
-          return Promise.resolve({ data: mockState.responses[table] ?? [], error: null }).then(resolve, reject)
+          const data = mockState.responses[table] ?? []
+          const ranged = Array.isArray(data) && query.rangeArgs
+            ? data.slice(query.rangeArgs[0], query.rangeArgs[1] + 1)
+            : data
+          return Promise.resolve({ data: ranged, error: null }).then(resolve, reject)
         },
       }
       return query
@@ -29,7 +35,7 @@ vi.mock('./supabase', () => ({
   },
 }))
 
-import { getClassActiveRosterSize, getClassRosterForExport, getMyAttendance, getMySessions, getMyTimesheets, getStudentHistory, getTimesheets } from './data-queries'
+import { getClassActiveRosterSize, getClassRosterForExport, getMyAttendance, getMySessions, getMyTimesheets, getStudentHistory, getStudentIntakeDuplicateIdentities, getTimesheets } from './data-queries'
 
 const assignedStaffRelation = 'staff!session_staff_staff_id_fkey('
 
@@ -129,6 +135,34 @@ describe('class roster summary query', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('student intake duplicate lookup', () => {
+  beforeEach(() => {
+    mockState.selections.length = 0
+    mockState.calls.length = 0
+    mockState.responses = {}
+  })
+
+  it('loads all existing student identities in stable pages', async () => {
+    mockState.responses.students = Array.from({ length: 1001 }, (_, index) => ({
+      id: `qa-student-${index + 1}`,
+      student_code: `QA-${index + 1}`,
+      full_name: `QA Student ${index + 1}`,
+      phone: null,
+    }))
+
+    const students = await getStudentIntakeDuplicateIdentities()
+
+    expect(students).toHaveLength(1001)
+    expect(students[0].id).toBe('qa-student-1')
+    expect(students.at(-1)?.id).toBe('qa-student-1001')
+    expect(mockState.selections.find((item) => item.table === 'students')?.columns).toBe('id,student_code,full_name,phone')
+    expect(mockState.calls.filter((item) => item.table === 'students' && item.method === 'range')).toEqual([
+      { table: 'students', method: 'range', args: [0, 999] },
+      { table: 'students', method: 'range', args: [1000, 1999] },
+    ])
   })
 })
 

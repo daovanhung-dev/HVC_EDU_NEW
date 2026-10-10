@@ -17,6 +17,36 @@ export function adminCreateUser(input: CreateUserInput) {
   return invokeFunction<CreateUserInput, { profile: unknown; temporary_password: string }>('admin-create-user', input)
 }
 
+export interface AdminStudentIntakeCandidate {
+  row_number: number
+  full_name: string
+  student_code?: string
+  phone?: string
+  parent_name?: string
+  parent_phone?: string
+}
+
+export type AdminStudentIntakeResult =
+  | { row_number: number; status: 'CREATED'; student_code: string; username: string; temporary_password: string }
+  | { row_number: number; status: 'SKIPPED'; reason_code: string }
+  | { row_number: number; status: 'FAILED'; reason_code: string }
+
+export function adminEnrollStudents(input: {
+  class_id: string
+  start_date: string
+  students: AdminStudentIntakeCandidate[]
+}) {
+  return invokeFunction<{
+    operation: 'batch_student_intake'
+    class_id: string
+    start_date: string
+    students: AdminStudentIntakeCandidate[]
+  }, { results: AdminStudentIntakeResult[] }>('admin-create-user', {
+    operation: 'batch_student_intake',
+    ...input,
+  })
+}
+
 export function adminResetPassword(user_id: string) {
   return invokeFunction<{ user_id: string }, { profile: unknown; temporary_password: string }>('admin-reset-password', { user_id })
 }

@@ -12,12 +12,13 @@ import FormModal from '@/app/components/FormModal.vue'
 import ConfirmModal from '@/app/components/ConfirmModal.vue'
 import DetailModal from '@/app/components/DetailModal.vue'
 import BulkPasswordResetModal from '@/modules/admin/components/BulkPasswordResetModal.vue'
+import StudentQuickEnrollmentModal from '@/modules/admin/components/StudentQuickEnrollmentModal.vue'
 import type { BulkResetDisplayResult, BulkResetPerson } from '@/modules/admin/components/bulk-password-reset.types'
 import { downloadStudentLoginExport } from '@/modules/admin/utils/student-account-export'
 import { downloadStudentClassRosterExport } from '@/modules/admin/utils/student-class-roster-export'
 
 interface Student { id: string; user_id: string; student_code: string; full_name: string; phone: string | null; parent_name: string | null; parent_phone?: string | null; status: string; created_at: string }
-interface ClassOption { id: string; code: string; name: string }
+interface ClassOption { id: string; code: string; name: string; status: string }
 interface StudentForm { student_code: string; full_name: string; phone: string; parent_name: string; parent_phone: string }
 const toast = useToastStore()
 const MAX_BULK_RESET_TARGETS = 100
@@ -37,6 +38,11 @@ const classOptionsLoading = ref(false)
 const classOptionsError = ref('')
 const classRosterClassId = ref('')
 const classRosterExportBusy = ref(false)
+const classRosterStudentIds = ref<Set<string>>(new Set())
+const classRosterLoading = ref(false)
+const classRosterError = ref('')
+const quickEnrollmentOpen = ref(false)
+let classRosterRequestId = 0
 const loading = ref(false)
 const showForm = ref(false)
 const editing = ref<Student | null>(null)
@@ -53,7 +59,12 @@ const confirmBusy = ref(false)
 const confirmDetails = ref({ title: '', message: '', itemName: '', warning: '', confirmLabel: 'Xác nhận', destructive: false })
 const pendingAction = ref<(() => Promise<void>) | null>(null)
 const modalTitle = computed(() => editing.value ? 'Sửa hồ sơ học sinh' : 'Tạo hồ sơ và tài khoản học sinh')
-const activeRows = computed(() => rows.value.filter((row) => row.status === 'ACTIVE'))
+const visibleRows = computed(() => {
+  if (!classRosterClassId.value) return rows.value
+  if (classRosterLoading.value || classRosterError.value) return []
+  return rows.value.filter((row) => classRosterStudentIds.value.has(row.id))
+})
+const activeRows = computed(() => visibleRows.value.filter((row) => row.status === 'ACTIVE'))
 const allActiveSelected = computed(() => activeRows.value.length > 0 && activeRows.value.length <= MAX_BULK_RESET_TARGETS && activeRows.value.every((row) => selectedUserIds.value.includes(row.user_id)))
 const tooManyActiveRows = computed(() => activeRows.value.length > MAX_BULK_RESET_TARGETS)
 const selectedClassForRoster = computed(() => classOptions.value.find((classRow) => classRow.id === classRosterClassId.value) || null)
@@ -64,6 +75,32 @@ async function loadClassOptions() {
   try { classOptions.value = await getClasses() as ClassOption[] }
   catch (error) { classOptionsError.value = error instanceof Error ? error.message : 'Không thể tải danh sách lớp.' }
   finally { classOptionsLoading.value = false }
+}
+
+async function loadSelectedClassRoster() {
+  const classId = classRosterClassId.value
+  const requestId = ++classRosterRequestId
+  classRosterError.value = ''
+  if (!classId) {
+    classRosterStudentIds.value = new Set()
+    classRosterLoading.value = false
+    return
+  }
+
+  classRosterStudentIds.value = new Set()
+  classRosterLoading.value = true
+  try {
+    const roster = await getClassRosterForExport(classId)
+    if (requestId === classRosterRequestId && classRosterClassId.value === classId) {
+      classRosterStudentIds.value = new Set(roster.map((student) => student.id))
+    }
+  } catch (error) {
+    if (requestId === classRosterRequestId && classRosterClassId.value === classId) {
+      classRosterError.value = error instanceof Error ? error.message : 'Không thể tải roster của lớp.'
+    }
+  } finally {
+    if (requestId === classRosterRequestId) classRosterLoading.value = false
+  }
 }
 
 async function exportActiveStudents() {
@@ -94,6 +131,7 @@ async function exportClassRoster() {
   classRosterExportBusy.value = true
   try {
     const roster = await getClassRosterForExport(selectedClass.id)
+    classRosterStudentIds.value = new Set(roster.map((student) => student.id))
     if (!roster.length) {
       toast.warning(`Lớp ${selectedClass.name} chưa có học sinh đang thuộc lớp. Chưa tạo tệp Excel.`)
       return
@@ -116,7 +154,12 @@ async function load() {
   finally { loading.value = false }
 }
 
-watch(search, () => { selectedUserIds.value = [] })
+async function refreshAfterQuickEnrollment() {
+  await Promise.all([load(), loadSelectedClassRoster()])
+}
+
+watch([search, classRosterClassId], () => { selectedUserIds.value = [] })
+watch(classRosterClassId, () => { void loadSelectedClassRoster() })
 
 function toggleAllActive(checked: boolean) {
   selectedUserIds.value = checked && !tooManyActiveRows.value
@@ -262,7 +305,7 @@ onMounted(() => { void load(); void loadClassOptions() })
 
 <template>
   <AppPageHeader title="Học sinh" eyebrow="Hồ sơ và tài khoản" description="Theo dõi hồ sơ, thông tin phụ huynh và trạng thái tài khoản.">
-    <template #actions><button class="btn btn-primary" type="button" @click="openCreate">Thêm học sinh</button></template>
+    <template #actions><div class="d-flex flex-wrap gap-2"><button class="btn btn-outline-primary" type="button" data-testid="open-quick-enrollment" @click="quickEnrollmentOpen = true">Nhập học nhanh</button><button class="btn btn-primary" type="button" @click="openCreate">Thêm học sinh</button></div></template>
   </AppPageHeader>
   <div v-if="classOptionsError" class="alert alert-danger" role="alert">
     {{ classOptionsError }} <button class="btn btn-sm btn-outline-danger ms-2" type="button" :disabled="classOptionsLoading" @click="loadClassOptions">Thử tải lại danh sách lớp</button>
@@ -271,11 +314,11 @@ onMounted(() => { void load(); void loadClassOptions() })
   <section class="card"><div class="card-body">
     <form class="app-list-search d-flex flex-wrap gap-2 mb-3" role="search" @submit.prevent="load"><label class="visually-hidden" for="student-search">Tìm học sinh</label><input id="student-search" v-model="search" class="form-control flex-grow-1" placeholder="Tìm theo tên hoặc mã học sinh" /><button class="btn btn-outline-primary" type="submit" :disabled="loading">Tìm</button></form>
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-      <p class="mb-0 small text-secondary">{{ activeRows.length }} tài khoản đang hoạt động · {{ selectedUserIds.length }}/{{ MAX_BULK_RESET_TARGETS }} đã chọn</p>
+      <p class="mb-0 small text-secondary">{{ activeRows.length }} tài khoản đang hoạt động{{ selectedClassForRoster ? ` trong ${selectedClassForRoster.name}` : '' }} · {{ selectedUserIds.length }}/{{ MAX_BULK_RESET_TARGETS }} đã chọn</p>
       <div class="d-flex flex-wrap gap-2">
-        <label class="visually-hidden" for="student-export-class">Chọn lớp để xuất danh sách học sinh</label>
-        <select id="student-export-class" v-model="classRosterClassId" class="form-select w-auto" data-testid="student-export-class" :disabled="classOptionsLoading || !!classOptionsError" aria-label="Chọn lớp để xuất danh sách học sinh">
-          <option value="">{{ classOptionsLoading ? 'Đang tải lớp…' : 'Chọn lớp' }}</option>
+        <label class="visually-hidden" for="student-export-class">Lọc học sinh theo lớp</label>
+        <select id="student-export-class" v-model="classRosterClassId" class="form-select w-auto" data-testid="student-export-class" :disabled="classOptionsLoading || !!classOptionsError" aria-label="Lọc học sinh theo lớp">
+          <option value="">{{ classOptionsLoading ? 'Đang tải lớp…' : 'Tất cả lớp' }}</option>
           <option v-for="classRow in classOptions" :key="classRow.id" :value="classRow.id">{{ classRow.code }} — {{ classRow.name }}</option>
         </select>
         <button class="btn btn-outline-primary" type="button" data-testid="export-student-class-roster" :aria-busy="classRosterExportBusy" :disabled="!selectedClassForRoster || classOptionsLoading || !!classOptionsError || classRosterExportBusy" @click="exportClassRoster">{{ classRosterExportBusy ? 'Đang xuất…' : 'Xuất danh sách lớp' }}</button>
@@ -285,10 +328,12 @@ onMounted(() => { void load(); void loadClassOptions() })
     </div>
     <p v-if="tooManyActiveRows" class="small text-secondary mb-2">Có hơn {{ MAX_BULK_RESET_TARGETS }} học sinh đang hoạt động trong kết quả. Hãy lọc thêm trước khi chọn tất cả.</p>
     <AppState v-if="loading" kind="loading" title="Đang tải danh sách học sinh" message="Thông tin sẽ xuất hiện tại đây sau khi tải xong." />
+    <AppState v-else-if="classRosterLoading" kind="loading" title="Đang tải danh sách học sinh của lớp" message="Đang đối chiếu membership còn hiệu lực." />
+    <AppState v-else-if="classRosterError" kind="error" title="Không thể tải danh sách lớp" :message="classRosterError" @retry="loadSelectedClassRoster" />
     <AppState v-else-if="errorMessage && !rows.length" kind="error" title="Không thể tải danh sách học sinh" :message="errorMessage" @retry="load" />
-    <AppState v-else-if="!rows.length" kind="empty" title="Chưa có học sinh phù hợp" message="Thêm hồ sơ mới hoặc điều chỉnh từ khóa tìm kiếm." />
+    <AppState v-else-if="!visibleRows.length" kind="empty" :title="selectedClassForRoster ? 'Chưa có học sinh phù hợp trong lớp' : 'Chưa có học sinh phù hợp'" :message="selectedClassForRoster ? 'Lớp chưa có membership hiệu lực hôm nay hoặc từ khóa tìm kiếm không khớp.' : 'Thêm hồ sơ mới hoặc điều chỉnh từ khóa tìm kiếm.'" />
     <div v-else class="table-responsive"><table class="table align-middle"><thead><tr><th><input type="checkbox" class="form-check-input" data-testid="select-all-active-students" aria-label="Chọn tất cả học sinh đang hoạt động trong kết quả lọc" :checked="allActiveSelected" :disabled="loading || !activeRows.length || tooManyActiveRows" @change="toggleAllActive(($event.target as HTMLInputElement).checked)" /></th><th>Mã</th><th>Họ tên</th><th>SĐT</th><th>Phụ huynh</th><th>Trạng thái</th><th>Ngày tạo</th><th>Thao tác</th></tr></thead><tbody>
-      <tr v-for="row in rows" :key="row.id"><td><input type="checkbox" class="form-check-input" data-testid="select-student-row" :aria-label="`Chọn ${row.full_name}`" :checked="selectedUserIds.includes(row.user_id)" :disabled="loading || row.status !== 'ACTIVE' || (selectedUserIds.length >= MAX_BULK_RESET_TARGETS && !selectedUserIds.includes(row.user_id))" @change="toggleSelectedUser(row.user_id, ($event.target as HTMLInputElement).checked)" /></td><td><code>{{ row.student_code }}</code></td><td class="fw-semibold">{{ row.full_name }}</td><td>{{ row.phone || '—' }}</td><td>{{ row.parent_name || '—' }}</td><td><span class="badge" :class="row.status === 'ACTIVE' ? 'text-bg-success' : 'text-bg-secondary'">{{ row.status === 'ACTIVE' ? 'Đang hoạt động' : row.status === 'LOCKED' ? 'Đã khóa' : row.status }}</span></td><td>{{ formatDateTime(row.created_at) }}</td><td><div class="d-flex flex-wrap gap-1"><RouterLink class="btn btn-sm btn-outline-primary" :to="`/admin/students/${row.id}`">Chi tiết</RouterLink><button class="btn btn-sm btn-outline-secondary" type="button" @click="beginEdit(row)">Sửa</button><button v-if="row.status !== 'ARCHIVED'" class="btn btn-sm btn-outline-danger" type="button" @click="askFor(row, 'archive')">Lưu trữ</button><button v-if="row.status !== 'ARCHIVED'" class="btn btn-sm btn-outline-secondary" type="button" @click="askFor(row, 'toggle')">{{ row.status === 'ACTIVE' ? 'Khóa TK' : 'Mở TK' }}</button><button v-if="row.status !== 'ARCHIVED'" class="btn btn-sm btn-outline-primary" type="button" @click="askFor(row, 'reset')">Đặt lại mật khẩu</button></div></td></tr>
+      <tr v-for="row in visibleRows" :key="row.id"><td><input type="checkbox" class="form-check-input" data-testid="select-student-row" :aria-label="`Chọn ${row.full_name}`" :checked="selectedUserIds.includes(row.user_id)" :disabled="loading || row.status !== 'ACTIVE' || (selectedUserIds.length >= MAX_BULK_RESET_TARGETS && !selectedUserIds.includes(row.user_id))" @change="toggleSelectedUser(row.user_id, ($event.target as HTMLInputElement).checked)" /></td><td><code>{{ row.student_code }}</code></td><td class="fw-semibold">{{ row.full_name }}</td><td>{{ row.phone || '—' }}</td><td>{{ row.parent_name || '—' }}</td><td><span class="badge" :class="row.status === 'ACTIVE' ? 'text-bg-success' : 'text-bg-secondary'">{{ row.status === 'ACTIVE' ? 'Đang hoạt động' : row.status === 'LOCKED' ? 'Đã khóa' : row.status }}</span></td><td>{{ formatDateTime(row.created_at) }}</td><td><div class="d-flex flex-wrap gap-1"><RouterLink class="btn btn-sm btn-outline-primary" :to="`/admin/students/${row.id}`">Chi tiết</RouterLink><button class="btn btn-sm btn-outline-secondary" type="button" @click="beginEdit(row)">Sửa</button><button v-if="row.status !== 'ARCHIVED'" class="btn btn-sm btn-outline-danger" type="button" @click="askFor(row, 'archive')">Lưu trữ</button><button v-if="row.status !== 'ARCHIVED'" class="btn btn-sm btn-outline-secondary" type="button" @click="askFor(row, 'toggle')">{{ row.status === 'ACTIVE' ? 'Khóa TK' : 'Mở TK' }}</button><button v-if="row.status !== 'ARCHIVED'" class="btn btn-sm btn-outline-primary" type="button" @click="askFor(row, 'reset')">Đặt lại mật khẩu</button></div></td></tr>
     </tbody></table></div>
   </div></section>
 
@@ -299,6 +344,7 @@ onMounted(() => { void load(); void loadClassOptions() })
     </div>
     <div v-if="errorMessage" class="alert alert-danger mt-3 mb-0" role="alert">{{ errorMessage }}</div>
   </FormModal>
+  <StudentQuickEnrollmentModal v-model="quickEnrollmentOpen" :classes="classOptions" :initial-class-id="classRosterClassId" @created="refreshAfterQuickEnrollment" />
   <ConfirmModal v-model="confirmOpen" v-bind="confirmDetails" :busy="confirmBusy" @confirm="confirmAction" @hidden="onConfirmHidden" />
   <BulkPasswordResetModal v-model="bulkDialogOpen" :mode="bulkDialogMode" :people="bulkPeople" :results="bulkResults" :temporary-password="bulkTemporaryPassword" :busy="bulkBusy" :error-message="bulkErrorMessage" @confirm="confirmBulkReset" />
   <DetailModal v-model="showPassword" title="Mật khẩu tạm thời" description="Mật khẩu là 12345678. Học sinh sẽ cần đổi mật khẩu ở lần đăng nhập kế tiếp. Mật khẩu chỉ hiển thị trong phiên này; hãy bàn giao qua kênh bảo mật." size="sm">

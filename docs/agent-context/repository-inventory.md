@@ -257,6 +257,7 @@
 | supabase/migrations/0054_sync_manual_session_student_rosters.sql | Supabase / migrations | SQL | Đồng bộ membership hiệu lực vào roster các buổi thủ công SCHEDULED trong tương lai. |
 | supabase/migrations/0055_session_management_and_rosters.sql | Supabase / migrations | SQL | Cho Admin sửa roster buổi tương lai theo membership hiệu lực, bảo toàn dữ liệu học tập/tài chính, xóa buổi trống và chặn tái sinh buổi lặp đã xóa. |
 | supabase/migrations/0056_historical_session_edits.sql | Supabase / migrations | SQL | Cho Admin hiệu chỉnh buổi chưa hủy: lịch, giáo viên, roster, nội dung và attendance; kiểm tra quyền/xung đột, ghi audit và giữ nguyên giờ thực tế cùng snapshot tài chính. |
+| supabase/migrations/0057_delete_month_where_guard.sql | Supabase / migrations | SQL | Sửa RPC xóa tháng để các lệnh xóa mẫu lịch có điều kiện khóa chính, tương thích với cơ chế production chặn DELETE không có WHERE. |
 | supabase/seed.sql | Supabase / cấu hình và seed | SQL | Seed cho database local; không dùng làm căn cứ dữ liệu production. |
 | supabase/tests/admin_monthly_session_planning.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra admin monthly session planning bằng fixture database cô lập. |
 | supabase/tests/backdated_session_creation.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra backdated session creation bằng fixture database cô lập. |
@@ -270,4 +271,4 @@
 | supabase/tests/student_future_session_roster_sync.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra student future session roster sync bằng fixture database cô lập. |
 | supabase/tests/timesheet_workflow.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra timesheet workflow bằng fixture database cô lập. |
 
-Tổng: 263 đường dẫn có trong inventory.
+Tổng: 264 đường dẫn có trong inventory.

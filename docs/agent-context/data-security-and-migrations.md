@@ -29,7 +29,7 @@ Import assessment có thể giữ hàng nguồn kể cả khi chưa có attendan
 
 ## Lịch sử migration trong repo
 
-Migration phải được đọc theo thứ tự và kiểm tra migration sau có `CREATE OR REPLACE`, revoke/grant hoặc thay đổi cùng object. Hiện repo có `0001–0056`:
+Migration phải được đọc theo thứ tự và kiểm tra migration sau có `CREATE OR REPLACE`, revoke/grant hoặc thay đổi cùng object. Hiện repo có `0001–0057`:
 
 - `0001–0006`: extension, enum, Auth/profile, RBAC, hồ sơ student/staff và danh mục học thuật/lớp.
 - `0007–0019`: mô hình ClassMonth/session/attendance/timesheet và các bảng tài chính/notification/audit/function/RLS/index/seed của giai đoạn đầu. Phần tháng và tài chính hiện là lịch sử hoặc bị khóa khỏi app.
@@ -44,6 +44,7 @@ Migration phải được đọc theo thứ tự và kiểm tra migration sau c�
 - `0053–0054`: thay lịch tháng bằng buổi từ mẫu tuần, rồi đồng bộ membership có hiệu lực vào roster session thủ công tương lai.
 - `0055`: sửa roster buổi theo membership hiệu lực/ngày buổi, bảo toàn dòng có lịch sử, xóa cứng buổi tương lai trống có quyền Admin và ghi tombstone cho ngày của buổi lặp.
 - `0056`: cho phép Admin hiệu chỉnh lịch/giáo viên/roster và nội dung/điểm danh của buổi chưa hủy; giữ trạng thái, giờ thực tế và dữ liệu chấm công/tài chính, kiểm tra quyền, xung đột và audit trước/sau.
+- `0057`: giữ nguyên RPC xóa tháng nhưng thêm điều kiện theo khóa chính vào lệnh dọn mẫu lịch, đáp ứng cơ chế production từ chối `DELETE` không có `WHERE`.
 
 Không sửa, xóa hoặc đổi số migration đã có thể chạy ở môi trường khác. Thay đổi schema bằng migration tiếp theo. Migration production cần yêu cầu rõ và kiểm tra target/backup/migration history trực tiếp; local test không cần áp vào production.
 

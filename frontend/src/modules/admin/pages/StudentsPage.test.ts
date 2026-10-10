@@ -1,14 +1,17 @@
 import { DOMWrapper, flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import * as XLSX from 'xlsx'
 import { useToastStore } from '@/stores/toast.store'
 import StudentsPage from './StudentsPage.vue'
 
 const mocks = vi.hoisted(() => ({
   getStudents: vi.fn(),
+  getStudentIntakeDuplicateIdentities: vi.fn(),
   getClasses: vi.fn(),
   getClassRosterForExport: vi.fn(),
   adminCreateUser: vi.fn(),
+  adminEnrollStudents: vi.fn(),
   adminExportStudentLogins: vi.fn(),
   adminResetPassword: vi.fn(),
   adminResetPasswordBulk: vi.fn(),
@@ -27,11 +30,13 @@ vi.mock('bootstrap', () => ({
 }))
 vi.mock('@/services/data-queries', () => ({
   getStudents: mocks.getStudents,
+  getStudentIntakeDuplicateIdentities: mocks.getStudentIntakeDuplicateIdentities,
   getClasses: mocks.getClasses,
   getClassRosterForExport: mocks.getClassRosterForExport,
 }))
 vi.mock('@/services/commands', () => ({
   adminCreateUser: mocks.adminCreateUser,
+  adminEnrollStudents: mocks.adminEnrollStudents,
   adminExportStudentLogins: mocks.adminExportStudentLogins,
   adminResetPassword: mocks.adminResetPassword,
   adminResetPasswordBulk: mocks.adminResetPasswordBulk,
@@ -48,7 +53,7 @@ import { downloadStudentClassRosterExport } from '@/modules/admin/utils/student-
 const student = { id: 'qa-student-1', user_id: 'qa-user-1', student_code: 'QA-S-1', full_name: 'Học sinh QA', phone: null, parent_name: null, parent_phone: null, status: 'ACTIVE', created_at: '2026-09-30T08:00:00Z' }
 const secondActiveStudent = { id: 'qa-student-3', user_id: 'qa-user-3', student_code: 'QA-S-3', full_name: 'Học sinh QA hai', phone: null, parent_name: null, parent_phone: null, status: 'ACTIVE', created_at: '2026-09-30T08:00:00Z' }
 const inactiveStudent = { id: 'qa-student-2', user_id: 'qa-user-2', student_code: 'QA-S-2', full_name: 'Học sinh QA nghỉ', phone: null, parent_name: null, parent_phone: null, status: 'INACTIVE', created_at: '2026-09-30T08:00:00Z' }
-const qaClass = { id: 'qa-class-1', code: 'QA-CLASS-1', name: 'Lớp QA' }
+const qaClass = { id: 'qa-class-1', code: 'QA-CLASS-1', name: 'Lớp QA', status: 'ACTIVE' }
 const qaClassStudent = { id: student.id, student_code: student.student_code, full_name: student.full_name, phone: student.phone, parent_name: student.parent_name, status: student.status, created_at: student.created_at }
 
 const mountedWrappers: Array<{ unmount: () => void }> = []
@@ -71,6 +76,21 @@ function findAllPageOrBody(wrapper: ReturnType<typeof mount>, selector: string) 
   return pageMatches.length ? pageMatches : new DOMWrapper(document.body).findAll(selector)
 }
 
+function qaIntakeWorkbook(rows: string[][]): File {
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+    ['Họ tên *', 'Mã học sinh', 'SĐT học sinh', 'Tên phụ huynh', 'SĐT phụ huynh'],
+    ...rows,
+  ]), 'Nhập học')
+  const bytes = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' })
+  const buffer = bytes instanceof ArrayBuffer
+    ? bytes
+    : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+  const file = new File([buffer], 'QA-nhap-hoc.xlsx')
+  Object.defineProperty(file, 'arrayBuffer', { value: async () => buffer })
+  return file
+}
+
 function allButtons(wrapper: ReturnType<typeof mount>) {
   return [...wrapper.findAll('button'), ...new DOMWrapper(document.body).findAll('button')]
 }
@@ -84,9 +104,11 @@ describe('StudentsPage dialogs', () => {
 
   beforeEach(() => {
     mocks.getStudents.mockReset().mockResolvedValue([student])
+    mocks.getStudentIntakeDuplicateIdentities.mockReset().mockResolvedValue([student])
     mocks.getClasses.mockReset().mockResolvedValue([qaClass])
     mocks.getClassRosterForExport.mockReset().mockResolvedValue([qaClassStudent])
     mocks.adminCreateUser.mockReset().mockResolvedValue({ temporary_password: 'QA-temp-pass-42' })
+    mocks.adminEnrollStudents.mockReset().mockResolvedValue({ results: [] })
     mocks.adminExportStudentLogins.mockReset().mockResolvedValue({
       rows: [{ student_code: student.student_code, full_name: student.full_name, login_email: 'qa-login@hvc-edu.local' }],
       missing_email_count: 0,
@@ -236,6 +258,116 @@ describe('StudentsPage dialogs', () => {
     expect(mocks.adminExportStudentLogins).not.toHaveBeenCalled()
     expect(useToastStore(pinia).items.at(-1)?.message).toContain(`Đã xuất 1 học sinh lớp ${qaClass.name}`)
     wrapper.unmount()
+  })
+
+  it('filters the student table by current class membership and combines it with search results', async () => {
+    mocks.getStudents.mockImplementation((query = '') => Promise.resolve(query ? [inactiveStudent] : [student, secondActiveStudent, inactiveStudent]))
+    mocks.getClassRosterForExport.mockResolvedValue([qaClassStudent, {
+      ...qaClassStudent,
+      id: inactiveStudent.id,
+      student_code: inactiveStudent.student_code,
+      full_name: inactiveStudent.full_name,
+      status: inactiveStudent.status,
+    }])
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await getPageOrBody(wrapper, '[data-testid="student-export-class"]').setValue(qaClass.id)
+    await flushPromises()
+    expect(wrapper.text()).toContain(student.full_name)
+    expect(wrapper.text()).toContain(inactiveStudent.full_name)
+    expect(wrapper.text()).not.toContain(secondActiveStudent.full_name)
+    expect(wrapper.text()).toContain('trong Lớp QA')
+
+    await getPageOrBody(wrapper, '#student-search').setValue('QA-S-2')
+    await getPageOrBody(wrapper, 'form[role="search"]').trigger('submit')
+    await flushPromises()
+    const filteredRows = wrapper.findAll('tbody tr').map((row) => row.text())
+    expect(filteredRows).toHaveLength(1)
+    expect(filteredRows[0]).toContain(inactiveStudent.student_code)
+    expect(filteredRows[0]).not.toContain(student.student_code)
+    wrapper.unmount()
+  })
+
+  it('previews an XLSX import, keeps name review explicit, retries row failures, and preserves one-time credentials', async () => {
+    const file = qaIntakeWorkbook([
+      ['QA- Học sinh mới', 'QA-INTAKE-001', '0909990001', 'QA- Phụ huynh', '0909990011'],
+      ['QA- Trùng mã', student.student_code, '0909990002', '', ''],
+      [student.full_name, 'QA-INTAKE-003', '0909990003', '', ''],
+      ['', 'QA-INTAKE-004', '0909990004', '', ''],
+    ])
+    mocks.adminEnrollStudents
+      .mockResolvedValueOnce({ results: [
+        { row_number: 2, status: 'CREATED', student_code: 'QA-INTAKE-001', username: 'qa-intake-1', temporary_password: 'QA-one-time-secret-1' },
+        { row_number: 4, status: 'FAILED', reason_code: 'STUDENT_CREATE_FAILED' },
+      ] })
+      .mockResolvedValueOnce({ results: [
+        { row_number: 4, status: 'CREATED', student_code: 'QA-INTAKE-003', username: 'qa-intake-2', temporary_password: 'QA-one-time-secret-2' },
+      ] })
+
+    const wrapper = mountPage()
+    await flushPromises()
+    await allButtons(wrapper).find((button) => button.text() === 'Nhập học nhanh')?.trigger('click')
+    await getPageOrBody(wrapper, '#intake-class').setValue(qaClass.id)
+    const fileInput = getPageOrBody(wrapper, '#student-intake-file')
+    Object.defineProperty(fileInput.element, 'files', { configurable: true, value: [file] })
+    await fileInput.trigger('change')
+    await flushPromises()
+
+    expect(new DOMWrapper(document.body).text()).toContain('1 sẽ nhập')
+    expect(new DOMWrapper(document.body).text()).toContain('1 trùng, bỏ qua')
+    expect(new DOMWrapper(document.body).text()).toContain('1 cần rà soát tên')
+    expect(new DOMWrapper(document.body).text()).toContain('1 dòng lỗi')
+    const sameNameChoice = new DOMWrapper(document.body).find('.student-intake-preview input[type="checkbox"]')
+    await sameNameChoice.setValue(true)
+    expect(new DOMWrapper(document.body).text()).toContain('2 sẽ nhập')
+    await allButtons(wrapper).find((button) => button.text() === 'Xác nhận nhập 2 học sinh')?.trigger('click')
+    await flushPromises()
+
+    expect(mocks.adminEnrollStudents).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      class_id: qaClass.id,
+      start_date: '2026-10-10',
+      students: expect.arrayContaining([
+        expect.objectContaining({ row_number: 2, student_code: 'QA-INTAKE-001' }),
+        expect.objectContaining({ row_number: 4, student_code: 'QA-INTAKE-003' }),
+      ]),
+    }))
+    expect(new DOMWrapper(document.body).text()).toContain('QA-one-time-secret-1')
+    await allButtons(wrapper).find((button) => button.text() === 'Thử lại 1 dòng lỗi')?.trigger('click')
+    await flushPromises()
+
+    expect(mocks.adminEnrollStudents).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      students: [expect.objectContaining({ row_number: 4, student_code: 'QA-INTAKE-003' })],
+    }))
+    expect(new DOMWrapper(document.body).text()).toContain('QA-one-time-secret-1')
+    expect(new DOMWrapper(document.body).text()).toContain('QA-one-time-secret-2')
+    expect(new DOMWrapper(document.body).text()).toContain('QA- Trùng mã')
+
+    await allButtons(wrapper).find((button) => button.text() === 'Đóng')?.trigger('click')
+    await flushPromises()
+    expect(new DOMWrapper(document.body).text()).not.toContain('QA-one-time-secret-1')
+    expect(new DOMWrapper(document.body).text()).not.toContain('QA-one-time-secret-2')
+    wrapper.unmount()
+  })
+
+  it('shows the correct empty and error states while filtering a class roster', async () => {
+    const emptyWrapper = mountPage()
+    await flushPromises()
+    mocks.getClassRosterForExport.mockResolvedValueOnce([])
+    await getPageOrBody(emptyWrapper, '[data-testid="student-export-class"]').setValue(qaClass.id)
+    await flushPromises()
+    expect(emptyWrapper.text()).toContain('Chưa có học sinh phù hợp trong lớp')
+    expect(emptyWrapper.text()).not.toContain(student.full_name)
+    emptyWrapper.unmount()
+
+    const errorWrapper = mountPage()
+    await flushPromises()
+    mocks.getClassRosterForExport.mockRejectedValueOnce(new Error('QA class filter failure'))
+    await getPageOrBody(errorWrapper, '[data-testid="student-export-class"]').setValue(qaClass.id)
+    await flushPromises()
+    expect(errorWrapper.text()).toContain('Không thể tải danh sách lớp')
+    expect(errorWrapper.text()).toContain('QA class filter failure')
+    errorWrapper.unmount()
   })
 
   it('does not create a workbook for an empty roster and reports roster query errors', async () => {

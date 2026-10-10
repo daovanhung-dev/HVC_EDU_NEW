@@ -133,6 +133,7 @@ const migrationPurposes = {
   '0054_sync_manual_session_student_rosters.sql': 'Đồng bộ membership hiệu lực vào roster các buổi thủ công SCHEDULED trong tương lai.',
   '0055_session_management_and_rosters.sql': 'Cho Admin sửa roster buổi tương lai theo membership hiệu lực, bảo toàn dữ liệu học tập/tài chính, xóa buổi trống và chặn tái sinh buổi lặp đã xóa.',
   '0056_historical_session_edits.sql': 'Cho Admin hiệu chỉnh buổi chưa hủy: lịch, giáo viên, roster, nội dung và attendance; kiểm tra quyền/xung đột, ghi audit và giữ nguyên giờ thực tế cùng snapshot tài chính.',
+  '0057_delete_month_where_guard.sql': 'Sửa RPC xóa tháng để các lệnh xóa mẫu lịch có điều kiện khóa chính, tương thích với cơ chế production chặn DELETE không có WHERE.',
 }
 
 const filePurposes = {
