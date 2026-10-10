@@ -39,6 +39,7 @@ export const memberships: any[] = [
 export const schedules: any[] = [
   { id: 'qa-schedule-1', class_id: 'qa-class-1', day_of_week: new Date(`${today}T12:00:00Z`).getUTCDay() || 7, start_time: '17:30:00', end_time: '19:00:00', room: 'QA-A1', status: 'ACTIVE', reviewed_at: at(-15, '10:00'), class_schedule_staff: [{ staff_id: 'qa-teacher-1', staff: teachers[0] }] },
 ]
+const monthScheduleTemplates = new Map<string, any[]>()
 
 export const sessions: any[] = [
   { id: 'qa-session-1', class_id: 'qa-class-1', recurrence_schedule_id: 'qa-schedule-1', manual_schedule: false, scheduled_start_at: at(1, '17:30'), scheduled_end_at: at(1, '19:00'), status: 'SCHEDULED', room: 'QA-A1', session_note: null, classes: classes[0], class_schedules: schedules[0], session_staff: [{ staff_id: 'qa-teacher-1', assignment_role: 'TEACHER', staff: teachers[0] }], session_students: memberships.filter((item) => item.class_id === 'qa-class-1' && item.student_id !== 'qa-student-4').map((item) => ({ student_id: item.student_id })) },
@@ -149,6 +150,9 @@ export function getClassMembershipsForSessionDate(classId: string, sessionDate: 
     && row.students?.status === 'ACTIVE'))
 }
 export function getClassSchedules(id: string) { return query(schedules.filter((row) => row.class_id === id)) }
+export function getClassSchedulesForClasses(classIds: string[]) {
+  return query(schedules.filter((row) => classIds.includes(row.class_id) && row.status === 'ACTIVE'))
+}
 export function getMySessions() { return query(sessions) }
 export function getSessionStudents(sessionId: string) {
   const session = sessions.find((item) => item.id === sessionId)
@@ -467,6 +471,44 @@ export async function replaceMonthWithWeekTemplate(monthStart: string, slots: an
     deleted_timesheets: deletedTimesheetCount,
     deleted_payroll_items: 0,
     created_sessions: createdSessions,
+  }
+}
+export async function getMonthWeekScheduleTemplate(monthStart: string) {
+  const slots = monthScheduleTemplates.get(monthStart)
+  return query(slots ? { month_start: monthStart, slots } : null)
+}
+export async function previewMonthWeekScheduleImport(monthStart: string, slots: any[]) {
+  await query(true)
+  const [year, monthNumber] = monthStart.slice(0, 7).split('-').map(Number)
+  const monthLength = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate()
+  let occurrences = 0
+  for (let day = 1; day <= monthLength; day += 1) {
+    const weekday = new Date(Date.UTC(year, monthNumber - 1, day)).getUTCDay() || 7
+    occurrences += slots.filter((slot) => slot.day_of_week === weekday).length
+  }
+  const saved = monthScheduleTemplates.get(monthStart) || []
+  const hasSameTemplate = JSON.stringify(saved) === JSON.stringify(slots)
+  return {
+    month_start: monthStart,
+    create_count: hasSameTemplate ? 0 : occurrences,
+    update_count: hasSameTemplate ? occurrences : 0,
+    cancel_future_count: 0,
+    preserve_history_count: 0,
+    blockers: [],
+    actions: [],
+  }
+}
+export async function importMonthWeekSchedule(monthStart: string, slots: any[]) {
+  await query(true)
+  const preview = await previewMonthWeekScheduleImport(monthStart, slots)
+  monthScheduleTemplates.set(monthStart, structuredClone(slots))
+  return {
+    month_start: monthStart,
+    created_sessions: preview.create_count,
+    updated_sessions: preview.update_count,
+    cancelled_sessions: preview.cancel_future_count,
+    preserved_sessions: preview.preserve_history_count,
+    slot_count: slots.length,
   }
 }
 export async function updateSessionTeachers(input: any) { const row = sessions.find((item) => item.id === input.session_id); if (row) row.session_staff = input.staff_ids.map((id: string) => ({ staff_id: id, assignment_role: 'TEACHER', staff: teachers.find((item) => item.id === id) })); return {} }

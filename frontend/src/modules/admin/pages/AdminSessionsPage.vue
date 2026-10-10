@@ -11,6 +11,9 @@ import {
   deleteSessionsForMonth,
   previewMonthWeekTemplateReplacement,
   replaceMonthWithWeekTemplate,
+  getMonthWeekScheduleTemplate,
+  previewMonthWeekScheduleImport,
+  importMonthWeekSchedule,
   correctSessionSchedule,
   correctSessionLearning,
   setClassScheduleStatus,
@@ -20,11 +23,12 @@ import {
   syncSessionStudentRoster,
   updateSessionTeachers,
 } from '@/services/commands'
-import type { MonthWeekTemplateSlot } from '@/services/commands'
+import type { MonthWeekScheduleImportPreview, MonthWeekTemplateSlot } from '@/services/commands'
 import {
   getClassActiveRosterSize,
   getClassMembershipsForSessionDate,
   getClassSchedules,
+  getClassSchedulesForClasses,
   getClasses,
   getMySessions,
   getSessionStudents,
@@ -63,6 +67,14 @@ import {
   groupSessionsByBusinessDate,
   shiftCalendarMonth,
 } from '@/shared/utils/session-calendar'
+import {
+  downloadMonthWeekScheduleTemplate,
+  parseMonthWeekScheduleWorkbook,
+  MAX_MONTH_WEEK_SCHEDULE_SLOTS,
+  type MonthWeekScheduleExportSlot,
+  type MonthWeekScheduleParseIssue,
+  type MonthWeekScheduleSlot,
+} from '@/modules/admin/utils/month-week-schedule-import'
 
 type ViewMode = 'month' | 'week' | 'list'
 type WeeklyTemplateSlotDraft = MonthWeekTemplateSlot & { client_id: string }
@@ -122,6 +134,15 @@ const deletePreviewBusy = ref(false)
 const templateEditorOpen = ref(false)
 const templatePreviewBusy = ref(false)
 const templateError = ref('')
+const excelScheduleOpen = ref(false)
+const excelScheduleBusy = ref(false)
+const excelScheduleError = ref('')
+const excelScheduleFileName = ref('')
+const excelScheduleFileInput = ref<HTMLInputElement | null>(null)
+const excelScheduleIssues = ref<MonthWeekScheduleParseIssue[]>([])
+const excelScheduleSlots = ref<Array<MonthWeekScheduleSlot & { slot_id: string }>>([])
+const excelSchedulePreview = ref<MonthWeekScheduleImportPreview | null>(null)
+const excelSchedulePreviewBusy = ref(false)
 const weeklyTemplateDays = ref<WeeklyTemplateDayDraft[]>([])
 const pendingTemplateMonthStart = ref('')
 const pendingTemplateSlots = ref<MonthWeekTemplateSlot[]>([])
@@ -314,6 +335,11 @@ const periodTitle = computed(() => viewMode.value === 'month'
   : `${formatBusinessDate(weekDateKeys.value[0])} – ${formatBusinessDate(weekDateKeys.value[6])}`)
 const visibleCalendarSessionCount = computed(() => visibleDateKeys.value.reduce((total, dateKey) => total + (visibleSessionsByDate.value[dateKey]?.length || 0), 0))
 const displayedMonthStart = computed(() => `${calendarAnchorDate.value.slice(0, 7)}-01`)
+const excelScheduleCanApply = computed(() => !!excelSchedulePreview.value
+  && !excelScheduleIssues.value.length
+  && !excelSchedulePreview.value.blockers.length
+  && !excelScheduleBusy.value
+  && !excelSchedulePreviewBusy.value)
 
 function dayLabel(day: number) {
   return day === 7 ? 'Chủ nhật' : `Thứ ${day + 1}`
@@ -796,6 +822,157 @@ function openWeeklyTemplate() {
   initializeWeeklyTemplate()
   templateError.value = ''
   templateEditorOpen.value = true
+}
+
+async function downloadMonthScheduleWorkbook() {
+  try {
+    let slots: MonthWeekScheduleSlot[] = []
+    const savedTemplate = await getMonthWeekScheduleTemplate(displayedMonthStart.value)
+    if (savedTemplate) {
+      slots = savedTemplate.slots.map((slot) => ({
+        ...slot,
+        slot_id: slot.slot_id || '',
+        room: slot.room || '',
+      }))
+    } else {
+      const activeClasses = activeTemplateClasses.value
+      const scheduleRows = await getClassSchedulesForClasses(activeClasses.map((row) => row.id))
+      slots = scheduleRows.map((schedule) => {
+        const assignments = schedule.class_schedule_staff || []
+        const unavailableAssignment = assignments.find((assignment) => !teachersList.value.some((teacher) =>
+          teacher.id === assignment.staff_id && teacher.status === 'ACTIVE' && (!teacher.staff_type || teacher.staff_type === 'TEACHER')))
+        const classRow = activeClasses.find((row) => row.id === schedule.class_id)
+        if (unavailableAssignment) {
+          throw new Error(`Lịch ${classRow?.code || schedule.id} có giáo viên đã ngừng hoạt động hoặc không còn quyền dạy. Hãy cập nhật lịch lặp trước khi xuất mẫu.`)
+        }
+        const staffIds = assignments.map((assignment) => assignment.staff_id)
+        if (!staffIds.length) {
+          throw new Error(`Lịch ${classRow?.code || schedule.id} chưa có giáo viên hoạt động. Hãy cập nhật lịch lặp trước khi xuất mẫu.`)
+        }
+        return {
+          slot_id: schedule.id,
+          source_schedule_id: schedule.id,
+          day_of_week: schedule.day_of_week,
+          class_id: schedule.class_id,
+          start_time: schedule.start_time,
+          end_time: schedule.end_time,
+          room: schedule.room || '',
+          staff_ids: staffIds,
+        }
+      })
+    }
+
+    if (slots.length > MAX_MONTH_WEEK_SCHEDULE_SLOTS) {
+      throw new Error(`Có ${slots.length} lịch tuần đang bật; biểu mẫu chỉ hỗ trợ tối đa ${MAX_MONTH_WEEK_SCHEDULE_SLOTS} dòng.`)
+    }
+
+    const classById = new Map(classes.value.map((row) => [row.id, row]))
+    const teacherById = new Map(teachersList.value.map((row) => [row.id, row]))
+    const exportSlots: MonthWeekScheduleExportSlot[] = slots.map((slot) => {
+      const classRow = classById.get(slot.class_id)
+      const teacherRows = slot.staff_ids.map((id) => teacherById.get(id))
+      if (!classRow?.code) throw new Error('Không thể xuất mẫu vì có lớp không còn trong danh sách. Hãy làm mới trang.')
+      if (!teacherRows.length || teacherRows.some((teacher) => !teacher?.staff_code)) {
+        throw new Error(`Không thể xuất mẫu cho lớp ${classRow.code}: một giáo viên đang hoạt động chưa có mã.`)
+      }
+      return {
+        ...slot,
+        slot_id: slot.slot_id || slot.source_schedule_id || '',
+        class_code: classRow.code,
+        teacher_codes: teacherRows.map((teacher) => teacher!.staff_code as string),
+      }
+    })
+    await downloadMonthWeekScheduleTemplate(displayedMonthStart.value, exportSlots)
+    toast.success(`Đã tải biểu mẫu lịch tuần cho ${formatBusinessMonth(displayedMonthStart.value)}.`)
+  } catch (error) {
+    excelScheduleError.value = userErrorMessage(error, 'Không thể tải biểu mẫu Excel lịch tháng.')
+    toast.error(excelScheduleError.value)
+  }
+}
+
+function openExcelScheduleImport() {
+  excelScheduleError.value = ''
+  excelScheduleFileName.value = ''
+  excelScheduleIssues.value = []
+  excelScheduleSlots.value = []
+  excelSchedulePreview.value = null
+  excelScheduleOpen.value = true
+}
+
+function resetExcelScheduleFile() {
+  if (excelScheduleFileInput.value) excelScheduleFileInput.value.value = ''
+  excelScheduleError.value = ''
+  excelScheduleFileName.value = ''
+  excelScheduleIssues.value = []
+  excelScheduleSlots.value = []
+  excelSchedulePreview.value = null
+}
+
+async function readExcelScheduleFile(event: Event) {
+  const file = (event.target as HTMLInputElement).files?.[0]
+  excelScheduleError.value = ''
+  excelScheduleFileName.value = file?.name || ''
+  excelScheduleIssues.value = []
+  excelScheduleSlots.value = []
+  excelSchedulePreview.value = null
+  if (!file) return
+
+  const currentMonthStart = `${getBusinessDateKey(new Date()).slice(0, 7)}-01`
+  if (displayedMonthStart.value < currentMonthStart) {
+    excelScheduleError.value = 'Chỉ nhập lịch cho tháng hiện tại hoặc tháng tương lai.'
+    return
+  }
+
+  excelSchedulePreviewBusy.value = true
+  try {
+    const parsed = await parseMonthWeekScheduleWorkbook(file, displayedMonthStart.value, {
+      classes: classes.value.map(({ id, code, status }) => ({ id, code, status })),
+      teachers: teachersList.value.map(({ id, staff_code, status, staff_type }) => ({ id, staff_code, status, staff_type })),
+    })
+    excelScheduleIssues.value = parsed.issues
+    excelScheduleSlots.value = parsed.slots
+    if (parsed.issues.length) return
+    excelSchedulePreview.value = await previewMonthWeekScheduleImport(parsed.month_start, parsed.slots.map(({ source_row_number: _sourceRowNumber, ...slot }) => slot))
+  } catch (error) {
+    excelScheduleError.value = userErrorMessage(error, 'Không thể đọc hoặc kiểm tra biểu mẫu Excel.')
+  } finally {
+    excelSchedulePreviewBusy.value = false
+  }
+}
+
+async function applyExcelScheduleImport() {
+  if (!excelScheduleCanApply.value || excelScheduleBusy.value) return
+  excelScheduleBusy.value = true
+  excelScheduleError.value = ''
+  try {
+    const monthStart = displayedMonthStart.value
+    const result = await importMonthWeekSchedule(monthStart, excelScheduleSlots.value.map(({ source_row_number: _sourceRowNumber, ...slot }) => slot))
+    excelScheduleOpen.value = false
+    excelSchedulePreview.value = null
+    excelScheduleSlots.value = []
+    const refreshed = await load()
+    const summary = `Đã tạo ${result.created_sessions}, cập nhật ${result.updated_sessions}, hủy ${result.cancelled_sessions} buổi; giữ nguyên ${result.preserved_sessions} buổi có lịch sử cho ${formatBusinessMonth(monthStart)}.`
+    if (!refreshed) {
+      errorMessage.value = `${summary} Chưa tải lại được lịch; hãy nhấn “Làm mới”.`
+      toast.info(summary)
+    } else {
+      toast.success(summary)
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('IMPORT_BLOCKED')) {
+      try {
+        excelSchedulePreview.value = await previewMonthWeekScheduleImport(
+          displayedMonthStart.value,
+          excelScheduleSlots.value.map(({ source_row_number: _sourceRowNumber, ...slot }) => slot),
+        )
+      } catch {
+        // Keep the last preview and the original apply error visible if refresh also fails.
+      }
+    }
+    excelScheduleError.value = userErrorMessage(error, 'Không thể áp dụng biểu mẫu lịch tháng. Hãy xem lại preview và thử lại.')
+  } finally {
+    excelScheduleBusy.value = false
+  }
 }
 
 function addWeeklyTemplateSlot(day: WeeklyTemplateDayDraft) {
@@ -1337,6 +1514,8 @@ watch(sessionFormIsBackdated, (isBackdated) => {
     <template #actions>
       <button class="btn btn-primary" @click="scheduleEditorOpen = !scheduleEditorOpen">Chỉnh sửa lịch</button>
       <button class="btn btn-outline-primary" :disabled="loading" @click="openWeeklyTemplate">Tạo lịch mẫu</button>
+      <button class="btn btn-outline-primary" :disabled="loading" @click="downloadMonthScheduleWorkbook">Tải mẫu Excel</button>
+      <button class="btn btn-outline-primary" :disabled="loading" @click="openExcelScheduleImport">Nhập lịch Excel</button>
       <button class="btn btn-outline-danger" :disabled="loading || deletePreviewBusy" :aria-busy="deletePreviewBusy || undefined" @click="previewAndConfirmDeleteMonthSessions">
         <span v-if="deletePreviewBusy" class="app-button__spinner" aria-hidden="true"></span>{{ deletePreviewBusy ? 'Đang kiểm tra…' : 'Xóa toàn bộ buổi trong tháng' }}
       </button>
@@ -1444,6 +1623,65 @@ watch(sessionFormIsBackdated, (isBackdated) => {
     </div>
     <div v-if="weeklyTemplateValidationError" class="alert alert-info mt-3 mb-0" role="status">{{ weeklyTemplateValidationError }}</div>
     <div v-if="templateError" class="alert alert-danger mt-3 mb-0" role="alert">{{ templateError }}</div>
+  </FormModal>
+
+  <FormModal
+    v-model="excelScheduleOpen"
+    :title="`Nhập lịch Excel cho ${formatBusinessMonth(displayedMonthStart)}`"
+    description="Chọn biểu mẫu đã điền. Lịch áp dụng cho toàn trung tâm và chỉ tháng này; lịch lặp từ các tháng sau được giữ nguyên."
+    size="xl"
+    :busy="excelScheduleBusy || excelSchedulePreviewBusy"
+    :submit-disabled="!excelScheduleCanApply"
+    submit-label="Áp dụng lịch tháng"
+    submitting-label="Đang áp dụng…"
+    @submit="applyExcelScheduleImport"
+    @cancel="excelScheduleOpen = false"
+  >
+    <div class="alert alert-info" role="note">
+      Lịch được lặp theo thứ trong tháng đang mở. Những ngày đã qua sẽ tạo buổi điểm danh bù ở trạng thái “Đã lên lịch”. Nếu có lỗi hoặc xung đột, hệ thống sẽ không áp dụng dòng nào.
+    </div>
+    <div class="d-flex flex-wrap align-items-end gap-3 mb-3">
+      <div class="flex-grow-1">
+        <label for="month-week-schedule-file" class="form-label">Biểu mẫu lịch tháng (.xlsx)</label>
+        <input id="month-week-schedule-file" ref="excelScheduleFileInput" class="form-control" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" :disabled="excelScheduleBusy || excelSchedulePreviewBusy" @change="readExcelScheduleFile" />
+        <div class="form-text">Tệp tối đa 10 MB, không quá 100 dòng lịch tuần.</div>
+      </div>
+      <div v-if="excelScheduleFileName" class="d-flex align-items-center gap-2">
+        <span class="small text-secondary">{{ excelScheduleFileName }}</span>
+        <button class="btn btn-sm btn-outline-secondary" type="button" :disabled="excelScheduleBusy || excelSchedulePreviewBusy" @click="resetExcelScheduleFile">Chọn tệp khác</button>
+      </div>
+    </div>
+    <div v-if="excelSchedulePreviewBusy" class="py-3 text-secondary" role="status" aria-live="polite">
+      <span class="app-button__spinner" aria-hidden="true"></span> Đang đọc biểu mẫu và kiểm tra các ngày trong tháng…
+    </div>
+    <div v-if="excelScheduleError" class="alert alert-danger" role="alert">{{ excelScheduleError }}</div>
+    <div v-if="excelScheduleIssues.length" class="alert alert-danger" role="alert">
+      <strong>Biểu mẫu có {{ excelScheduleIssues.length }} dòng cần sửa:</strong>
+      <ul class="mb-0 mt-2">
+        <li v-for="issue in excelScheduleIssues" :key="`${issue.row_number}-${issue.message}`">Dòng {{ issue.row_number }}: {{ issue.message }}</li>
+      </ul>
+    </div>
+    <template v-if="excelSchedulePreview">
+      <div class="month-import-summary" aria-label="Tóm tắt lịch sẽ áp dụng">
+        <div><strong>{{ excelScheduleSlots.length }}</strong><span>dòng mẫu hợp lệ</span></div>
+        <div><strong>{{ excelSchedulePreview.create_count }}</strong><span>buổi sẽ tạo</span></div>
+        <div><strong>{{ excelSchedulePreview.update_count }}</strong><span>buổi sẽ cập nhật</span></div>
+        <div><strong>{{ excelSchedulePreview.cancel_future_count }}</strong><span>buổi tương lai sẽ hủy</span></div>
+        <div><strong>{{ excelSchedulePreview.preserve_history_count }}</strong><span>buổi sẽ được giữ nguyên</span></div>
+      </div>
+      <div v-if="excelSchedulePreview.blockers.length" class="alert alert-danger mt-3" role="alert">
+        <strong>Chưa thể áp dụng lịch. Sửa các lỗi hoặc xung đột dưới đây rồi tải lại tệp:</strong>
+        <ul class="mb-0 mt-2">
+          <li v-for="(blocker, index) in excelSchedulePreview.blockers" :key="`${blocker.slot_id}-${blocker.date}-${blocker.code}-${index}`">
+            <template v-if="excelScheduleSlots.find((slot) => slot.slot_id === blocker.slot_id)?.source_row_number">Dòng {{ excelScheduleSlots.find((slot) => slot.slot_id === blocker.slot_id)?.source_row_number }} · </template>
+            {{ blocker.date ? formatBusinessDate(blocker.date) : '' }}{{ blocker.date ? ' · ' : '' }}{{ blocker.message }}
+          </li>
+        </ul>
+      </div>
+      <div v-else class="alert alert-success mt-3" role="status">
+        Có thể áp dụng toàn bộ {{ excelScheduleSlots.length }} dòng mẫu. Học sinh trong roster hiện có, điểm danh, kết quả và chấm công của buổi được cập nhật sẽ được giữ nguyên.
+      </div>
+    </template>
   </FormModal>
 
   <div v-if="scheduleEditorOpen" class="card border-0 shadow-sm mb-4">
@@ -1780,6 +2018,32 @@ watch(sessionFormIsBackdated, (isBackdated) => {
 
 .weekly-template-slot__heading {
   margin-bottom: 0.75rem;
+}
+
+.month-import-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: 0.65rem;
+}
+
+.month-import-summary > div {
+  display: flex;
+  min-height: 4.25rem;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.55rem;
+  background: var(--bs-tertiary-bg);
+}
+
+.month-import-summary strong {
+  font-size: 1.15rem;
+}
+
+.month-import-summary span {
+  color: var(--bs-secondary-color);
+  font-size: 0.78rem;
 }
 
 .calendar-scroll {

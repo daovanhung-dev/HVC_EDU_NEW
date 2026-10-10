@@ -1,8 +1,10 @@
 import { DOMWrapper, flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia } from 'pinia'
+import * as XLSX from 'xlsx'
 import type { SessionRow } from '@/shared/types/domain'
 import { addCalendarDays, formatBusinessDate, formatBusinessMonth, getBusinessDateKey, shiftCalendarMonth } from '@/shared/utils/session-calendar'
+import { MONTH_WEEK_SCHEDULE_HEADERS } from '@/modules/admin/utils/month-week-schedule-import'
 import AdminSessionsPage from './AdminSessionsPage.vue'
 
 const mockState = vi.hoisted(() => ({
@@ -12,6 +14,7 @@ const mockState = vi.hoisted(() => ({
   getClasses: vi.fn(),
   getStaff: vi.fn(),
   getClassSchedules: vi.fn(),
+  getClassSchedulesForClasses: vi.fn(),
   getClassMembershipsForSessionDate: vi.fn(),
   getClassActiveRosterSize: vi.fn(),
   updateSessionOccurrence: vi.fn(),
@@ -20,6 +23,9 @@ const mockState = vi.hoisted(() => ({
   createManualSession: vi.fn(),
   previewMonthWeekTemplateReplacement: vi.fn(),
   replaceMonthWithWeekTemplate: vi.fn(),
+  getMonthWeekScheduleTemplate: vi.fn(),
+  previewMonthWeekScheduleImport: vi.fn(),
+  importMonthWeekSchedule: vi.fn(),
   updateSessionTeachers: vi.fn(),
   addTeacherToClassSchedule: vi.fn(),
   createClassSchedule: vi.fn(),
@@ -39,6 +45,7 @@ vi.mock('@/services/data-queries', () => ({
   getClasses: mockState.getClasses,
   getStaff: mockState.getStaff,
   getClassSchedules: mockState.getClassSchedules,
+  getClassSchedulesForClasses: mockState.getClassSchedulesForClasses,
   getClassMembershipsForSessionDate: mockState.getClassMembershipsForSessionDate,
   getClassActiveRosterSize: mockState.getClassActiveRosterSize,
 }))
@@ -50,6 +57,9 @@ vi.mock('@/services/commands', () => ({
   createManualSession: mockState.createManualSession,
   previewMonthWeekTemplateReplacement: mockState.previewMonthWeekTemplateReplacement,
   replaceMonthWithWeekTemplate: mockState.replaceMonthWithWeekTemplate,
+  getMonthWeekScheduleTemplate: mockState.getMonthWeekScheduleTemplate,
+  previewMonthWeekScheduleImport: mockState.previewMonthWeekScheduleImport,
+  importMonthWeekSchedule: mockState.importMonthWeekSchedule,
   updateSessionTeachers: mockState.updateSessionTeachers,
   addTeacherToClassSchedule: mockState.addTeacherToClassSchedule,
   createClassSchedule: mockState.createClassSchedule,
@@ -122,6 +132,25 @@ function pageAndBodyText(wrapper: ReturnType<typeof mount>) {
   return `${wrapper.text()} ${document.body.textContent || ''}`
 }
 
+function qaScheduleWorkbook(month: string): File {
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+    [...MONTH_WEEK_SCHEDULE_HEADERS],
+    ['00000000-0000-4000-8000-000000000004', 'Thứ Hai', 'QA-CODE-1', '08:00', '09:30', 'QA-A1', 'QA-T-001'],
+  ]), 'Mẫu tuần')
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+    ['Tháng áp dụng', month.slice(0, 7)],
+    ['Mục', 'Hướng dẫn'],
+  ]), 'Hướng dẫn')
+  const bytes = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' })
+  const buffer = bytes instanceof ArrayBuffer
+    ? bytes
+    : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+  const file = new File([buffer], 'QA-lich-thang.xlsx')
+  Object.defineProperty(file, 'arrayBuffer', { value: async () => buffer })
+  return file
+}
+
 async function clickButtonWithText(wrapper: ReturnType<typeof mount>, text: string) {
   const button = [...wrapper.findAll('button'), ...new DOMWrapper(document.body).findAll('button')]
     .find((candidate) => candidate.text().trim() === text)
@@ -163,6 +192,7 @@ describe('AdminSessionsPage calendar', () => {
       { id: 'qa-teacher-6', staff_code: 'QA-T-006', full_name: 'Giáo viên QA 6', status: 'ACTIVE' },
     ])
     mockState.getClassSchedules.mockReset().mockResolvedValue([])
+    mockState.getClassSchedulesForClasses.mockReset().mockResolvedValue([])
     mockState.getClassMembershipsForSessionDate.mockReset().mockResolvedValue([])
     mockState.getClassActiveRosterSize.mockReset().mockResolvedValue(0)
     mockState.updateSessionOccurrence.mockReset().mockResolvedValue(undefined)
@@ -193,6 +223,24 @@ describe('AdminSessionsPage calendar', () => {
       deleted_timesheets: 1,
       deleted_payroll_items: 1,
       created_sessions: 10,
+    })
+    mockState.getMonthWeekScheduleTemplate.mockReset().mockResolvedValue(null)
+    mockState.previewMonthWeekScheduleImport.mockReset().mockResolvedValue({
+      month_start: `${getBusinessDateKey(new Date()).slice(0, 7)}-01`,
+      create_count: 3,
+      update_count: 2,
+      cancel_future_count: 1,
+      preserve_history_count: 2,
+      blockers: [],
+      actions: [],
+    })
+    mockState.importMonthWeekSchedule.mockReset().mockResolvedValue({
+      month_start: `${getBusinessDateKey(new Date()).slice(0, 7)}-01`,
+      created_sessions: 3,
+      updated_sessions: 2,
+      cancelled_sessions: 1,
+      preserved_sessions: 2,
+      slot_count: 1,
     })
     mockState.updateSessionTeachers.mockReset().mockResolvedValue({})
     mockState.addTeacherToClassSchedule.mockReset().mockResolvedValue({})
@@ -261,6 +309,94 @@ describe('AdminSessionsPage calendar', () => {
     expect(wrapper.find('thead').text()).toContain('Thời gian')
     expect(wrapper.find('.calendar-grid').exists()).toBe(false)
     expect(previousMonth).toMatch(/^\d{4}-\d{2}-01$/)
+  })
+
+  it('previews an Excel month template and applies only after a conflict-free preview', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Nhập lịch Excel')
+    const input = getPageOrBody(wrapper, '#month-week-schedule-file')
+    Object.defineProperty(input.element, 'files', { configurable: true, value: [qaScheduleWorkbook(getBusinessDateKey(new Date()).slice(0, 7) + '-01')] })
+    await input.trigger('change')
+    await flushPromises()
+
+    expect(mockState.previewMonthWeekScheduleImport).toHaveBeenCalledWith(
+      `${getBusinessDateKey(new Date()).slice(0, 7)}-01`,
+      [expect.objectContaining({ class_id: 'qa-class-1', staff_ids: ['qa-teacher-1'], day_of_week: 1 })],
+    )
+    expect(pageAndBodyText(wrapper)).toContain('3')
+    const apply = [...wrapper.findAll('button'), ...new DOMWrapper(document.body).findAll('button')]
+      .find((button) => button.text().trim() === 'Áp dụng lịch tháng')
+    expect(apply).toBeTruthy()
+    expect(apply?.attributes('disabled')).toBeUndefined()
+    await apply!.trigger('click')
+    await flushPromises()
+    expect(mockState.importMonthWeekSchedule).toHaveBeenCalledTimes(1)
+    expect(mockState.toastSuccess).toHaveBeenCalled()
+  })
+
+  it('keeps the month import disabled when backend preview finds a conflict', async () => {
+    mockState.previewMonthWeekScheduleImport.mockResolvedValueOnce({
+      month_start: `${getBusinessDateKey(new Date()).slice(0, 7)}-01`,
+      create_count: 0,
+      update_count: 1,
+      cancel_future_count: 0,
+      preserve_history_count: 0,
+      blockers: [{ code: 'SCHEDULE_CONFLICT', date: getBusinessDateKey(new Date()), message: 'Lịch QA bị trùng.' }],
+      actions: [],
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Nhập lịch Excel')
+    const input = getPageOrBody(wrapper, '#month-week-schedule-file')
+    Object.defineProperty(input.element, 'files', { configurable: true, value: [qaScheduleWorkbook(`${getBusinessDateKey(new Date()).slice(0, 7)}-01`)] })
+    await input.trigger('change')
+    await flushPromises()
+
+    expect(pageAndBodyText(wrapper)).toContain('Lịch QA bị trùng.')
+    const apply = [...wrapper.findAll('button'), ...new DOMWrapper(document.body).findAll('button')]
+      .find((button) => button.text().trim() === 'Áp dụng lịch tháng')
+    expect(apply?.attributes('disabled')).toBeDefined()
+    expect(mockState.importMonthWeekSchedule).not.toHaveBeenCalled()
+  })
+
+  it('refreshes the preview when the server rejects a stale month import', async () => {
+    const monthStart = `${getBusinessDateKey(new Date()).slice(0, 7)}-01`
+    mockState.previewMonthWeekScheduleImport
+      .mockResolvedValueOnce({
+        month_start: monthStart,
+        create_count: 1,
+        update_count: 0,
+        cancel_future_count: 0,
+        preserve_history_count: 0,
+        blockers: [],
+        actions: [],
+      })
+      .mockResolvedValueOnce({
+        month_start: monthStart,
+        create_count: 0,
+        update_count: 1,
+        cancel_future_count: 0,
+        preserve_history_count: 0,
+        blockers: [{ code: 'TEACHER_SCHEDULE_CONFLICT', slot_id: '00000000-0000-4000-8000-000000000004', date: getBusinessDateKey(new Date()), message: 'Giáo viên QA đã có lịch trùng.' }],
+        actions: [],
+      })
+    mockState.importMonthWeekSchedule.mockRejectedValueOnce(new Error('IMPORT_BLOCKED'))
+    const wrapper = mountPage()
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Nhập lịch Excel')
+    const input = getPageOrBody(wrapper, '#month-week-schedule-file')
+    Object.defineProperty(input.element, 'files', { configurable: true, value: [qaScheduleWorkbook(monthStart)] })
+    await input.trigger('change')
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Áp dụng lịch tháng')
+    await flushPromises()
+
+    expect(mockState.previewMonthWeekScheduleImport).toHaveBeenCalledTimes(2)
+    expect(pageAndBodyText(wrapper)).toContain('Giáo viên QA đã có lịch trùng.')
+    const apply = [...wrapper.findAll('button'), ...new DOMWrapper(document.body).findAll('button')]
+      .find((button) => button.text().trim() === 'Áp dụng lịch tháng')
+    expect(apply?.attributes('disabled')).toBeDefined()
   })
 
   it('hides past and cancelled sessions by default and restores them in every view with history enabled', async () => {

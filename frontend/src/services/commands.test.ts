@@ -10,7 +10,10 @@ import {
   adminResetPasswordBulk,
   createManualSession,
   deleteSessionsForMonth,
+  getMonthWeekScheduleTemplate,
+  importMonthWeekSchedule,
   previewDeleteSessionsForMonth,
+  previewMonthWeekScheduleImport,
   previewMonthWeekTemplateReplacement,
   replaceMonthWithWeekTemplate,
   updateSessionOccurrence,
@@ -103,6 +106,30 @@ describe('session room scheduling commands', () => {
     expect(mockState.rpc).toHaveBeenNthCalledWith(2, 'admin_replace_month_with_week_template', {
       p_month_start: '2026-10-01',
       p_template: slots,
+    })
+  })
+
+  it('uses the month-scoped Excel template, preview, and import RPCs', async () => {
+    const slots = [{
+      slot_id: 'qa-slot-1',
+      day_of_week: 7,
+      class_id: 'qa-class-1',
+      start_time: '08:00',
+      end_time: '09:30',
+      room: 'QA-A1',
+      staff_ids: ['qa-teacher-1', 'qa-teacher-2'],
+    }]
+
+    await getMonthWeekScheduleTemplate('2026-10-01')
+    await previewMonthWeekScheduleImport('2026-10-01', slots)
+    await importMonthWeekSchedule('2026-10-01', slots)
+
+    expect(mockState.rpc).toHaveBeenNthCalledWith(1, 'admin_get_month_week_schedule_template', { p_month_start: '2026-10-01' })
+    expect(mockState.rpc).toHaveBeenNthCalledWith(2, 'admin_preview_month_week_schedule_import', {
+      p_month_start: '2026-10-01', p_template: slots,
+    })
+    expect(mockState.rpc).toHaveBeenNthCalledWith(3, 'admin_import_month_week_schedule', {
+      p_month_start: '2026-10-01', p_template: slots,
     })
   })
 })

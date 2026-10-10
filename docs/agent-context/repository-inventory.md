@@ -94,6 +94,7 @@
 | frontend/src/main.ts | Frontend / nền tảng và dịch vụ | TypeScript | Bootstrap Vue, Pinia, router, Bootstrap và style gốc. |
 | frontend/src/modules/admin/components/bulk-password-reset.types.ts | Frontend / Admin | TypeScript | Kiểu input/kết quả cho luồng reset mật khẩu hàng loạt. |
 | frontend/src/modules/admin/components/BulkPasswordResetModal.vue | Frontend / Admin | Vue SFC | Giao diện xác nhận và thu thập lựa chọn reset mật khẩu hàng loạt. |
+| frontend/src/modules/admin/components/StudentQuickEnrollmentModal.vue | Frontend / Admin | Vue SFC | Component luồng Admin: Student Quick Enrollment Modal. |
 | frontend/src/modules/admin/components/TeacherPicker.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho Teacher Picker trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/admin/components/TeacherPicker.vue | Frontend / Admin | Vue SFC | Chọn hoặc chỉnh danh sách teacher được giao cho lịch/buổi. |
 | frontend/src/modules/admin/pages/AdminSessionsPage.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho Admin Sessions Page trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
@@ -104,13 +105,18 @@
 | frontend/src/modules/admin/pages/ClassesPage.vue | Frontend / Admin | Vue SFC | Danh sách/quản lý lớp và cấu hình chính sách sĩ số. |
 | frontend/src/modules/admin/pages/StaffPage.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho Staff Page trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/admin/pages/StaffPage.vue | Frontend / Admin | Vue SFC | Quản lý hồ sơ và tài khoản giáo viên từ giao diện Admin. |
+| frontend/src/modules/admin/pages/StudentDetailPage.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho Student Detail Page trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/admin/pages/StudentDetailPage.vue | Frontend / Admin | Vue SFC | Hồ sơ Admin của học sinh, lịch sử học và quan hệ lớp. |
 | frontend/src/modules/admin/pages/StudentsPage.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho Students Page trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/admin/pages/StudentsPage.vue | Frontend / Admin | Vue SFC | Danh sách/quản lý học sinh và trạng thái tài khoản. |
+| frontend/src/modules/admin/utils/month-week-schedule-import.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho month week schedule import trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
+| frontend/src/modules/admin/utils/month-week-schedule-import.ts | Frontend / Admin | TypeScript | Tiện ích nghiệp vụ Admin: month week schedule import. |
 | frontend/src/modules/admin/utils/student-account-export.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho student account export trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/admin/utils/student-account-export.ts | Frontend / Admin | TypeScript | Định dạng dữ liệu export tài khoản học sinh; rà quyền và dữ liệu nhạy cảm trước khi thay đổi. |
 | frontend/src/modules/admin/utils/student-class-roster-export.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho student class roster export trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/admin/utils/student-class-roster-export.ts | Frontend / Admin | TypeScript | Định dạng roster lớp cho luồng export hiện có. |
+| frontend/src/modules/admin/utils/student-intake.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho student intake trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
+| frontend/src/modules/admin/utils/student-intake.ts | Frontend / Admin | TypeScript | Tiện ích nghiệp vụ Admin: student intake. |
 | frontend/src/modules/auth/pages/ChangePasswordPage.test.ts | Frontend / Đăng nhập | TypeScript | Test hồi quy cho Change Password Page trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/auth/pages/ChangePasswordPage.vue | Frontend / Đăng nhập | Vue SFC | Form hoàn tất đổi mật khẩu bắt buộc. |
 | frontend/src/modules/auth/pages/LoginPage.test.ts | Frontend / Đăng nhập | TypeScript | Test hồi quy cho Login Page trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
@@ -170,6 +176,8 @@
 | supabase/functions/_shared/response.ts | Supabase / Edge Functions | TypeScript | Helper Edge Function: chuẩn hóa response thành công/lỗi và trace id. |
 | supabase/functions/admin-account-status/index.ts | Supabase / Edge Functions | TypeScript | HTTP entrypoint cho route: đổi trạng thái tài khoản theo quyền Admin. |
 | supabase/functions/admin-create-user/index.ts | Supabase / Edge Functions | TypeScript | HTTP entrypoint cho route: tạo tài khoản và hồ sơ theo role được phép. |
+| supabase/functions/admin-create-user/student-intake-handler.test.ts | Supabase / Edge Functions | TypeScript | Test hồi quy cho student intake handler. |
+| supabase/functions/admin-create-user/student-intake-handler.ts | Supabase / Edge Functions | TypeScript | File TypeScript thuộc Supabase / Edge Functions: student intake handler. |
 | supabase/functions/admin-export-student-logins/config.toml | Supabase / Edge Functions | TOML/config | Cấu hình JWT/deploy riêng cho route admin-export-student-logins. |
 | supabase/functions/admin-export-student-logins/handler.test.ts | Supabase / Edge Functions | TypeScript | Kiểm thử handler của route admin-export-student-logins với phụ thuộc giả lập. |
 | supabase/functions/admin-export-student-logins/handler.ts | Supabase / Edge Functions | TypeScript | Logic có thể kiểm thử tách biệt cho route: tạo export thông tin đăng nhập học sinh; xử lý dữ liệu nhạy cảm. |
@@ -258,12 +266,14 @@
 | supabase/migrations/0055_session_management_and_rosters.sql | Supabase / migrations | SQL | Cho Admin sửa roster buổi tương lai theo membership hiệu lực, bảo toàn dữ liệu học tập/tài chính, xóa buổi trống và chặn tái sinh buổi lặp đã xóa. |
 | supabase/migrations/0056_historical_session_edits.sql | Supabase / migrations | SQL | Cho Admin hiệu chỉnh buổi chưa hủy: lịch, giáo viên, roster, nội dung và attendance; kiểm tra quyền/xung đột, ghi audit và giữ nguyên giờ thực tế cùng snapshot tài chính. |
 | supabase/migrations/0057_delete_month_where_guard.sql | Supabase / migrations | SQL | Sửa RPC xóa tháng để các lệnh xóa mẫu lịch có điều kiện khóa chính, tương thích với cơ chế production chặn DELETE không có WHERE. |
+| supabase/migrations/0058_month_week_schedule_excel_import.sql | Supabase / migrations | SQL | Migration schema; đọc toàn bộ thay đổi và migration sau này có thể thay thế object. |
 | supabase/seed.sql | Supabase / cấu hình và seed | SQL | Seed cho database local; không dùng làm căn cứ dữ liệu production. |
 | supabase/tests/admin_monthly_session_planning.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra admin monthly session planning bằng fixture database cô lập. |
 | supabase/tests/backdated_session_creation.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra backdated session creation bằng fixture database cô lập. |
 | supabase/tests/class_teacher_limit.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra class teacher limit bằng fixture database cô lập. |
 | supabase/tests/continuous_learning_rls.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra continuous learning rls bằng fixture database cô lập. |
 | supabase/tests/historical_session_edits.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra historical session edits bằng fixture database cô lập. |
+| supabase/tests/month_week_schedule_excel_import.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra month week schedule excel import bằng fixture database cô lập. |
 | supabase/tests/month_week_template_replacement.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra month week template replacement bằng fixture database cô lập. |
 | supabase/tests/parallel_session_rooms.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra parallel session rooms bằng fixture database cô lập. |
 | supabase/tests/schedule_reset.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra schedule reset bằng fixture database cô lập. |
@@ -271,4 +281,4 @@
 | supabase/tests/student_future_session_roster_sync.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra student future session roster sync bằng fixture database cô lập. |
 | supabase/tests/timesheet_workflow.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra timesheet workflow bằng fixture database cô lập. |
 
-Tổng: 264 đường dẫn có trong inventory.
+Tổng: 274 đường dẫn có trong inventory.

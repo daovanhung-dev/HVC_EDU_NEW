@@ -22,7 +22,7 @@ flowchart LR
 |---|---|---|
 | Frontend | Vue 3.5, TypeScript 5.9, Vue Router 4, Pinia 3, Bootstrap 5, Vite 7 | SPA theo vai trò; router dùng hash history để chạy trên Pages. |
 | Supabase client | `@supabase/supabase-js` 2.57 | Auth và Data API; client dùng publishable key. |
-| File export | SheetJS `xlsx` 0.20.3 | Tạo một số export học sinh/roster; xử lý cẩn thận vì file có thể chứa dữ liệu cá nhân. |
+| File export/import | SheetJS `xlsx` 0.20.3 | Tạo workbook xuất roster và biểu mẫu nhập học/lịch tháng; xử lý file ở frontend theo giới hạn và validate của từng luồng. |
 | Backend | Supabase PostgreSQL, Auth, RLS, PL/pgSQL, RPC | Lưu dữ liệu và thực thi quyền/ràng buộc nghiệp vụ. |
 | Serverless | Supabase Edge Functions trên Deno | Xác thực caller, thao tác đặc quyền, tích hợp Gemini ở các route AI và gọi RPC service-only. |
 | Lịch nền | PostgreSQL `pg_cron`/Supabase Cron | Sinh buổi lặp và đồng bộ roster trong backend. |
@@ -66,7 +66,7 @@ Manifest là nguồn phiên bản dependency chính xác. Môi trường dự á
 
 ## Supabase: database và Edge Functions
 
-- `supabase/migrations/` là schema, enum, constraints, functions/RPC, grants, RLS, index và thay đổi theo thứ tự; migration mới nhất trong repo hiện là `0056`.
+- `supabase/migrations/` là schema, enum, constraints, functions/RPC, grants, RLS, index và thay đổi theo thứ tự; migration mới nhất trong repo hiện là `0058`.
 - `supabase/functions/<name>/index.ts` là HTTP entrypoint; một số route tách `handler.ts` để kiểm thử logic. `_shared/` chứa auth, CORS, password-reset và response/error.
 - Các route hiện có bao phủ account status/create/reset, bootstrap/login, cập nhật trạng thái buổi và learning, AI học sinh, tối ưu nhận xét giáo viên, và submit/review chấm công. Danh sách từng file nằm trong inventory.
 - `supabase/tests/` chứa kiểm thử SQL cho lập buổi, conflict phòng, giới hạn teacher, learning/RLS, roster và timesheet. Đọc test liên quan cùng migration tạo/sửa object.

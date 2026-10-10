@@ -307,12 +307,14 @@ export async function deleteSessionsForMonth(monthStart: string): Promise<Delete
 }
 
 export interface MonthWeekTemplateSlot {
+  slot_id?: string
   day_of_week: number
   class_id: string
   start_time: string
   end_time: string
   room: string | null
   staff_ids: string[]
+  source_schedule_id?: string | null
 }
 
 export interface MonthWeekTemplatePreview {
@@ -345,6 +347,62 @@ export interface MonthWeekTemplateReplacementResult {
   deleted_timesheets: number
   deleted_payroll_items: number
   created_sessions: number
+}
+
+export interface MonthWeekScheduleImportBlocker {
+  slot_id?: string
+  date?: string
+  code: string
+  message: string
+}
+
+export interface MonthWeekScheduleImportPreview {
+  month_start: string
+  create_count: number
+  update_count: number
+  cancel_future_count: number
+  preserve_history_count: number
+  blockers: MonthWeekScheduleImportBlocker[]
+  actions: Array<Record<string, unknown>>
+}
+
+export interface MonthWeekScheduleImportResult {
+  month_start: string
+  created_sessions: number
+  updated_sessions: number
+  cancelled_sessions: number
+  preserved_sessions: number
+  slot_count: number
+}
+
+export async function getMonthWeekScheduleTemplate(monthStart: string): Promise<{ month_start: string; slots: MonthWeekTemplateSlot[] } | null> {
+  const { data, error } = await supabase.rpc('admin_get_month_week_schedule_template', { p_month_start: monthStart })
+  if (error) throw error
+  return data as { month_start: string; slots: MonthWeekTemplateSlot[] } | null
+}
+
+export async function previewMonthWeekScheduleImport(
+  monthStart: string,
+  slots: Array<MonthWeekTemplateSlot & { slot_id: string }>,
+): Promise<MonthWeekScheduleImportPreview> {
+  const { data, error } = await supabase.rpc('admin_preview_month_week_schedule_import', {
+    p_month_start: monthStart,
+    p_template: slots,
+  })
+  if (error) throw error
+  return data as MonthWeekScheduleImportPreview
+}
+
+export async function importMonthWeekSchedule(
+  monthStart: string,
+  slots: Array<MonthWeekTemplateSlot & { slot_id: string }>,
+): Promise<MonthWeekScheduleImportResult> {
+  const { data, error } = await supabase.rpc('admin_import_month_week_schedule', {
+    p_month_start: monthStart,
+    p_template: slots,
+  })
+  if (error) throw error
+  return data as MonthWeekScheduleImportResult
 }
 
 export async function previewMonthWeekTemplateReplacement(
