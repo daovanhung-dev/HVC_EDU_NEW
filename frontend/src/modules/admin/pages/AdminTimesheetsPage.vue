@@ -25,6 +25,7 @@ const errorMessage = ref('')
 
 function statusLabel(status: TimesheetRow['status']) {
   if (status === 'APPROVED') return 'Đã duyệt'
+  if (status === 'REVOKED') return 'Đã thu hồi công'
   if (status === 'REJECTED') return 'Bị từ chối'
   return 'Chờ duyệt'
 }
@@ -80,8 +81,8 @@ onMounted(load)
             <td class="fw-semibold">{{ row.sessions?.classes?.name || 'Lớp học' }}</td>
             <td>{{ row.staff?.full_name || 'Giáo viên' }}</td>
             <td>{{ row.sessions ? `${formatDateTime(row.sessions.scheduled_start_at)} – ${formatDateTime(row.sessions.scheduled_end_at)}` : '—' }}</td>
-            <td class="text-break">{{ row.notes || '—' }}<div v-if="row.rejection_reason" class="small text-danger">Lý do từ chối: {{ row.rejection_reason }}</div></td>
-            <td><span class="badge" :class="row.status === 'APPROVED' ? 'text-bg-success' : row.status === 'REJECTED' ? 'text-bg-danger' : 'text-bg-warning'">{{ statusLabel(row.status) }}</span></td>
+            <td class="text-break">{{ row.notes || '—' }}<div v-if="row.rejection_reason" class="small text-danger">Lý do từ chối: {{ row.rejection_reason }}</div><div v-if="row.revoked_reason" class="small text-secondary">Lý do thu hồi: {{ row.revoked_reason }}</div></td>
+            <td><span class="badge" :class="row.status === 'APPROVED' ? 'text-bg-success' : row.status === 'REJECTED' ? 'text-bg-danger' : row.status === 'REVOKED' ? 'text-bg-secondary' : 'text-bg-warning'">{{ statusLabel(row.status) }}</span></td>
             <td class="timesheet-review-actions">
               <template v-if="row.status === 'PENDING'">
                 <button class="btn btn-success btn-sm me-2" :disabled="reviewingId === row.id" @click="askApprove(row)">Duyệt</button>

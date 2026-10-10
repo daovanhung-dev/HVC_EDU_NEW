@@ -14,7 +14,7 @@
 
 - RLS và grants giới hạn truy vấn Data API; PostgreSQL constraints/triggers/RPC kiểm tra trạng thái và quan hệ; Edge Function xác thực caller/role/input trước thao tác server-side.
 - Route guard, client-side role, id gửi từ browser và nút ẩn chỉ là UI. Không dùng chúng để cấp quyền dữ liệu.
-- Teacher chỉ cập nhật session khi là teacher đang hoạt động được phân công; `update_session_learning` chỉ cho session `IN_PROGRESS`. `complete_session` yêu cầu attendance record cho toàn roster. Từ migration 0056, Admin có thể hiệu chỉnh lịch, giáo viên, roster và kết quả học tập cho session chưa hủy; lịch của buổi `IN_PROGRESS`/`COMPLETED` phải còn trong quá khứ, còn `SCHEDULED` quá hạn có thể được dời tới tương lai. RPC kiểm tra `ACADEMIC_MANAGE` hoặc `CLASS_MANAGE` theo nhóm thao tác, kiểm tra membership hiệu lực và xung đột, ghi audit và bảo toàn giờ thực tế, timesheet, financial snapshot cùng dòng roster có lịch sử.
+- Teacher chỉ cập nhật session khi là teacher đang hoạt động được phân công; `update_session_learning` chỉ cho session `IN_PROGRESS`. `complete_session` yêu cầu attendance record cho toàn roster. Từ migration 0056, Admin có thể hiệu chỉnh lịch, giáo viên, roster và kết quả học tập cho session chưa hủy; migration 0059 chuyển việc ghi attendance sang RPC chốt mới, chỉ sau giờ kết thúc và khi session không còn `IN_PROGRESS`, cùng quyết định công cho toàn bộ teacher. RPC kiểm tra `ACADEMIC_MANAGE` + `TIMESHEET_APPROVE`, khóa roster/phân công sau chốt và ghi audit trong cùng transaction. Lịch sửa vẫn theo các rule của migration 0056, đồng thời bảo toàn giờ thực tế, timesheet, financial snapshot và roster có lịch sử.
 - RPC Teacher `start_session`, `complete_session` và `update_session_learning` được gọi qua Edge Function với `EXECUTE` chỉ cấp service role; handler xác thực caller trước khi dùng quyền server. RPC quản trị lịch/buổi được gọi bằng authenticated client nhưng tự kiểm tra `ACADEMIC_MANAGE`/`CLASS_MANAGE` trong PostgreSQL.
 - Chấm công đọc theo RLS; submit/review qua Edge Function/RPC. Không cấp ghi trực tiếp bảng timesheet cho authenticated chỉ để thuận tiện UI.
 - Học sinh bị buộc đổi mật khẩu có thể đọc profile để vào form đổi nhưng không đọc learning data cho đến khi hoàn tất. Kiểm tra cả status active và quan hệ sở hữu/roster khi thay RLS.
@@ -24,13 +24,13 @@
 
 Schema và RPC dùng các mức riêng: BTVN nullable 0–10, understanding nullable 1–5, attitude nullable 1–5; `late_minutes` nullable nhưng không âm; feedback count nullable và không âm. Attendance status phải có khi lưu; trạng thái `LATE` có thể kèm số phút, còn lý do vắng là text tùy chọn cho `ABSENT`/`EXCUSED` ở frontend. Không có điểm tổng trong schema/code hiện hành.
 
-Các nguồn xác minh: `frontend/src/modules/staff/attendance.ts`, `frontend/src/modules/staff/components/StaffAttendanceModal.vue`, `frontend/src/modules/student/pages/StudentPage.vue`, migrations 0009/0034/0039/0047 và test learning liên quan. Form client không thay validation database.
+Các nguồn xác minh: `frontend/src/modules/staff/attendance.ts`, `frontend/src/modules/staff/components/StaffAttendanceModal.vue`, `frontend/src/modules/student/pages/StudentPage.vue`, migrations 0009/0034/0039/0047/0059 và test learning liên quan. Form client không thay validation database.
 
 Import assessment có thể giữ hàng nguồn kể cả khi chưa có attendance status trong `assessment_snapshot`; không tự chuyển mọi giá trị raw sang điểm chuẩn hóa. Migration 0035 là migration dữ liệu attendance lịch sử: không chép row-level names/comments vào tài liệu hoặc fixture, và không dùng để tạo dữ liệu QA.
 
 ## Lịch sử migration trong repo
 
-Migration phải được đọc theo thứ tự và kiểm tra migration sau có `CREATE OR REPLACE`, revoke/grant hoặc thay đổi cùng object. Hiện repo có `0001–0058`:
+Migration phải được đọc theo thứ tự và kiểm tra migration sau có `CREATE OR REPLACE`, revoke/grant hoặc thay đổi cùng object. Hiện repo có `0001–0059`:
 
 - `0001–0006`: extension, enum, Auth/profile, RBAC, hồ sơ student/staff và danh mục học thuật/lớp.
 - `0007–0019`: mô hình ClassMonth/session/attendance/timesheet và các bảng tài chính/notification/audit/function/RLS/index/seed của giai đoạn đầu. Phần tháng và tài chính hiện là lịch sử hoặc bị khóa khỏi app.
@@ -47,6 +47,7 @@ Migration phải được đọc theo thứ tự và kiểm tra migration sau c�
 - `0056`: cho phép Admin hiệu chỉnh lịch/giáo viên/roster và nội dung/điểm danh của buổi chưa hủy; giữ trạng thái, giờ thực tế và dữ liệu chấm công/tài chính, kiểm tra quyền, xung đột và audit trước/sau.
 - `0057`: giữ nguyên RPC xóa tháng nhưng thêm điều kiện theo khóa chính vào lệnh dọn mẫu lịch, đáp ứng cơ chế production từ chối `DELETE` không có `WHERE`.
 - `0058`: thêm mẫu lịch Excel riêng theo tháng và RPC preview/import có khóa đồng bộ, quyền `CLASS_MANAGE`, kiểm tra conflict toàn lô, audit, tạo buổi từ membership hiệu lực và giữ/hủy an toàn buổi hiện có.
+- `0059`: thêm quyết định tính công theo phân công và trạng thái `REVOKED`; RPC Admin yêu cầu `ACADEMIC_MANAGE` + `TIMESHEET_APPROVE`, giờ kết thúc đã qua, đầy đủ roster/trạng thái/giáo viên và lưu completion, attendance, timesheet, audit trong một giao dịch. RPC submit giữ nguyên quyền service role nhưng chặn giáo viên có quyết định `false`; RPC sửa learning cũ chỉ còn cập nhật metadata. Roster/phân công được khóa sau lần Admin chốt để các tập đã xác nhận không lệch nhau.
 
 Không sửa, xóa hoặc đổi số migration đã có thể chạy ở môi trường khác. Thay đổi schema bằng migration tiếp theo. Migration production cần yêu cầu rõ và kiểm tra target/backup/migration history trực tiếp; local test không cần áp vào production.
 

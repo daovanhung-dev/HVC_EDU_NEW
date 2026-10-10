@@ -33,7 +33,7 @@
 
 ## Trạng thái buổi và kết quả học tập
 
-Trạng thái: `SCHEDULED` → `IN_PROGRESS` → `COMPLETED`; buổi tương lai có thể thành `CANCELLED`. Teacher được phân công bắt đầu buổi, cập nhật nội dung/attendance trong lúc `IN_PROGRESS`, rồi hoàn tất. Sau hoàn tất, learning record và video chỉ đọc với Teacher. Admin có thể hiệu chỉnh ghi chú, video, điểm danh và đánh giá trên buổi chưa hủy đã diễn ra; `ACADEMIC_MANAGE` được kiểm tra trong RPC và mỗi hiệu chỉnh được audit. RPC Teacher tiếp tục kiểm tra người gọi là teacher đang hoạt động có assignment.
+Trạng thái: `SCHEDULED` → `IN_PROGRESS` → `COMPLETED`; buổi tương lai có thể thành `CANCELLED`. Teacher được phân công bắt đầu buổi, cập nhật nội dung/attendance trong lúc `IN_PROGRESS`, rồi hoàn tất. Sau hoàn tất, learning record và video chỉ đọc với Teacher. Admin có thể hiệu chỉnh ghi chú và video trên buổi chưa hủy đã bắt đầu. Để Admin tự chốt attendance và công, giờ kết thúc theo lịch phải qua và trạng thái không còn `IN_PROGRESS`; RPC kiểm tra đủ roster, trạng thái attendance từng học sinh và quyết định Tính công/Không tính công cho từng teacher, rồi lưu attendance, hoàn tất buổi, công và audit nguyên tử. `ACADEMIC_MANAGE` cùng `TIMESHEET_APPROVE` được kiểm tra ở database. Khi đã chốt, roster và phân công teacher bị khóa để bảo toàn bộ attendance/decision; Admin vẫn sửa được lựa chọn công và các lần đổi có audit.
 
 Hoàn tất yêu cầu mỗi học sinh trong roster có một bản ghi attendance với trạng thái. Không đòi mọi điểm hoặc nhận xét phải có giá trị.
 
@@ -66,7 +66,9 @@ Học sinh chỉ xem learning result của mình theo chính sách dữ liệu; 
 ## Chấm công theo buổi
 
 - Teacher được phân công gửi yêu cầu sau khi session `COMPLETED`; mỗi teacher/session có tối đa một yêu cầu chưa bị từ chối.
+- `session_staff.timesheet_eligible = NULL` giữ luồng gửi/duyệt hiện tại; `false` chặn gửi yêu cầu.
 - Admin duyệt hoặc từ chối; từ chối phải có lý do. Teacher chỉ xem yêu cầu của mình và có thể gửi lại sau khi bị từ chối.
+- Admin có thể chốt attendance sau giờ kết thúc và chọn công theo từng teacher trong cùng một lần lưu: `true` tạo/đưa timesheet sang `APPROVED`; `false` không tạo công và nếu đã `APPROVED` thì chuyển sang `REVOKED` kèm lý do/người/thời điểm. Admin có thể đổi lại quyết định; event audit giữ lịch sử dù metadata thu hồi hiện tại được xóa khi công được khôi phục.
 - Đây là workflow xác nhận công dạy theo buổi, không ghi giờ vào/ra, không tính payroll và không tạo giao dịch tài chính.
 
 ## Ngoài phạm vi

@@ -20,6 +20,7 @@ const mockState = vi.hoisted(() => ({
   updateSessionOccurrence: vi.fn(),
   correctSessionSchedule: vi.fn(),
   correctSessionLearning: vi.fn(),
+  recordAdminSessionAttendance: vi.fn(),
   createManualSession: vi.fn(),
   previewMonthWeekTemplateReplacement: vi.fn(),
   replaceMonthWithWeekTemplate: vi.fn(),
@@ -54,6 +55,7 @@ vi.mock('@/services/commands', () => ({
   updateSessionOccurrence: mockState.updateSessionOccurrence,
   correctSessionSchedule: mockState.correctSessionSchedule,
   correctSessionLearning: mockState.correctSessionLearning,
+  recordAdminSessionAttendance: mockState.recordAdminSessionAttendance,
   createManualSession: mockState.createManualSession,
   previewMonthWeekTemplateReplacement: mockState.previewMonthWeekTemplateReplacement,
   replaceMonthWithWeekTemplate: mockState.replaceMonthWithWeekTemplate,
@@ -198,6 +200,7 @@ describe('AdminSessionsPage calendar', () => {
     mockState.updateSessionOccurrence.mockReset().mockResolvedValue(undefined)
     mockState.correctSessionSchedule.mockReset().mockResolvedValue(undefined)
     mockState.correctSessionLearning.mockReset().mockResolvedValue({ session_id: 'qa-session-1', students_updated: 1 })
+    mockState.recordAdminSessionAttendance.mockReset().mockResolvedValue({ session_id: 'qa-session-1', status: 'COMPLETED', students_updated: 1, timesheets_approved: 1, teachers_not_eligible: 0 })
     mockState.createManualSession.mockReset().mockResolvedValue({ session_id: 'qa-new-session' })
     mockState.previewMonthWeekTemplateReplacement.mockReset().mockResolvedValue({
       month_start: `${getBusinessDateKey(new Date()).slice(0, 7)}-01`,
@@ -594,8 +597,14 @@ describe('AdminSessionsPage calendar', () => {
     'allows Admin to edit a past %s session while preserving its status',
     async (status) => {
       const pastDate = addCalendarDays(getBusinessDateKey(new Date()), -1)
-      const session = { ...makeSession(`qa-session-past-${status.toLowerCase()}`, 'Lớp Lịch sử QA', '10:00', '12:00', pastDate), status }
+      const session = { ...makeSession(`qa-session-past-${status.toLowerCase()}`, 'Lớp Lịch sử QA', '10:00', '12:00', pastDate, ['qa-teacher-1']), status }
       mockState.getMySessions.mockResolvedValue([session])
+      mockState.getSessionStudents.mockResolvedValue([{
+        student_id: 'qa-student-1',
+        students: { full_name: 'QA Học sinh Một', student_code: 'QA-S-001' },
+        assessment_snapshot: {},
+        student_attendances: [{ status: 'PRESENT' }],
+      }])
       const wrapper = mountPage()
       await flushPromises()
 
@@ -611,6 +620,12 @@ describe('AdminSessionsPage calendar', () => {
       expect(pageAndBodyText(wrapper)).toContain('Sửa nội dung, điểm danh và đánh giá')
       expect(detail.text()).toContain(status)
       expect(pageAndBodyText(wrapper)).not.toContain('Xóa buổi học')
+      if (status === 'IN_PROGRESS') {
+        await clickButtonWithText(wrapper, 'Sửa nội dung, điểm danh và đánh giá')
+        expect((getPageOrBody(wrapper, '#admin-attendance-status-qa-student-1').element as HTMLSelectElement).disabled).toBe(true)
+        expect((getPageOrBody(wrapper, '#admin-timesheet-decision-qa-teacher-1').element as HTMLSelectElement).disabled).toBe(true)
+        expect(pageAndBodyText(wrapper)).toContain('Buổi học đang diễn ra nên Admin chưa thể chốt điểm danh và chấm công.')
+      }
     },
   )
 
@@ -651,7 +666,7 @@ describe('AdminSessionsPage calendar', () => {
 
   it('saves historical lesson content and all attendance and assessment fields', async () => {
     const pastDate = addCalendarDays(getBusinessDateKey(new Date()), -1)
-    const session = { ...makeSession('qa-session-learning-edit', 'Lớp Kết quả QA', '10:00', '12:00', pastDate), status: 'COMPLETED' as const }
+    const session = { ...makeSession('qa-session-learning-edit', 'Lớp Kết quả QA', '10:00', '12:00', pastDate, ['qa-teacher-1']), status: 'COMPLETED' as const }
     const sourceRow = {
       student_id: 'qa-student-1',
       students: { full_name: 'QA Học sinh Một', student_code: 'QA-ST-001' },
@@ -683,10 +698,11 @@ describe('AdminSessionsPage calendar', () => {
     await getPageOrBody(wrapper, '#admin-feedback-count-qa-student-1').setValue('2')
     await getPageOrBody(wrapper, '#admin-feedback-raw-qa-student-1').setValue('QA tích cực')
     await getPageOrBody(wrapper, '#admin-attendance-comment-qa-student-1').setValue('QA nhận xét')
-    await clickButtonWithText(wrapper, 'Lưu nội dung và kết quả')
+    await getPageOrBody(wrapper, '#admin-timesheet-decision-qa-teacher-1').setValue('true')
+    await clickButtonWithText(wrapper, 'Chốt điểm danh và chấm công')
     await flushPromises()
 
-    expect(mockState.correctSessionLearning).toHaveBeenCalledWith({
+    expect(mockState.recordAdminSessionAttendance).toHaveBeenCalledWith({
       session_id: session.id,
       session_note: 'QA ghi chú đã sửa',
       lesson_youtube_url: 'https://youtu.be/dQw4w9WgXcQ',
@@ -695,8 +711,10 @@ describe('AdminSessionsPage calendar', () => {
         homework_score: 8.5, homework_note: 'QA BTVN', understanding_score: 4, attitude_score: 5,
         positive_feedback_count: 2, positive_feedback_raw: 'QA tích cực', comment: 'QA nhận xét',
       }],
+      teacher_decisions: [{ staff_id: 'qa-teacher-1', eligible: true }],
     })
-    expect(mockState.toastSuccess).toHaveBeenCalledWith('Đã lưu nội dung buổi học, điểm danh và đánh giá.')
+    expect(mockState.correctSessionLearning).not.toHaveBeenCalled()
+    expect(mockState.toastSuccess).toHaveBeenCalledWith('Đã chốt điểm danh và quyết định chấm công cho buổi học.')
   })
 
   it('preserves unsaved learning edits when the schedule group is saved', async () => {
@@ -735,7 +753,7 @@ describe('AdminSessionsPage calendar', () => {
     expect(mockState.getSessionStudents).toHaveBeenCalledOnce()
     expect((getPageOrBody(wrapper, '#admin-session-note').element as HTMLTextAreaElement).value).toBe('QA ghi chú chưa lưu')
     expect((getPageOrBody(wrapper, '#admin-homework-qa-student-independent-save').element as HTMLInputElement).value).toBe('8')
-    const saveLearningButton = findAllPageOrBody(wrapper, 'button').find((button) => button.text().trim() === 'Lưu nội dung và kết quả')
+    const saveLearningButton = findAllPageOrBody(wrapper, 'button').find((button) => button.text().trim() === 'Chốt điểm danh và chấm công')
     expect(saveLearningButton?.attributes('disabled')).toBeUndefined()
   })
 
@@ -804,7 +822,7 @@ describe('AdminSessionsPage calendar', () => {
 
   it('requires an attendance status and retains edits after a failed historical correction', async () => {
     const pastDate = addCalendarDays(getBusinessDateKey(new Date()), -1)
-    const session = { ...makeSession('qa-session-learning-error', 'Lớp Lỗi QA', '10:00', '12:00', pastDate), status: 'COMPLETED' as const }
+    const session = { ...makeSession('qa-session-learning-error', 'Lớp Lỗi QA', '10:00', '12:00', pastDate, ['qa-teacher-1']), status: 'COMPLETED' as const }
     const sourceRow = {
       student_id: 'qa-student-2',
       students: { full_name: 'QA Học sinh Hai', student_code: 'QA-ST-002' },
@@ -821,13 +839,14 @@ describe('AdminSessionsPage calendar', () => {
     await clickButtonWithText(wrapper, 'Sửa nội dung, điểm danh và đánh giá')
     const homework = getPageOrBody(wrapper, '#admin-homework-qa-student-2')
     await homework.setValue('8')
-    await clickButtonWithText(wrapper, 'Lưu nội dung và kết quả')
+    await getPageOrBody(wrapper, '#admin-timesheet-decision-qa-teacher-1').setValue('true')
+    await clickButtonWithText(wrapper, 'Chốt điểm danh và chấm công')
     expect(pageAndBodyText(wrapper)).toContain('Chọn trạng thái điểm danh.')
-    expect(mockState.correctSessionLearning).not.toHaveBeenCalled()
+    expect(mockState.recordAdminSessionAttendance).not.toHaveBeenCalled()
 
     await getPageOrBody(wrapper, '#admin-attendance-status-qa-student-2').setValue('PRESENT')
-    mockState.correctSessionLearning.mockRejectedValueOnce(new Error('QA correction failure'))
-    await clickButtonWithText(wrapper, 'Lưu nội dung và kết quả')
+    mockState.recordAdminSessionAttendance.mockRejectedValueOnce(new Error('QA correction failure'))
+    await clickButtonWithText(wrapper, 'Chốt điểm danh và chấm công')
     await flushPromises()
     expect((getPageOrBody(wrapper, '#admin-homework-qa-student-2').element as HTMLInputElement).value).toBe('8')
     expect(pageAndBodyText(wrapper)).toContain('Không thể lưu nội dung buổi học, điểm danh và đánh giá.')

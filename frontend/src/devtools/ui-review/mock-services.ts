@@ -350,6 +350,34 @@ export async function correctSessionLearning(input: any) {
   }
   return { session_id: input.session_id, students_updated: (input.students || []).length }
 }
+export async function recordAdminSessionAttendance(input: any) {
+  await query(true)
+  const session = sessions.find((item) => item.id === input.session_id)
+  if (!session) throw new Error('SESSION_NOT_FOUND')
+  session.status = 'COMPLETED'
+  session.session_note = input.session_note
+  session.lesson_youtube_url = input.lesson_youtube_url
+  for (const change of input.students || []) {
+    const existing = attendance.find((item) => item.session_id === input.session_id && item.student_id === change.student_id)
+    if (existing) Object.assign(existing, change)
+    else attendance.push({ id: `qa-attendance-${Date.now()}-${change.student_id}`, session_id: input.session_id, ...change })
+  }
+  for (const decision of input.teacher_decisions || []) {
+    const assignment = session.session_staff?.find((item: any) => item.staff_id === decision.staff_id)
+    if (!assignment) continue
+    assignment.timesheet_eligible = decision.eligible
+    const row = timesheets.find((item) => item.session_id === input.session_id && item.staff_id === decision.staff_id)
+    if (decision.eligible) {
+      if (row) Object.assign(row, { status: 'APPROVED', approved_at: new Date().toISOString(), approved_by: 'qa-admin', rejection_reason: null, revoked_at: null, revoked_by: null, revoked_reason: null })
+      else timesheets.unshift({ id: `qa-timesheet-${Date.now()}`, session_id: input.session_id, staff_id: decision.staff_id, status: 'APPROVED', submitted_at: new Date().toISOString(), approved_at: new Date().toISOString(), approved_by: 'qa-admin', rejection_reason: null, revoked_at: null, revoked_by: null, revoked_reason: null, notes: null, sessions: { ...session, classes: session.classes }, staff: assignment.staff })
+    } else if (row?.status === 'APPROVED') {
+      Object.assign(row, { status: 'REVOKED', revoked_at: new Date().toISOString(), revoked_by: 'qa-admin', revoked_reason: 'Admin xác nhận buổi học không tính công.', rejection_reason: null })
+    } else if (row?.status === 'PENDING') {
+      Object.assign(row, { status: 'REJECTED', rejection_reason: 'Admin xác nhận buổi học không tính công.' })
+    }
+  }
+  return { session_id: input.session_id, status: 'COMPLETED', students_updated: (input.students || []).length }
+}
 export async function updateSessionStudentRoster(input: any) {
   await query(true)
   const session = sessions.find((row) => row.id === input.session_id)

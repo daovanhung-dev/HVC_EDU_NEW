@@ -14,7 +14,7 @@ export interface Profile {
 
 export type SessionStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
 export type AttendanceStatus = 'PRESENT' | 'LATE' | 'ABSENT' | 'EXCUSED'
-export type TimesheetStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
+export type TimesheetStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'REVOKED'
 
 export interface ClassDetailRow {
   id: string
@@ -81,6 +81,7 @@ export interface StudentCurrentClass extends StudentCurrentClassSummary {
 export interface SessionStaffRow {
   staff_id: string
   assignment_role?: 'TEACHER'
+  timesheet_eligible?: boolean | null
   staff?: { id: string; staff_code?: string | null; full_name: string } | null
 }
 
@@ -143,6 +144,9 @@ export interface TimesheetRow {
   approved_at: string | null
   approved_by: string | null
   rejection_reason: string | null
+  revoked_at?: string | null
+  revoked_by?: string | null
+  revoked_reason?: string | null
   notes: string | null
   sessions?: {
     id: string

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { submitTimesheet } from '@/services/commands'
-import { getMySessions, getMyTimesheets } from '@/services/data-queries'
+import { getMySessions, getMyStaff, getMyTimesheets } from '@/services/data-queries'
 import type { SessionRow, TimesheetRow } from '@/shared/types/domain'
 import { formatDateTime } from '@/shared/utils/format'
 import { userErrorMessage } from '@/shared/utils/errors'
@@ -10,6 +10,7 @@ import AppPageHeader from '@/app/components/AppPageHeader.vue'
 import AppState from '@/app/components/AppState.vue'
 
 const sessions = ref<SessionRow[]>([])
+const myStaffId = ref('')
 const toast = useToastStore()
 const timesheets = ref<TimesheetRow[]>([])
 const notes = ref<Record<string, string>>({})
@@ -17,13 +18,16 @@ const loading = ref(false)
 const submittingId = ref('')
 const errorMessage = ref('')
 
-const completedSessions = computed(() => sessions.value.filter((session) => session.status === 'COMPLETED'))
+const completedSessions = computed(() => sessions.value.filter((session) => session.status === 'COMPLETED'
+  && (!myStaffId.value || Boolean(teacherAssignment(session)))))
 const timesheetBySession = computed(() => new Map(timesheets.value.map((row) => [row.session_id, row])))
 const timesheetCounts = computed(() => {
-  const counts = { toSubmit: 0, pending: 0, rejected: 0, approved: 0 }
+  const counts = { toSubmit: 0, pending: 0, rejected: 0, approved: 0, notEligible: 0, revoked: 0 }
   for (const session of completedSessions.value) {
     const row = timesheetBySession.value.get(session.id)
-    if (!row) counts.toSubmit += 1
+    if (row?.status === 'REVOKED') counts.revoked += 1
+    else if (isNotEligible(session)) counts.notEligible += 1
+    else if (!row) counts.toSubmit += 1
     else if (row.status === 'PENDING') counts.pending += 1
     else if (row.status === 'REJECTED') counts.rejected += 1
     else counts.approved += 1
@@ -31,8 +35,38 @@ const timesheetCounts = computed(() => {
   return counts
 })
 
+function teacherAssignment(session: SessionRow) {
+  if (!myStaffId.value) return undefined
+  return session.session_staff?.find((item) => item.staff_id === myStaffId.value && (!item.assignment_role || item.assignment_role === 'TEACHER'))
+}
+
+function isNotEligible(session: SessionRow) {
+  return teacherAssignment(session)?.timesheet_eligible === false
+}
+
+function canSubmitTimesheet(session: SessionRow) {
+  const existing = timesheetBySession.value.get(session.id)
+  return !isNotEligible(session) && (!existing || existing.status === 'REJECTED')
+}
+
+function statusLabelForSession(session: SessionRow) {
+  const row = timesheetBySession.value.get(session.id)
+  if (row?.status === 'REVOKED') return 'Đã thu hồi công'
+  if (isNotEligible(session)) return 'Không tính công'
+  return row ? statusLabel(row.status) : 'Chưa gửi'
+}
+
+function statusClassForSession(session: SessionRow) {
+  const row = timesheetBySession.value.get(session.id)
+  if (row?.status === 'REVOKED' || isNotEligible(session)) return 'text-bg-secondary'
+  if (row?.status === 'APPROVED') return 'text-bg-success'
+  if (row?.status === 'REJECTED') return 'text-bg-danger'
+  return row ? 'text-bg-warning' : 'text-bg-secondary'
+}
+
 function statusLabel(status: TimesheetRow['status']) {
   if (status === 'APPROVED') return 'Đã duyệt'
+  if (status === 'REVOKED') return 'Đã thu hồi công'
   if (status === 'REJECTED') return 'Bị từ chối'
   return 'Chờ duyệt'
 }
@@ -41,9 +75,10 @@ async function load() {
   loading.value = true
   errorMessage.value = ''
   try {
-    const [sessionRows, timesheetRows] = await Promise.all([getMySessions(), getMyTimesheets()])
+    const [sessionRows, timesheetRows, staff] = await Promise.all([getMySessions(), getMyTimesheets(), getMyStaff()])
     sessions.value = sessionRows
     timesheets.value = timesheetRows
+    myStaffId.value = staff?.id || ''
   } catch (error) {
     errorMessage.value = userErrorMessage(error, 'Không thể tải dữ liệu chấm công.')
   } finally {
@@ -53,6 +88,7 @@ async function load() {
 
 async function submit(session: SessionRow) {
   if (submittingId.value === session.id) return
+  if (isNotEligible(session)) return
   const existing = timesheetBySession.value.get(session.id)
   if (existing && existing.status !== 'REJECTED') return
   submittingId.value = session.id
@@ -87,6 +123,8 @@ onMounted(load)
         <article class="teacher-timesheet-summary__item"><span>Chờ duyệt</span><strong>{{ timesheetCounts.pending }}</strong><small>Admin đang xem</small></article>
         <article class="teacher-timesheet-summary__item teacher-timesheet-summary__item--success"><span>Đã duyệt</span><strong>{{ timesheetCounts.approved }}</strong><small>Đã xác nhận</small></article>
         <article class="teacher-timesheet-summary__item teacher-timesheet-summary__item--attention"><span>Cần cập nhật</span><strong>{{ timesheetCounts.rejected }}</strong><small>Bị từ chối, có thể gửi lại</small></article>
+        <article class="teacher-timesheet-summary__item"><span>Không tính công</span><strong>{{ timesheetCounts.notEligible }}</strong><small>Admin đã xác nhận</small></article>
+        <article class="teacher-timesheet-summary__item"><span>Đã thu hồi</span><strong>{{ timesheetCounts.revoked }}</strong><small>Có lưu lịch sử</small></article>
       </div>
       <div class="teacher-timesheet-list">
         <article v-for="session in completedSessions" :key="session.id" class="teacher-timesheet-card">
@@ -94,13 +132,14 @@ onMounted(load)
           <div class="teacher-timesheet-card__main">
             <div class="teacher-timesheet-card__heading">
               <div><h2>{{ session.classes?.name || 'Lớp học' }}</h2><span class="teacher-timesheet-card__subline">Buổi học đã hoàn thành</span></div>
-              <span class="badge" :class="!timesheetBySession.get(session.id) ? 'text-bg-secondary' : timesheetBySession.get(session.id)?.status === 'APPROVED' ? 'text-bg-success' : timesheetBySession.get(session.id)?.status === 'REJECTED' ? 'text-bg-danger' : 'text-bg-warning'">
-                {{ timesheetBySession.get(session.id) ? statusLabel(timesheetBySession.get(session.id)!.status) : 'Chưa gửi' }}
+              <span class="badge" :class="statusClassForSession(session)">
+                {{ statusLabelForSession(session) }}
               </span>
             </div>
             <p v-if="timesheetBySession.get(session.id)?.rejection_reason" class="teacher-timesheet-card__rejection"><strong>Lý do cần cập nhật</strong>{{ timesheetBySession.get(session.id)?.rejection_reason }}</p>
+            <p v-if="timesheetBySession.get(session.id)?.revoked_reason" class="teacher-timesheet-card__rejection"><strong>Lý do thu hồi công</strong>{{ timesheetBySession.get(session.id)?.revoked_reason }}</p>
             <p v-if="timesheetBySession.get(session.id)?.notes" class="teacher-timesheet-card__note"><strong>Ghi chú đã gửi</strong>{{ timesheetBySession.get(session.id)?.notes }}</p>
-            <form v-if="!timesheetBySession.get(session.id) || timesheetBySession.get(session.id)?.status === 'REJECTED'" class="teacher-timesheet-card__form" @submit.prevent="submit(session)">
+            <form v-if="canSubmitTimesheet(session)" class="teacher-timesheet-card__form" @submit.prevent="submit(session)">
               <label class="form-label" :for="`timesheet-note-${session.id}`">Ghi chú chấm công <span>(không bắt buộc)</span></label>
               <div class="teacher-timesheet-card__form-row">
                 <textarea :id="`timesheet-note-${session.id}`" v-model="notes[session.id]" class="form-control" rows="2" maxlength="2000" placeholder="Thêm ghi chú về buổi dạy"></textarea>
@@ -110,7 +149,7 @@ onMounted(load)
                 </button>
               </div>
             </form>
-            <div v-else class="teacher-timesheet-card__locked" role="status">{{ timesheetBySession.get(session.id)?.status === 'APPROVED' ? 'Yêu cầu đã được Admin duyệt.' : 'Yêu cầu đang chờ Admin duyệt.' }}</div>
+            <div v-else class="teacher-timesheet-card__locked" role="status">{{ isNotEligible(session) ? 'Admin xác nhận buổi này không tính công cho bạn.' : timesheetBySession.get(session.id)?.status === 'REVOKED' ? 'Công đã bị thu hồi; lịch sử quyết định của Admin được lưu lại.' : timesheetBySession.get(session.id)?.status === 'APPROVED' ? 'Yêu cầu đã được Admin duyệt.' : 'Yêu cầu đang chờ Admin duyệt.' }}</div>
           </div>
         </article>
       </div>
@@ -125,7 +164,7 @@ onMounted(load)
 .teacher-workspace__intro p { margin: 0; color: var(--color-text-secondary); font-size: 13px; }
 .teacher-alert { margin: 0; }
 .teacher-empty-card { border: 1px solid var(--color-border); border-radius: var(--radius-card); background: #fff; }
-.teacher-timesheet-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.teacher-timesheet-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .teacher-timesheet-summary__item { display: grid; min-height: 102px; align-content: space-between; gap: 4px; border: 1px solid var(--color-border); border-radius: 11px; padding: 13px 15px; background: #fff; box-shadow: var(--shadow-surface); }
 .teacher-timesheet-summary__item span { color: var(--color-text-secondary); font-size: 11px; font-weight: 650; }
 .teacher-timesheet-summary__item strong { color: var(--color-text); font-size: 25px; line-height: 1; }

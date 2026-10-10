@@ -267,8 +267,10 @@
 | supabase/migrations/0056_historical_session_edits.sql | Supabase / migrations | SQL | Cho Admin hiệu chỉnh buổi chưa hủy: lịch, giáo viên, roster, nội dung và attendance; kiểm tra quyền/xung đột, ghi audit và giữ nguyên giờ thực tế cùng snapshot tài chính. |
 | supabase/migrations/0057_delete_month_where_guard.sql | Supabase / migrations | SQL | Sửa RPC xóa tháng để các lệnh xóa mẫu lịch có điều kiện khóa chính, tương thích với cơ chế production chặn DELETE không có WHERE. |
 | supabase/migrations/0058_month_week_schedule_excel_import.sql | Supabase / migrations | SQL | Migration schema; đọc toàn bộ thay đổi và migration sau này có thể thay thế object. |
+| supabase/migrations/0059_admin_session_attendance_timesheets.sql | Supabase / migrations | SQL | Cho Admin chốt điểm danh sau giờ kết thúc và quyết định công theo từng giáo viên trong một giao dịch; giữ luồng gửi công của giáo viên và ghi audit khi duyệt/thu hồi. |
 | supabase/seed.sql | Supabase / cấu hình và seed | SQL | Seed cho database local; không dùng làm căn cứ dữ liệu production. |
 | supabase/tests/admin_monthly_session_planning.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra admin monthly session planning bằng fixture database cô lập. |
+| supabase/tests/admin_session_attendance_timesheets.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra admin session attendance timesheets bằng fixture database cô lập. |
 | supabase/tests/backdated_session_creation.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra backdated session creation bằng fixture database cô lập. |
 | supabase/tests/class_teacher_limit.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra class teacher limit bằng fixture database cô lập. |
 | supabase/tests/continuous_learning_rls.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra continuous learning rls bằng fixture database cô lập. |
@@ -281,4 +283,4 @@
 | supabase/tests/student_future_session_roster_sync.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra student future session roster sync bằng fixture database cô lập. |
 | supabase/tests/timesheet_workflow.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra timesheet workflow bằng fixture database cô lập. |
 
-Tổng: 274 đường dẫn có trong inventory.
+Tổng: 276 đường dẫn có trong inventory.

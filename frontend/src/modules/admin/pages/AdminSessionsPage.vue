@@ -16,6 +16,7 @@ import {
   importMonthWeekSchedule,
   correctSessionSchedule,
   correctSessionLearning,
+  recordAdminSessionAttendance,
   setClassScheduleStatus,
   updateClassSchedule,
   updateSessionOccurrence,
@@ -93,6 +94,8 @@ const learningRows = ref<AttendanceStudentRow[]>([])
 const learningEditorOpen = ref(false)
 const learningBusy = ref(false)
 const learningValidationErrors = ref<Record<string, string>>({})
+const learningTeacherValidationError = ref('')
+const teacherEligibilityDraft = ref<Record<string, boolean | null>>({})
 const sessionNoteInput = ref('')
 const lessonYoutubeInput = ref('')
 const sessionRosterCandidates = ref<any[]>([])
@@ -214,14 +217,24 @@ const canEditSelectedSession = computed(() => !!selected.value && selected.value
 const canEditSelectedLearning = computed(() => !!selected.value
   && selected.value.status !== 'CANCELLED'
   && (selected.value.status !== 'SCHEDULED' || Date.parse(selected.value.scheduled_start_at) <= Date.now()))
+const canAdminFinalizeAttendance = computed(() => !!selected.value
+  && selected.value.status !== 'CANCELLED'
+  && selected.value.status !== 'IN_PROGRESS'
+  && Date.parse(selected.value.scheduled_end_at) <= Date.now())
+const assignedTeachers = computed(() => (selected.value?.session_staff || [])
+  .filter((item) => !item.assignment_role || item.assignment_role === 'TEACHER'))
+const adminAttendanceTakenOver = computed(() => assignedTeachers.value.some((item) => item.timesheet_eligible !== null && item.timesheet_eligible !== undefined))
 const canCancelOrDeleteSelectedSession = computed(() => !!selected.value
   && selected.value.status === 'SCHEDULED'
   && Date.parse(selected.value.scheduled_start_at) > Date.now())
 const dirtyLearningRows = computed(() => learningRows.value.filter(attendanceIsDirty))
+const teacherEligibilityDirty = computed(() => assignedTeachers.value.some((item) =>
+  teacherEligibilityDraft.value[item.staff_id] !== (item.timesheet_eligible ?? null)))
+const adminAttendanceDirty = computed(() => dirtyLearningRows.value.length > 0 || teacherEligibilityDirty.value)
 const learningDirty = computed(() => !!selected.value && (
   sessionNoteInput.value.trim() !== (selected.value.session_note || '').trim()
   || lessonYoutubeInput.value.trim() !== (selected.value.lesson_youtube_url || '').trim()
-  || dirtyLearningRows.value.length > 0
+  || adminAttendanceDirty.value
 ))
 const selectedSessionDate = computed(() => selected.value ? getBusinessDateKey(selected.value.scheduled_start_at) : '')
 const rosterSyncDelta = computed(() => {
@@ -567,6 +580,7 @@ watch(visibleSessions, (rows) => {
     selectedDetailOpen.value = false
     students.value = []
     selectedTeacherIds.value = []
+    teacherEligibilityDraft.value = {}
   }
 })
 
@@ -577,9 +591,13 @@ async function selectSession(session: SessionRow) {
   learningEditorOpen.value = false
   rosterEditorError.value = ''
   learningValidationErrors.value = {}
+  learningTeacherValidationError.value = ''
   sessionRosterCandidates.value = []
   sessionRosterCandidateSessionId.value = ''
   selectedTeacherIds.value = (session.session_staff || []).map((item) => item.staff_id)
+  teacherEligibilityDraft.value = Object.fromEntries((session.session_staff || [])
+    .filter((item) => !item.assignment_role || item.assignment_role === 'TEACHER')
+    .map((item) => [item.staff_id, item.timesheet_eligible ?? null]))
   startInput.value = toLocalInput(session.scheduled_start_at)
   endInput.value = toLocalInput(session.scheduled_end_at)
   sessionRoomInput.value = session.room ?? session.class_schedules?.room ?? ''
@@ -1385,39 +1403,76 @@ async function saveSelectedLearning() {
   if (!selected.value || !canEditSelectedLearning.value || learningBusy.value || !learningDirty.value) return
   errorMessage.value = ''
   learningValidationErrors.value = {}
+  learningTeacherValidationError.value = ''
   if (!isYoutubeLessonLink(lessonYoutubeInput.value)) {
     errorMessage.value = 'Chỉ chấp nhận link video YouTube hợp lệ.'
     return
   }
 
   const rowErrors: Record<string, string> = {}
-  for (const row of dirtyLearningRows.value) {
-    const error = attendanceValidationError(row.attendance)
-    if (error) rowErrors[row.student_id] = error
+  if (adminAttendanceDirty.value) {
+    if (!canAdminFinalizeAttendance.value) {
+      errorMessage.value = 'Chỉ có thể chốt điểm danh và chấm công sau giờ kết thúc theo lịch.'
+      return
+    }
+    for (const row of learningRows.value) {
+      const error = attendanceValidationError(row.attendance)
+      if (error) rowErrors[row.student_id] = error
+    }
+    if (!assignedTeachers.value.length || assignedTeachers.value.some((item) => teacherEligibilityDraft.value[item.staff_id] === null || teacherEligibilityDraft.value[item.staff_id] === undefined)) {
+      learningTeacherValidationError.value = assignedTeachers.value.length
+        ? 'Hãy chọn Tính công hoặc Không tính công cho từng giáo viên được phân công.'
+        : 'Buổi học cần có ít nhất một giáo viên được phân công.'
+    }
   }
   if (Object.keys(rowErrors).length) {
     learningValidationErrors.value = rowErrors
-    return
   }
+  if (Object.keys(rowErrors).length || learningTeacherValidationError.value) return
 
   const session = selected.value
   const sessionNote = sessionNoteInput.value.trim() || null
   const lessonYoutubeUrl = lessonYoutubeInput.value.trim() || null
+  const finalizingAttendance = adminAttendanceDirty.value
   learningBusy.value = true
   try {
-    await correctSessionLearning({
-      session_id: session.id,
+    if (finalizingAttendance) {
+      await recordAdminSessionAttendance({
+        session_id: session.id,
+        session_note: sessionNote,
+        lesson_youtube_url: lessonYoutubeUrl,
+        students: learningRows.value.map(toAttendanceSaveInput),
+        teacher_decisions: assignedTeachers.value.map((item) => ({
+          staff_id: item.staff_id,
+          eligible: teacherEligibilityDraft.value[item.staff_id] as boolean,
+        })),
+      })
+    } else {
+      await correctSessionLearning({
+        session_id: session.id,
+        session_note: sessionNote,
+        lesson_youtube_url: lessonYoutubeUrl,
+        students: [],
+      })
+    }
+    const updatedSession = {
+      ...session,
+      status: finalizingAttendance ? 'COMPLETED' as const : session.status,
       session_note: sessionNote,
       lesson_youtube_url: lessonYoutubeUrl,
-      students: dirtyLearningRows.value.map(toAttendanceSaveInput),
-    })
-    const updatedSession = { ...session, session_note: sessionNote, lesson_youtube_url: lessonYoutubeUrl }
+      session_staff: (session.session_staff || []).map((item) => ({
+        ...item,
+        timesheet_eligible: teacherEligibilityDraft.value[item.staff_id] ?? item.timesheet_eligible ?? null,
+      })),
+    }
     selected.value = updatedSession
     sessions.value = sessions.value.map((row) => row.id === session.id ? updatedSession : row)
     sessionNoteInput.value = sessionNote || ''
     lessonYoutubeInput.value = lessonYoutubeUrl || ''
     learningEditorOpen.value = false
-    toast.success('Đã lưu nội dung buổi học, điểm danh và đánh giá.')
+    toast.success(finalizingAttendance
+      ? 'Đã chốt điểm danh và quyết định chấm công cho buổi học.'
+      : 'Đã lưu nội dung buổi học.')
     try {
       students.value = await getSessionStudents(session.id) as any[]
       learningRows.value = students.value.map(attendanceRowFromSource)
@@ -1880,9 +1935,10 @@ watch(sessionFormIsBackdated, (isBackdated) => {
           <h2 class="h5">{{ className(selected) }}</h2>
           <div class="text-secondary mb-3">Giáo viên: {{ teachers }} · {{ selected.status }} · {{ sessionRoomInput || 'Chưa xếp phòng' }}</div>
           <div v-if="canEditSelectedSession" class="row g-2 align-items-end mb-3">
-            <div class="col-md-8"><label class="form-label" for="session-detail-teachers">Giáo viên được phân công cho buổi này ({{ teacherCountLabel(selected.class_id, selectedTeacherIds, selected.id) }})</label><TeacherPicker id="session-detail-teachers" :model-value="selectedTeacherIds" :teachers="activeTeachers" multiple placeholder="Tìm theo tên hoặc mã giáo viên" :disabled="teacherSaveBusy" :disabled-ids="activeTeachers.filter((teacher) => !canSelectSessionTeacher(teacher.id)).map((teacher) => teacher.id)" @update:model-value="updateSelectedTeacherSelection" /></div>
-            <div class="col-md-4"><button class="btn btn-outline-primary" :disabled="teacherSaveBusy || selectedSessionTeacherCount > MAX_CLASS_TEACHERS" @click="saveTeachers">{{ teacherSaveBusy ? 'Đang lưu…' : 'Lưu phân công buổi này' }}</button></div>
+            <div class="col-md-8"><label class="form-label" for="session-detail-teachers">Giáo viên được phân công cho buổi này ({{ teacherCountLabel(selected.class_id, selectedTeacherIds, selected.id) }})</label><TeacherPicker id="session-detail-teachers" :model-value="selectedTeacherIds" :teachers="activeTeachers" multiple placeholder="Tìm theo tên hoặc mã giáo viên" :disabled="teacherSaveBusy || adminAttendanceTakenOver" :disabled-ids="activeTeachers.filter((teacher) => !canSelectSessionTeacher(teacher.id)).map((teacher) => teacher.id)" @update:model-value="updateSelectedTeacherSelection" /></div>
+            <div class="col-md-4"><button class="btn btn-outline-primary" :disabled="teacherSaveBusy || adminAttendanceTakenOver || selectedSessionTeacherCount > MAX_CLASS_TEACHERS" @click="saveTeachers">{{ teacherSaveBusy ? 'Đang lưu…' : 'Lưu phân công buổi này' }}</button></div>
           </div>
+          <p v-if="adminAttendanceTakenOver" class="small text-secondary">Phân công giáo viên và roster đã khóa sau khi Admin chốt điểm danh; quyết định tính công vẫn có thể chỉnh trong biểu mẫu bên dưới.</p>
           <div class="row g-2 mb-3">
             <div class="col-md-4"><label class="form-label">Bắt đầu</label><input v-model="startInput" class="form-control" type="datetime-local" :disabled="!canEditSelectedSession || scheduleSaveBusy" /></div>
             <div class="col-md-4"><label class="form-label">Kết thúc</label><input v-model="endInput" class="form-control" type="datetime-local" :disabled="!canEditSelectedSession || scheduleSaveBusy" /></div>
@@ -1913,42 +1969,59 @@ watch(sessionFormIsBackdated, (isBackdated) => {
                 <small class="text-secondary">Để trống nếu buổi học không có video.</small>
               </div>
             </div>
-            <p class="small text-secondary">Mỗi học sinh có một bản ghi điểm danh; trạng thái bắt buộc khi lưu. Điểm bài tập 0–10, hiểu bài và thái độ 1–5; các điểm được phép để trống.</p>
+            <div v-if="!canAdminFinalizeAttendance" class="alert alert-info py-2" role="status">{{ selected.status === 'IN_PROGRESS' ? 'Buổi học đang diễn ra nên Admin chưa thể chốt điểm danh và chấm công.' : `Admin chỉ có thể chốt điểm danh và chấm công sau ${formatDateTime(selected.scheduled_end_at)}.` }} Có thể lưu ghi chú hoặc video trước thời điểm này.</div>
+            <p class="small text-secondary">Mỗi học sinh cần có trạng thái điểm danh. Hãy chọn quyết định công cho từng giáo viên trước khi chốt. Điểm bài tập 0–10, hiểu bài và thái độ 1–5; các điểm được phép để trống.</p>
             <div v-for="row in learningRows" :key="row.student_id" class="border rounded p-3 mb-3">
               <div class="fw-semibold mb-2">{{ row.students?.full_name || 'Học sinh' }} <small class="text-secondary">{{ row.students?.student_code }}</small></div>
               <div class="row g-2">
                 <div class="col-md-3">
                   <label class="form-label" :for="`admin-attendance-status-${row.student_id}`">Điểm danh</label>
-                  <select :id="`admin-attendance-status-${row.student_id}`" v-model="row.attendance.status" class="form-select" :disabled="learningBusy || rosterEditorBusy" :aria-label="`Trạng thái điểm danh của ${row.students?.full_name || 'học sinh'}`">
+                  <select :id="`admin-attendance-status-${row.student_id}`" v-model="row.attendance.status" class="form-select" :disabled="learningBusy || rosterEditorBusy || !canAdminFinalizeAttendance" :aria-label="`Trạng thái điểm danh của ${row.students?.full_name || 'học sinh'}`">
                     <option :value="null">Chọn trạng thái</option>
                     <option v-for="status in attendanceStatuses" :key="status" :value="status">{{ attendanceStatusLabel(status) }}</option>
                   </select>
                   <small v-if="learningValidationErrors[row.student_id]" class="text-danger" role="alert">{{ learningValidationErrors[row.student_id] }}</small>
                 </div>
-                <div class="col-md-2"><label class="form-label" :for="`admin-late-${row.student_id}`">Phút đi muộn</label><input :id="`admin-late-${row.student_id}`" v-model.number="row.attendance.late_minutes" class="form-control" type="number" min="0" :disabled="learningBusy || rosterEditorBusy || row.attendance.status !== 'LATE'" placeholder="—" /></div>
-                <div class="col-md-3"><label class="form-label" :for="`admin-absence-${row.student_id}`">Lý do vắng</label><input :id="`admin-absence-${row.student_id}`" v-model="row.attendance.absence_reason" class="form-control" :disabled="learningBusy || rosterEditorBusy || !['ABSENT', 'EXCUSED'].includes(row.attendance.status || '')" placeholder="Không bắt buộc" /></div>
-                <div class="col-md-2"><label class="form-label" :for="`admin-homework-${row.student_id}`">BTVN /10</label><input :id="`admin-homework-${row.student_id}`" v-model.number="row.attendance.homework_score" class="form-control" type="number" min="0" max="10" step="0.1" :disabled="learningBusy || rosterEditorBusy" placeholder="—" /></div>
-                <div class="col-md-2"><label class="form-label" :for="`admin-understanding-${row.student_id}`">Hiểu bài /5</label><input :id="`admin-understanding-${row.student_id}`" v-model.number="row.attendance.understanding_score" class="form-control" type="number" min="1" max="5" step="1" :disabled="learningBusy || rosterEditorBusy" placeholder="—" /></div>
-                <div class="col-md-2"><label class="form-label" :for="`admin-attitude-${row.student_id}`">Thái độ /5</label><input :id="`admin-attitude-${row.student_id}`" v-model.number="row.attendance.attitude_score" class="form-control" type="number" min="1" max="5" step="1" :disabled="learningBusy || rosterEditorBusy" placeholder="—" /></div>
-                <div class="col-md-2"><label class="form-label" :for="`admin-feedback-count-${row.student_id}`">Điểm cộng</label><input :id="`admin-feedback-count-${row.student_id}`" v-model.number="row.attendance.positive_feedback_count" class="form-control" type="number" min="0" step="1" :disabled="learningBusy || rosterEditorBusy" placeholder="—" /></div>
-                <div class="col-md-4"><label class="form-label" :for="`admin-homework-note-${row.student_id}`">Ghi chú BTVN</label><input :id="`admin-homework-note-${row.student_id}`" v-model="row.attendance.homework_note" class="form-control" :disabled="learningBusy || rosterEditorBusy" /></div>
-                <div class="col-md-4"><label class="form-label" :for="`admin-feedback-raw-${row.student_id}`">Ghi nhận điểm cộng</label><input :id="`admin-feedback-raw-${row.student_id}`" v-model="row.attendance.positive_feedback_raw" class="form-control" :disabled="learningBusy || rosterEditorBusy" /></div>
-                <div class="col-12"><label class="form-label" :for="`admin-attendance-comment-${row.student_id}`">Nhận xét</label><textarea :id="`admin-attendance-comment-${row.student_id}`" v-model="row.attendance.comment" class="form-control" rows="2" maxlength="2000" :disabled="learningBusy || rosterEditorBusy"></textarea></div>
+                <div class="col-md-2"><label class="form-label" :for="`admin-late-${row.student_id}`">Phút đi muộn</label><input :id="`admin-late-${row.student_id}`" v-model.number="row.attendance.late_minutes" class="form-control" type="number" min="0" :disabled="learningBusy || rosterEditorBusy || !canAdminFinalizeAttendance || row.attendance.status !== 'LATE'" placeholder="—" /></div>
+                <div class="col-md-3"><label class="form-label" :for="`admin-absence-${row.student_id}`">Lý do vắng</label><input :id="`admin-absence-${row.student_id}`" v-model="row.attendance.absence_reason" class="form-control" :disabled="learningBusy || rosterEditorBusy || !canAdminFinalizeAttendance || !['ABSENT', 'EXCUSED'].includes(row.attendance.status || '')" placeholder="Không bắt buộc" /></div>
+                <div class="col-md-2"><label class="form-label" :for="`admin-homework-${row.student_id}`">BTVN /10</label><input :id="`admin-homework-${row.student_id}`" v-model.number="row.attendance.homework_score" class="form-control" type="number" min="0" max="10" step="0.1" :disabled="learningBusy || rosterEditorBusy || !canAdminFinalizeAttendance" placeholder="—" /></div>
+                <div class="col-md-2"><label class="form-label" :for="`admin-understanding-${row.student_id}`">Hiểu bài /5</label><input :id="`admin-understanding-${row.student_id}`" v-model.number="row.attendance.understanding_score" class="form-control" type="number" min="1" max="5" step="1" :disabled="learningBusy || rosterEditorBusy || !canAdminFinalizeAttendance" placeholder="—" /></div>
+                <div class="col-md-2"><label class="form-label" :for="`admin-attitude-${row.student_id}`">Thái độ /5</label><input :id="`admin-attitude-${row.student_id}`" v-model.number="row.attendance.attitude_score" class="form-control" type="number" min="1" max="5" step="1" :disabled="learningBusy || rosterEditorBusy || !canAdminFinalizeAttendance" placeholder="—" /></div>
+                <div class="col-md-2"><label class="form-label" :for="`admin-feedback-count-${row.student_id}`">Điểm cộng</label><input :id="`admin-feedback-count-${row.student_id}`" v-model.number="row.attendance.positive_feedback_count" class="form-control" type="number" min="0" step="1" :disabled="learningBusy || rosterEditorBusy || !canAdminFinalizeAttendance" placeholder="—" /></div>
+                <div class="col-md-4"><label class="form-label" :for="`admin-homework-note-${row.student_id}`">Ghi chú BTVN</label><input :id="`admin-homework-note-${row.student_id}`" v-model="row.attendance.homework_note" class="form-control" :disabled="learningBusy || rosterEditorBusy || !canAdminFinalizeAttendance" /></div>
+                <div class="col-md-4"><label class="form-label" :for="`admin-feedback-raw-${row.student_id}`">Ghi nhận điểm cộng</label><input :id="`admin-feedback-raw-${row.student_id}`" v-model="row.attendance.positive_feedback_raw" class="form-control" :disabled="learningBusy || rosterEditorBusy || !canAdminFinalizeAttendance" /></div>
+                <div class="col-12"><label class="form-label" :for="`admin-attendance-comment-${row.student_id}`">Nhận xét</label><textarea :id="`admin-attendance-comment-${row.student_id}`" v-model="row.attendance.comment" class="form-control" rows="2" maxlength="2000" :disabled="learningBusy || rosterEditorBusy || !canAdminFinalizeAttendance"></textarea></div>
               </div>
             </div>
             <div v-if="!learningRows.length" class="text-secondary small mb-3">Chưa có học sinh trong roster buổi học.</div>
+            <section v-if="assignedTeachers.length" class="border rounded p-3 mb-3" aria-label="Quyết định tính công cho giáo viên">
+              <h4 class="h6">Quyết định chấm công</h4>
+              <div v-for="teacher in assignedTeachers" :key="teacher.staff_id" class="row align-items-center g-2 py-1">
+                <label class="col-md-6" :for="`admin-timesheet-decision-${teacher.staff_id}`">{{ teacher.staff?.full_name || teacher.staff_id }}</label>
+                <div class="col-md-6">
+                  <select :id="`admin-timesheet-decision-${teacher.staff_id}`" v-model="teacherEligibilityDraft[teacher.staff_id]" class="form-select" :disabled="learningBusy || !canAdminFinalizeAttendance">
+                    <option :value="null">Chọn quyết định</option>
+                    <option :value="true">Tính công</option>
+                    <option :value="false">Không tính công</option>
+                  </select>
+                </div>
+              </div>
+              <small v-if="learningTeacherValidationError" class="text-danger" role="alert">{{ learningTeacherValidationError }}</small>
+              <small v-else-if="adminAttendanceTakenOver" class="text-secondary">Admin có thể đổi quyết định; lần đổi được ghi vào lịch sử.</small>
+            </section>
             <div class="d-flex flex-wrap align-items-center gap-2">
-              <button class="btn btn-primary btn-sm" type="button" :disabled="learningBusy || rosterEditorBusy || !learningDirty" @click="saveSelectedLearning">{{ learningBusy ? 'Đang lưu…' : 'Lưu nội dung và kết quả' }}</button>
+              <button class="btn btn-primary btn-sm" type="button" :disabled="learningBusy || rosterEditorBusy || !learningDirty || (adminAttendanceDirty && !canAdminFinalizeAttendance)" @click="saveSelectedLearning">{{ learningBusy ? 'Đang lưu…' : adminAttendanceDirty ? 'Chốt điểm danh và chấm công' : 'Lưu nội dung buổi học' }}</button>
               <span v-if="dirtyLearningRows.length" class="small text-secondary">{{ dirtyLearningRows.length }} học sinh có thay đổi.</span>
             </div>
           </section>
           <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3 mb-2">
             <h3 class="h6 mb-0">Học sinh và kết quả</h3>
-            <div v-if="canEditSelectedSession" class="d-flex gap-2">
+            <div v-if="canEditSelectedSession && !adminAttendanceTakenOver" class="d-flex gap-2">
               <button class="btn btn-outline-primary btn-sm" :disabled="rosterEditorLoading || rosterEditorBusy" @click="openRosterEditor">{{ rosterEditorLoading ? 'Đang tải lớp…' : 'Sửa danh sách học sinh' }}</button>
               <button class="btn btn-outline-success btn-sm" :disabled="rosterEditorLoading || rosterEditorBusy || rosterEditorOpen" @click="prepareSessionRosterSync">Đồng bộ học sinh theo lớp</button>
             </div>
           </div>
+          <p v-if="adminAttendanceTakenOver" class="small text-secondary">Roster đã khóa sau khi Admin chốt điểm danh để giữ đủ dữ liệu của buổi.</p>
           <div v-if="rosterEditorError" class="alert alert-danger py-2" role="alert">{{ rosterEditorError }}</div>
           <section v-if="rosterEditorOpen" class="border rounded p-3 mb-3" aria-label="Sửa danh sách học sinh của buổi học">
             <div class="fw-semibold mb-1">Thành viên lớp có hiệu lực ngày {{ formatBusinessDate(selectedSessionDate) }}</div>

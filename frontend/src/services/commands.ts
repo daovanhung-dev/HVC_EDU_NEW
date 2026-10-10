@@ -487,6 +487,35 @@ export async function correctSessionLearning(input: {
   return data as { session_id: string; students_updated: number }
 }
 
+export interface AdminSessionTeacherTimesheetDecision {
+  staff_id: string
+  eligible: boolean
+}
+
+export async function recordAdminSessionAttendance(input: {
+  session_id: string
+  session_note: string | null
+  lesson_youtube_url: string | null
+  students: AdminSessionAttendanceInput[]
+  teacher_decisions: AdminSessionTeacherTimesheetDecision[]
+}) {
+  const { data, error } = await supabase.rpc('admin_record_session_attendance', {
+    p_session_id: input.session_id,
+    p_session_note: input.session_note,
+    p_lesson_youtube_url: input.lesson_youtube_url,
+    p_students: input.students,
+    p_teacher_decisions: input.teacher_decisions,
+  })
+  if (error) throw error
+  return data as {
+    session_id: string
+    status: 'COMPLETED'
+    students_updated: number
+    timesheets_approved: number
+    teachers_not_eligible: number
+  }
+}
+
 export interface SessionRosterMutationResult {
   session_id: string
   added: number

@@ -6,11 +6,12 @@ import StaffTimesheetsPage from './StaffTimesheetsPage.vue'
 
 const mocks = vi.hoisted(() => ({
   getMySessions: vi.fn(),
+  getMyStaff: vi.fn(),
   getMyTimesheets: vi.fn(),
   submitTimesheet: vi.fn(),
 }))
 
-vi.mock('@/services/data-queries', () => ({ getMySessions: mocks.getMySessions, getMyTimesheets: mocks.getMyTimesheets }))
+vi.mock('@/services/data-queries', () => ({ getMySessions: mocks.getMySessions, getMyStaff: mocks.getMyStaff, getMyTimesheets: mocks.getMyTimesheets }))
 vi.mock('@/services/commands', () => ({ submitTimesheet: mocks.submitTimesheet }))
 
 describe('StaffTimesheetsPage', () => {
@@ -19,7 +20,9 @@ describe('StaffTimesheetsPage', () => {
       id: 'qa-session', class_id: 'qa-class', scheduled_start_at: '2026-09-30T10:00:00+07:00',
       scheduled_end_at: '2026-09-30T12:00:00+07:00', status: 'COMPLETED',
       session_note: null, classes: { name: 'QA class' },
+      session_staff: [{ staff_id: 'qa-teacher', assignment_role: 'TEACHER', timesheet_eligible: null }],
     }])
+    mocks.getMyStaff.mockReset().mockResolvedValue({ id: 'qa-teacher' })
     mocks.getMyTimesheets.mockReset().mockResolvedValue([])
     mocks.submitTimesheet.mockReset().mockResolvedValue({ timesheet_id: 'qa-timesheet', status: 'PENDING' })
   })
@@ -53,6 +56,38 @@ describe('StaffTimesheetsPage', () => {
     await wrapper.findAll('button').find((button) => button.text() === 'Làm mới')?.trigger('click')
     await flushPromises()
     expect(wrapper.find('form').exists()).toBe(false)
+  })
+
+  it('shows an admin no-pay decision and hides the teacher submission form', async () => {
+    mocks.getMySessions.mockResolvedValue([{
+      id: 'qa-session', class_id: 'qa-class', scheduled_start_at: '2026-09-30T10:00:00+07:00',
+      scheduled_end_at: '2026-09-30T12:00:00+07:00', status: 'COMPLETED', session_note: null,
+      classes: { name: 'QA class' }, session_staff: [{ staff_id: 'qa-teacher', assignment_role: 'TEACHER', timesheet_eligible: false }],
+    }])
+    const wrapper = mount(StaffTimesheetsPage, { global: { plugins: [createPinia()] } })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Không tính công')
+    expect(wrapper.text()).toContain('Admin xác nhận buổi này không tính công cho bạn.')
+    expect(wrapper.find('form').exists()).toBe(false)
+    expect(mocks.submitTimesheet).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('shows revoked admin timesheets as history with the revocation reason', async () => {
+    mocks.getMyTimesheets.mockResolvedValue([{
+      id: 'qa-revoked', session_id: 'qa-session', staff_id: 'qa-teacher', status: 'REVOKED',
+      submitted_at: '2026-09-30T10:00:00Z', approved_at: '2026-09-30T12:00:00Z', approved_by: 'qa-admin',
+      rejection_reason: null, revoked_at: '2026-10-01T12:00:00Z', revoked_by: 'qa-admin',
+      revoked_reason: 'Admin xác nhận buổi học không tính công.', notes: null,
+    }])
+    const wrapper = mount(StaffTimesheetsPage, { global: { plugins: [createPinia()] } })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Đã thu hồi công')
+    expect(wrapper.text()).toContain('Admin xác nhận buổi học không tính công.')
+    expect(wrapper.find('form').exists()).toBe(false)
+    wrapper.unmount()
   })
 
   it('locks duplicate submissions while the request is pending', async () => {

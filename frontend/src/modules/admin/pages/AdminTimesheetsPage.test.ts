@@ -75,6 +75,23 @@ describe('AdminTimesheetsPage', () => {
     expect(useToastStore(pinia).items.map((item) => item.message)).toContain('Đã duyệt chấm công.')
   })
 
+  it('shows revoked timesheet history without review actions', async () => {
+    mocks.getTimesheets.mockResolvedValueOnce([{
+      id: 'qa-revoked-timesheet', session_id: 'qa-session', staff_id: 'qa-teacher', status: 'REVOKED',
+      submitted_at: '2026-09-30T10:00:00Z', approved_at: '2026-09-30T12:00:00Z', approved_by: 'qa-admin',
+      rejection_reason: null, revoked_at: '2026-10-01T12:00:00Z', revoked_by: 'qa-admin',
+      revoked_reason: 'QA: buổi không tính công', notes: null,
+      sessions: { id: 'qa-session', scheduled_start_at: '2026-09-30T10:00:00Z', scheduled_end_at: '2026-09-30T12:00:00Z', status: 'COMPLETED', classes: { name: 'QA class' } },
+      staff: { id: 'qa-teacher', staff_code: 'QA-T-1', full_name: 'QA teacher' },
+    }])
+    const wrapper = track(mount(AdminTimesheetsPage, { global: { plugins: [createPinia()] } }))
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Đã thu hồi công')
+    expect(wrapper.text()).toContain('QA: buổi không tính công')
+    expect(allButtons(wrapper).some((button) => ['Duyệt', 'Từ chối'].includes(button.text()))).toBe(false)
+  })
+
   it('sends a required rejection reason to the review command', async () => {
     const pinia = createPinia()
     const wrapper = track(mount(AdminTimesheetsPage, { global: { plugins: [pinia] } }))

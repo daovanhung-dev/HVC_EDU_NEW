@@ -269,12 +269,12 @@ export async function getClassSchedulesForClasses(classIds: string[]): Promise<C
 }
 
 export function getMySessions() {
-  return unwrap<SessionRow[]>(supabase.from('sessions').select('id,class_id,recurrence_schedule_id,recurrence_occurrence_date,scheduled_start_at,scheduled_end_at,status,session_note,lesson_youtube_url,room,schedule_override,classes(id,name,subjects(name),grades(name)),class_schedules(room),session_students(student_id,students(id,student_code,full_name)),session_staff(staff_id,assignment_role,staff!session_staff_staff_id_fkey(id,staff_code,full_name))').order('scheduled_start_at', { ascending: false }))
+  return unwrap<SessionRow[]>(supabase.from('sessions').select('id,class_id,recurrence_schedule_id,recurrence_occurrence_date,scheduled_start_at,scheduled_end_at,status,session_note,lesson_youtube_url,room,schedule_override,classes(id,name,subjects(name),grades(name)),class_schedules(room),session_students(student_id,students(id,student_code,full_name)),session_staff(staff_id,assignment_role,timesheet_eligible,staff!session_staff_staff_id_fkey(id,staff_code,full_name))').order('scheduled_start_at', { ascending: false }))
 }
 
 async function loadTimesheets(): Promise<TimesheetRow[]> {
   const rows = await unwrap<any[]>(supabase.from('timesheets')
-    .select('id,session_id,staff_id,status,submitted_at,approved_at,approved_by,rejection_reason,notes,sessions(id,scheduled_start_at,scheduled_end_at,status,classes(name)),staff(id,staff_code,full_name)')
+    .select('id,session_id,staff_id,status,submitted_at,approved_at,approved_by,rejection_reason,revoked_at,revoked_by,revoked_reason,notes,sessions(id,scheduled_start_at,scheduled_end_at,status,classes(name)),staff(id,staff_code,full_name)')
     .order('submitted_at', { ascending: false }))
   return rows.map((row) => {
     const session = oneRelation(row.sessions)
