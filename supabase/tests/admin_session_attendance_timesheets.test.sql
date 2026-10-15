@@ -70,7 +70,7 @@ select throws_ok($$select public.admin_record_session_attendance(
   'f0590000-0000-0000-0000-000000000405', null, null,
   '[{"student_id":"f0590000-0000-0000-0000-000000000201","status":"PRESENT"}]'::jsonb,
   '[{"staff_id":"f0590000-0000-0000-0000-000000000101","eligible":true}]'::jsonb
-)$$, 'P0001', 'ADMIN_SESSION_NOT_FINISHED', 'in-progress session cannot be finalized before scheduled end');
+)$$, 'P0001', 'ADMIN_SESSION_IN_PROGRESS', 'in-progress sessions are rejected before checking their scheduled end');
 select is((select count(*)::integer from public.student_attendances where session_id = 'f0590000-0000-0000-0000-000000000405'), 0, 'in-progress rejection leaves attendance untouched');
 select throws_ok($$select public.admin_record_session_attendance(
   'f0590000-0000-0000-0000-000000000406', null, null,
@@ -117,7 +117,7 @@ reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select set_config('request.jwt.claim.sub', 'f0590000-0000-0000-0000-000000000001', true);
-select throws_ok($$select public.admin_update_session_teachers('f0590000-0000-0000-0000-000000000401', array[]::uuid[])$$,
+select throws_ok($$select public.admin_update_session_teachers('f0590000-0000-0000-0000-000000000401', array['f0590000-0000-0000-0000-000000000101'::uuid])$$,
   'P0001', 'ADMIN_ATTENDANCE_ASSIGNMENTS_LOCKED', 'teacher assignments are locked after admin finalization');
 
 select lives_ok($$select public.admin_record_session_attendance(
@@ -134,6 +134,7 @@ select lives_ok($$select public.admin_record_session_attendance(
 )$$, 'admin can restore a revoked teacher to eligible');
 select is((select status::text from public.timesheets where session_id = 'f0590000-0000-0000-0000-000000000401' and staff_id = 'f0590000-0000-0000-0000-000000000101'), 'APPROVED'::text, 'restored eligibility approves the timesheet again');
 select ok((select revoked_at is null and revoked_by is null and revoked_reason is null from public.timesheets where session_id = 'f0590000-0000-0000-0000-000000000401' and staff_id = 'f0590000-0000-0000-0000-000000000101'), 'restored approval clears current revocation metadata while audit keeps history');
+reset role;
 select ok((select count(*) >= 5 from public.audit_logs where entity_id = 'f0590000-0000-0000-0000-000000000401' or old_data->>'session_id' = 'f0590000-0000-0000-0000-000000000401' or new_data->>'session_id' = 'f0590000-0000-0000-0000-000000000401'), 'session and timesheet decision changes are audited');
 select throws_ok($$select public.admin_correct_session_learning(
   'f0590000-0000-0000-0000-000000000401', null, null,
