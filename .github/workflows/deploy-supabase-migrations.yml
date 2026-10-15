@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy_production:
-        description: Apply the reviewed migration after tests pass. The production guard requires 0060 to be the only pending migration.
+        description: Apply attendance and timesheet migrations 0059 and 0060 after tests pass. Production must have exactly those two migrations pending.
         required: false
         type: boolean
         default: false
@@ -98,9 +98,9 @@ jobs:
           dry_run="$(supabase db push --linked --dry-run --skip-vault 2>&1)"
           printf '%s\n' "$dry_run"
           pending="$(printf '%s\n' "$dry_run" | grep -Eo '[0-9]{4}_[a-z0-9_]+' | sort -u || true)"
-          expected="0060_session_staff_timesheet_eligibility_read"
+          expected=$'0059_admin_session_attendance_timesheets\n0060_session_staff_timesheet_eligibility_read'
           if [[ "$pending" != "$expected" ]]; then
-            echo "Refusing to push: expected only migration 0060 to be pending." >&2
+            echo "Refusing to push: expected only migrations 0059 and 0060 to be pending." >&2
             exit 1
           fi
       - name: Push the reviewed migrations
