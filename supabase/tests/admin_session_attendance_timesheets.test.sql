@@ -104,12 +104,12 @@ select lives_ok($$select public.admin_record_session_attendance(
 select is((select status::text from public.sessions where id = 'f0590000-0000-0000-0000-000000000401'), 'COMPLETED'::text, 'admin finalization completes the session');
 select is((select ended_by from public.sessions where id = 'f0590000-0000-0000-0000-000000000401'), 'f0590000-0000-0000-0000-000000000001'::uuid, 'admin finalization records the acting admin');
 select is((select status::text from public.student_attendances where session_id = 'f0590000-0000-0000-0000-000000000401' and student_id = 'f0590000-0000-0000-0000-000000000201'), 'LATE'::text, 'full roster attendance is persisted');
+reset role;
 select is((select timesheet_eligible from public.session_staff where session_id = 'f0590000-0000-0000-0000-000000000401' and staff_id = 'f0590000-0000-0000-0000-000000000101'), true, 'eligible teacher decision is stored per assignment');
 select is((select timesheet_eligible from public.session_staff where session_id = 'f0590000-0000-0000-0000-000000000401' and staff_id = 'f0590000-0000-0000-0000-000000000102'), false, 'ineligible teacher decision is stored per assignment');
 select is((select status::text from public.timesheets where session_id = 'f0590000-0000-0000-0000-000000000401' and staff_id = 'f0590000-0000-0000-0000-000000000101'), 'APPROVED'::text, 'eligible teacher timesheet is approved immediately');
 select is((select count(*)::integer from public.timesheets where session_id = 'f0590000-0000-0000-0000-000000000401' and staff_id = 'f0590000-0000-0000-0000-000000000102'), 0, 'ineligible teacher receives no payable timesheet');
 
-reset role;
 set local role service_role;
 select throws_ok($$select public.submit_timesheet('f0590000-0000-0000-0000-000000000401', 'f0590000-0000-0000-0000-000000000102', 'f0590000-0000-0000-0000-000000000003', null)$$,
   'P0001', 'TIMESHEET_NOT_ELIGIBLE', 'ineligible teacher cannot submit a timesheet');
