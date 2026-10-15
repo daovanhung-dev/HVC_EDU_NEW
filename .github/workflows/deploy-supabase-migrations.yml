@@ -1,0 +1,65 @@
+name: Deploy Supabase migrations
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-migrations-production
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+      - name: Start the local Supabase database
+        run: supabase start
+      - name: Run the eligibility access-control test
+        run: supabase test db --local supabase/tests/session_staff_timesheet_eligibility.test.sql
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+      - name: Link production project
+        run: supabase link --project-ref dtftytlyaqmxjgynicqs --password "$SUPABASE_DB_PASSWORD"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      - name: Verify only the reviewed migrations are pending
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          supabase migration list --linked
+          dry_run="$(supabase db push --linked --dry-run --skip-vault 2>&1)"
+          printf '%s\n' "$dry_run"
+          pending="$(printf '%s\n' "$dry_run" | grep -Eo '[0-9]{4}_[a-z0-9_]+' | sort -u || true)"
+          expected="$(printf '%s\n' '0059_admin_session_attendance_timesheets' '0060_session_staff_timesheet_eligibility_read')"
+          if [[ "$pending" != "$expected" ]]; then
+            echo "Refusing to push: expected only migrations 0059 and 0060 to be pending." >&2
+            exit 1
+          fi
+      - name: Push the reviewed migrations
+        run: supabase db push --linked --yes --skip-vault
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      - name: Verify remote migration history
+        run: supabase migration list --linked
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
