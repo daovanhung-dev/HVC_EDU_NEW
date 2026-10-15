@@ -268,8 +268,36 @@ export async function getClassSchedulesForClasses(classIds: string[]): Promise<C
   })) as ClassScheduleRow[]
 }
 
-export function getMySessions() {
-  return unwrap<SessionRow[]>(supabase.from('sessions').select('id,class_id,recurrence_schedule_id,recurrence_occurrence_date,scheduled_start_at,scheduled_end_at,status,session_note,lesson_youtube_url,room,schedule_override,classes(id,name,subjects(name),grades(name)),class_schedules(room),session_students(student_id,students(id,student_code,full_name)),session_staff(staff_id,assignment_role,timesheet_eligible,staff!session_staff_staff_id_fkey(id,staff_code,full_name))').order('scheduled_start_at', { ascending: false }))
+interface SessionStaffTimesheetEligibilityRow {
+  session_id: string
+  staff_id: string
+  timesheet_eligible: boolean | null
+}
+
+export async function getMySessions(): Promise<SessionRow[]> {
+  const sessions = await unwrap<SessionRow[]>(supabase.from('sessions')
+    .select('id,class_id,recurrence_schedule_id,recurrence_occurrence_date,scheduled_start_at,scheduled_end_at,status,session_note,lesson_youtube_url,room,schedule_override,classes(id,name,subjects(name),grades(name)),class_schedules(room),session_students(student_id,students(id,student_code,full_name)),session_staff(staff_id,assignment_role,staff!session_staff_staff_id_fkey(id,staff_code,full_name))')
+    .order('scheduled_start_at', { ascending: false }))
+  if (!sessions.length) return sessions
+
+  const eligibilityRows = await unwrap<SessionStaffTimesheetEligibilityRow[]>(supabase.rpc(
+    'get_session_staff_timesheet_eligibility',
+    { p_session_ids: sessions.map((session) => session.id) },
+  ))
+  if (!eligibilityRows.length) return sessions
+
+  const eligibilityByAssignment = new Map(
+    eligibilityRows.map((row) => [`${row.session_id}:${row.staff_id}`, row.timesheet_eligible]),
+  )
+  return sessions.map((session) => ({
+    ...session,
+    session_staff: session.session_staff?.map((assignment) => {
+      const key = `${session.id}:${assignment.staff_id}`
+      return eligibilityByAssignment.has(key)
+        ? { ...assignment, timesheet_eligible: eligibilityByAssignment.get(key) ?? null }
+        : assignment
+    }),
+  }))
 }
 
 async function loadTimesheets(): Promise<TimesheetRow[]> {

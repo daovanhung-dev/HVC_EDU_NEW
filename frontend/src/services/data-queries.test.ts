@@ -4,10 +4,16 @@ const mockState = vi.hoisted(() => ({
   selections: [] as Array<{ table: string; columns: string }>,
   calls: [] as Array<{ table: string; method: string; args: unknown[] }>,
   responses: {} as Record<string, unknown>,
+  rpcCalls: [] as Array<{ name: string; args: unknown }>,
+  rpcResponses: {} as Record<string, { data: unknown; error: Error | null }>,
 }))
 
 vi.mock('./supabase', () => ({
   supabase: {
+    rpc(name: string, args: unknown) {
+      mockState.rpcCalls.push({ name, args })
+      return Promise.resolve(mockState.rpcResponses[name] ?? { data: [], error: null })
+    },
     from(table: string) {
       const query: any = {
         rangeArgs: null as [number, number] | null,
@@ -44,10 +50,13 @@ describe('session staff PostgREST relations', () => {
   beforeEach(() => {
     mockState.selections.length = 0
     mockState.calls.length = 0
+    mockState.rpcCalls.length = 0
     mockState.responses = {}
+    mockState.rpcResponses = {}
   })
 
   it('uses the assigned staff foreign key when loading sessions', async () => {
+    mockState.responses.sessions = [{ id: 'qa-session', session_staff: [] }]
     await getMySessions()
 
     const selection = mockState.selections.find((item) => item.table === 'sessions')
@@ -59,6 +68,53 @@ describe('session staff PostgREST relations', () => {
     expect(selection?.columns).not.toContain('classes(id,code,name)')
     expect(selection?.columns).not.toContain('manual_schedule')
     expect(selection?.columns).not.toContain('staff_assignment_override')
+    expect(selection?.columns).not.toContain('timesheet_eligible')
+    expect(mockState.rpcCalls).toEqual([{
+      name: 'get_session_staff_timesheet_eligibility',
+      args: { p_session_ids: ['qa-session'] },
+    }])
+  })
+
+  it('merges timesheet eligibility returned by the permission-scoped RPC', async () => {
+    mockState.responses.sessions = [{
+      id: 'qa-session',
+      session_staff: [
+        { staff_id: 'qa-teacher-1', assignment_role: 'TEACHER' },
+        { staff_id: 'qa-teacher-2', assignment_role: 'TEACHER' },
+      ],
+    }]
+    mockState.rpcResponses.get_session_staff_timesheet_eligibility = {
+      data: [
+        { session_id: 'qa-session', staff_id: 'qa-teacher-1', timesheet_eligible: false },
+        { session_id: 'qa-session', staff_id: 'qa-teacher-2', timesheet_eligible: null },
+      ],
+      error: null,
+    }
+
+    await expect(getMySessions()).resolves.toMatchObject([{
+      id: 'qa-session',
+      session_staff: [
+        { staff_id: 'qa-teacher-1', timesheet_eligible: false },
+        { staff_id: 'qa-teacher-2', timesheet_eligible: null },
+      ],
+    }])
+  })
+
+  it('surfaces a failure from the permission-scoped eligibility RPC', async () => {
+    mockState.responses.sessions = [{ id: 'qa-session', session_staff: [] }]
+    mockState.rpcResponses.get_session_staff_timesheet_eligibility = {
+      data: null,
+      error: new Error('QA eligibility RPC failure'),
+    }
+
+    await expect(getMySessions()).rejects.toThrow('QA eligibility RPC failure')
+  })
+
+  it('does not call the eligibility RPC when no sessions are visible', async () => {
+    mockState.responses.sessions = []
+
+    await expect(getMySessions()).resolves.toEqual([])
+    expect(mockState.rpcCalls).toEqual([])
   })
 
   it('uses the assigned staff foreign key in attendance history', async () => {

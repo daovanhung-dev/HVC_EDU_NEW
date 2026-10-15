@@ -368,9 +368,10 @@ describe('StudentsPage dialogs', () => {
     await allButtons(wrapper).find((button) => button.text() === 'Xác nhận nhập 2 học sinh')?.trigger('click')
     await flushPromises()
 
+    const todayInVietnam = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date())
     expect(mocks.adminEnrollStudents).toHaveBeenNthCalledWith(1, expect.objectContaining({
       class_id: qaClass.id,
-      start_date: '2026-10-10',
+      start_date: todayInVietnam,
       students: expect.arrayContaining([
         expect.objectContaining({ row_number: 2, student_code: 'QA-INTAKE-001' }),
         expect.objectContaining({ row_number: 4, student_code: 'QA-INTAKE-003' }),
