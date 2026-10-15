@@ -18,8 +18,22 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: 2.116.0
-      - name: Start only the local database
-        run: supabase start --exclude gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+      - name: Start the local database without production attendance data
+        shell: bash
+        run: |
+          set -euo pipefail
+          import_migration="supabase/migrations/0035_seed_t9_attendance.sql"
+          import_backup="$RUNNER_TEMP/0035_seed_t9_attendance.sql"
+          restore_import_migration() {
+            if [[ -f "$import_backup" && ! -f "$import_migration" ]]; then
+              mv "$import_backup" "$import_migration"
+            fi
+          }
+          trap restore_import_migration EXIT
+          mv "$import_migration" "$import_backup"
+          supabase start --exclude gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+          restore_import_migration
+          trap - EXIT
       - name: Test admin attendance and timesheets
         run: supabase test db --local supabase/tests/admin_session_attendance_timesheets.test.sql
       - name: Test eligibility access control
