@@ -42,10 +42,20 @@ insert into public.sessions (id, class_id, scheduled_start_at, scheduled_end_at,
 insert into public.session_students (session_id, student_id)
 values ('f0600000-0000-0000-0000-000000000401', 'f0600000-0000-0000-0000-000000000201');
 insert into public.session_staff (session_id, staff_id, assignment_role, timesheet_eligible) values
-  ('f0600000-0000-0000-0000-000000000401', 'f0600000-0000-0000-0000-000000000101', 'TEACHER', true),
-  ('f0600000-0000-0000-0000-000000000401', 'f0600000-0000-0000-0000-000000000102', 'TEACHER', false),
+  ('f0600000-0000-0000-0000-000000000401', 'f0600000-0000-0000-0000-000000000101', 'TEACHER', null),
+  ('f0600000-0000-0000-0000-000000000401', 'f0600000-0000-0000-0000-000000000102', 'TEACHER', null),
   ('f0600000-0000-0000-0000-000000000402', 'f0600000-0000-0000-0000-000000000102', 'TEACHER', null),
-  ('f0600000-0000-0000-0000-000000000403', 'f0600000-0000-0000-0000-000000000104', 'TEACHER', true);
+  ('f0600000-0000-0000-0000-000000000403', 'f0600000-0000-0000-0000-000000000104', 'TEACHER', null);
+update public.session_staff
+set timesheet_eligible = case staff_id
+  when 'f0600000-0000-0000-0000-000000000101'::uuid then true
+  when 'f0600000-0000-0000-0000-000000000102'::uuid then false
+  when 'f0600000-0000-0000-0000-000000000104'::uuid then true
+end
+where session_id in (
+  'f0600000-0000-0000-0000-000000000401'::uuid,
+  'f0600000-0000-0000-0000-000000000403'::uuid
+);
 
 select ok(has_function_privilege('authenticated', 'public.get_session_staff_timesheet_eligibility(uuid[])', 'EXECUTE'), 'authenticated can execute the permission-checked RPC');
 select ok(not has_column_privilege('authenticated', 'public.session_staff', 'timesheet_eligible', 'SELECT'), 'authenticated still cannot select the eligibility column directly');
