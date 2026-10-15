@@ -18,6 +18,6 @@
 
 ## Phát hành và dữ liệu thật
 
-- Không áp migration, chạy seed, tạo tài khoản, thay đổi dữ liệu production hoặc deploy nếu người dùng chưa yêu cầu rõ trong nhiệm vụ hiện tại.
-- Trước thao tác được yêu cầu, xác minh project đích, lịch sử migration, backup và workflow đang dùng. Báo cáo QA cũ chỉ là snapshot.
+- Project Supabase mặc định là `dtftytlyaqmxjgynicqs`; khi liên kết Supabase CLI với remote, dùng `supabase link --project-ref dtftytlyaqmxjgynicqs` và xác minh ref trước lệnh tác động remote.
+- Người dùng đã ủy quyền agent thao tác và thực thi lệnh trên production trong phạm vi công việc của dự án; không cần xin phép lại chỉ vì thao tác chạy trên production. Trước khi thao tác, xác minh project đích, lịch sử migration, backup/recovery và workflow đang dùng. Không dùng production làm nơi thử. Báo cáo QA cũ chỉ là snapshot.
 - Giữ giờ nghiệp vụ theo Asia/Ho_Chi_Minh. Không xóa hoặc sửa lịch sử để phục vụ luồng mới.

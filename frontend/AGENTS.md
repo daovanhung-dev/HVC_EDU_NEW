@@ -17,4 +17,4 @@
 - Router guard chỉ kiểm soát điều hướng; mọi thay đổi quyền hoặc phạm vi dữ liệu phải được kiểm tra ở database/Edge Function.
 - Không đưa secret vào biến VITE_ hoặc bundle. Chỉ dùng VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY và VITE_APP_BASE_PATH ở frontend.
 - Không khôi phục module legacy chỉ vì còn bảng hoặc migration cũ. Luồng chấm công hiện hành là yêu cầu theo buổi đã hoàn tất.
-- Khi người dùng yêu cầu kiểm thử/xác minh, chọn lệnh phù hợp với phạm vi; không chạy thao tác production để kiểm chứng.
+- Với mọi tác vụ coding, test hoặc sửa lỗi, dùng Chrome để chạy ứng dụng, tái hiện lỗi và kiểm tra kết quả theo `AGENTS.md`. Chọn lệnh phù hợp với phạm vi; không chạy thao tác ghi lên production chỉ để kiểm chứng.

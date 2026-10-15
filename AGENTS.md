@@ -9,7 +9,7 @@
 
 ## Dùng Chrome cho tác vụ phát triển
 
-- Với mọi tác vụ coding, test hoặc fix bug, luôn dùng [@Chrome](plugin://chrome@openai-bundled) trong quá trình thực hiện để mở/chạy ứng dụng, tái hiện tình huống hoặc kiểm tra kết quả liên quan.
+- Với mọi tác vụ coding, test hoặc fix bug, luôn dùng [@Chrome](plugin://chrome@openai-bundled) để mở/chạy ứng dụng; bắt buộc dùng Chrome khi tái hiện lỗi và kiểm tra kết quả.
 
 ## Nguồn sự thật và phạm vi
 
@@ -27,7 +27,7 @@
 
 ## Vận hành và phát triển
 
-- Không tạo tài khoản, sửa/xóa dữ liệu production, áp migration production hoặc deploy nếu người dùng chưa yêu cầu rõ trong nhiệm vụ hiện tại. Khi được yêu cầu, xác minh project đích, migration, backup và workflow trực tiếp.
+- Người dùng đã ủy quyền agent thao tác và thực thi lệnh trên production trong phạm vi công việc của dự án; không cần xin phép lại chỉ vì thao tác chạy trên production. Trước khi hành động, xác minh project đích, phạm vi/tác động, trạng thái migration, backup/recovery và workflow trực tiếp. Không dùng production làm môi trường thử nghiệm.
 - Thay đổi schema bằng migration mới nối tiếp số hiện có; không sửa migration lịch sử đã có thể được áp dụng ở môi trường khác.
 - Yêu cầu Node.js 22 và npm 10+. Lệnh chính: npm run dev, npm run typecheck, npm run test:run, npm run build.
 - Hướng dẫn theo subsystem nằm trong frontend/AGENTS.md và supabase/AGENTS.md. Danh mục repo được sinh/kiểm tra bằng npm run agent:context:update và npm run agent:context:check.

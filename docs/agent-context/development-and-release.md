@@ -15,7 +15,7 @@ npm run ui:review
 
 `build` chạy `vue-tsc --noEmit` trước Vite. Vitest dùng jsdom; test đặt cạnh source với hậu tố `.test.ts`. `ui:review` mở các Vue page thật với auth/service mocks và fixture `QA-`; harness không tạo Supabase client và không gọi dịch vụ thật.
 
-Với tác vụ coding, test hoặc sửa lỗi, dùng Chrome để mở/chạy ứng dụng hoặc kiểm tra kết quả liên quan theo `AGENTS.md`. Dùng UI review harness khi cần xem trạng thái frontend mà không đụng dữ liệu thật. Phân biệt rõ kiểm tra source, local browser, staging, production và thiết bị thật.
+Với mọi tác vụ coding, test hoặc sửa lỗi, luôn dùng Chrome để mở/chạy ứng dụng; tái hiện lỗi và kiểm tra kết quả trong Chrome theo `AGENTS.md`. Dùng UI review harness khi cần xem trạng thái frontend mà không đụng dữ liệu thật. Phân biệt rõ kiểm tra source, local browser, staging, production và thiết bị thật.
 
 ## Supabase local
 
@@ -26,6 +26,16 @@ supabase functions serve
 ```
 
 Chỉ chạy `db reset` trên môi trường local có thể bỏ dữ liệu. Kiểm thử database cần Supabase/Postgres local cô lập và fixture tổng hợp; không chạy reset/seed để kiểm chứng production. Bootstrap ROOT dùng `bash scripts/bootstrap-root.sh`, cần Supabase CLI/Python/curl phù hợp và nhập secret tương tác.
+
+## Supabase CLI project
+
+Project Supabase mặc định của dự án là `dtftytlyaqmxjgynicqs`. Khi cần liên kết Supabase CLI với remote project, dùng:
+
+```bash
+supabase link --project-ref dtftytlyaqmxjgynicqs
+```
+
+Trước lệnh CLI tác động remote, xác minh project đang link đúng ref này.
 
 ## Biến môi trường và secret
 
@@ -39,7 +49,7 @@ Chỉ chạy `db reset` trên môi trường local có thể bỏ dữ liệu. K
 - `.github/workflows/quality-check.yml`: Node 22, `npm ci`, typecheck, test, build và quét một số mẫu secret.
 - `.github/workflows/deploy-pages.yml`: kiểm tra public config, build frontend và deploy artifact `frontend/dist` lên GitHub Pages.
 - `.github/workflows/deploy-supabase.yml`: chỉ `workflow_dispatch`; link project, `db push`, deploy functions và xóa endpoint legacy được liệt kê trong workflow. Trước khi sửa bước xóa, xác minh chính xác endpoint đang dùng.
-- Workflow tồn tại không phải sự cho phép deploy. Không áp migration, deploy, tạo tài khoản hoặc sửa/xóa dữ liệu production nếu nhiệm vụ chưa yêu cầu rõ.
+- Người dùng đã ủy quyền agent thao tác và thực thi lệnh trên production trong phạm vi công việc của dự án; không cần xin phép lại chỉ vì thao tác chạy trên production. Trước khi thao tác, xác minh project đích, migration, backup/recovery và workflow trực tiếp. Workflow tồn tại tự nó không xác định phạm vi cần làm.
 
 ## Vòng đời Edge Function
 
@@ -62,4 +72,4 @@ Script lấy file Git theo dõi và file chưa bị ignore; ignored build/cache 
 
 Không lưu migration production, backup, DNS, deploy, credential hay phiên đăng nhập hiện tại vào context. Roadmap/log/QA report là snapshot có thời điểm, không phải bằng chứng trực tiếp hôm nay.
 
-Khi người dùng yêu cầu vận hành, trước hành động cần xác minh project đích, migration đã áp, backup/recovery và workflow trực tiếp. Báo cáo lệnh, môi trường, kết quả và giới hạn; không dùng production như nơi thử. Giữ giờ nghiệp vụ theo `Asia/Ho_Chi_Minh`.
+Trước thao tác vận hành, xác minh project đích, migration đã áp, backup/recovery và workflow trực tiếp. Báo cáo lệnh, môi trường, kết quả và giới hạn; không dùng production như nơi thử. Giữ giờ nghiệp vụ theo `Asia/Ho_Chi_Minh`.

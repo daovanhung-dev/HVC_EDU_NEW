@@ -49,7 +49,7 @@ Migration phải được đọc theo thứ tự và kiểm tra migration sau c�
 - `0058`: thêm mẫu lịch Excel riêng theo tháng và RPC preview/import có khóa đồng bộ, quyền `CLASS_MANAGE`, kiểm tra conflict toàn lô, audit, tạo buổi từ membership hiệu lực và giữ/hủy an toàn buổi hiện có.
 - `0059`: thêm quyết định tính công theo phân công và trạng thái `REVOKED`; RPC Admin yêu cầu `ACADEMIC_MANAGE` + `TIMESHEET_APPROVE`, giờ kết thúc đã qua, đầy đủ roster/trạng thái/giáo viên và lưu completion, attendance, timesheet, audit trong một giao dịch. RPC submit giữ nguyên quyền service role nhưng chặn giáo viên có quyết định `false`; RPC sửa learning cũ chỉ còn cập nhật metadata. Roster/phân công được khóa sau lần Admin chốt để các tập đã xác nhận không lệch nhau.
 
-Không sửa, xóa hoặc đổi số migration đã có thể chạy ở môi trường khác. Thay đổi schema bằng migration tiếp theo. Migration production cần yêu cầu rõ và kiểm tra target/backup/migration history trực tiếp; local test không cần áp vào production.
+Không sửa, xóa hoặc đổi số migration đã có thể chạy ở môi trường khác. Thay đổi schema bằng migration tiếp theo. Migration production cần nằm trong phạm vi công việc và phải kiểm tra target/backup/migration history trực tiếp; local test không cần áp vào production.
 
 ## Edge Functions
 

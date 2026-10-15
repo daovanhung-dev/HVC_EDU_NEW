@@ -15,7 +15,7 @@
 | Cài đặt, kiểm tra, CI hoặc phát hành | [Phát triển và phát hành](development-and-release.md) | Manifest, config và workflow hiện hành |
 | Không biết file thuộc đâu hoặc đổi cấu trúc repo | [Danh mục repository](repository-inventory.md) | Mục đích của từng file, rồi mở file source tương ứng |
 
-Với mọi tác vụ coding, test hoặc sửa lỗi, dùng Chrome để mở/chạy ứng dụng hoặc kiểm tra kết quả liên quan. UI review harness dùng mock và fixture `QA-`, không kết nối Supabase thật.
+Với mọi tác vụ coding, test hoặc sửa lỗi, luôn dùng Chrome để mở/chạy ứng dụng; bắt buộc dùng Chrome để tái hiện lỗi và kiểm tra kết quả liên quan. UI review harness dùng mock và fixture `QA-`, không kết nối Supabase thật.
 
 ## Nguồn sự thật
 
