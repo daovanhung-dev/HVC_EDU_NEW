@@ -30,15 +30,42 @@ jobs:
           set -euo pipefail
           import_migration="supabase/migrations/0035_seed_t9_attendance.sql"
           import_backup="$RUNNER_TEMP/0035_seed_t9_attendance.sql"
-          restore_import_migration() {
+          legacy_migration="supabase/migrations/0044_allow_parallel_sessions_by_room.sql"
+          legacy_backup="$RUNNER_TEMP/0044_allow_parallel_sessions_by_room.sql"
+          restore_test_migrations() {
             if [[ -f "$import_backup" && ! -f "$import_migration" ]]; then
               mv "$import_backup" "$import_migration"
             fi
+            if [[ -f "$legacy_backup" ]]; then
+              mv "$legacy_backup" "$legacy_migration"
+            fi
           }
-          trap restore_import_migration EXIT
+          trap restore_test_migrations EXIT
           mv "$import_migration" "$import_backup"
+          cp "$legacy_migration" "$legacy_backup"
+          # 0044 replaces a 0039 overload after removing its parameter defaults;
+          # drop that overload only in the temporary local test copy.
+          python3 - "$legacy_migration" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          sql = path.read_text()
+          marker = """create or replace function public.admin_update_session_occurrence(
+            p_session_id uuid,
+            p_scheduled_start_at timestamptz,
+            p_scheduled_end_at timestamptz,
+            p_cancel boolean
+          )"""
+          replacement = """drop function if exists public.admin_update_session_occurrence(uuid, timestamptz, timestamptz, boolean);
+
+          """ + marker
+          if sql.count(marker) != 1:
+              raise SystemExit("Could not find the legacy 4-argument function definition exactly once")
+          path.write_text(sql.replace(marker, replacement, 1))
+          PY
           supabase start --exclude gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
-          restore_import_migration
+          restore_test_migrations
           trap - EXIT
       - name: Test admin attendance and timesheets
         run: supabase test db --local supabase/tests/admin_session_attendance_timesheets.test.sql
