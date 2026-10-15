@@ -138,6 +138,7 @@ select set_config('request.jwt.claim.role', 'anon', true);
 select throws_ok(
   $$select * from public.get_session_staff_timesheet_eligibility(array['f0600000-0000-0000-0000-000000000401'::uuid])$$,
   '42501',
+  'permission denied for function get_session_staff_timesheet_eligibility',
   'anon RPC invocation is rejected');
 
 reset role;
@@ -147,6 +148,7 @@ select set_config('request.jwt.claim.sub', 'f0600000-0000-0000-0000-000000000001
 select throws_ok(
   $$select timesheet_eligible from public.session_staff limit 1$$,
   '42501',
+  'permission denied for table session_staff',
   'authenticated cannot select the eligibility column directly');
 
 select * from finish();
