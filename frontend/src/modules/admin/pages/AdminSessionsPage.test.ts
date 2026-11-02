@@ -403,6 +403,8 @@ describe('AdminSessionsPage calendar', () => {
   })
 
   it('hides past and cancelled sessions by default and restores them in every view with history enabled', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-07T12:00:00+07:00'))
     const today = getBusinessDateKey(new Date())
     const past = makeSession('qa-session-past', 'Buổi cũ QA', '10:00', '12:00', addCalendarDays(today, -1))
     const cancelled = { ...makeSession('qa-session-cancelled', 'Buổi đã hủy QA', '10:00', '12:00', addCalendarDays(today, 1)), status: 'CANCELLED' as const }
