@@ -10,7 +10,9 @@ import AppPageHeader from '@/app/components/AppPageHeader.vue'
 import AppState from '@/app/components/AppState.vue'
 import SessionMonthCalendar from '@/app/components/SessionMonthCalendar.vue'
 import StaffAttendanceModal from '../components/StaffAttendanceModal.vue'
+import SessionAttendanceExcelModal from '../components/SessionAttendanceExcelModal.vue'
 import { attendanceIsDirty, attendanceStatusLabel, attendanceValidationError, createAttendanceValue, toAttendanceSaveInput, type AttendanceStudentRow } from '../attendance'
+import type { AttendanceExcelPatchRow } from '../session-attendance-excel'
 import { isValidYouTubeUrl } from '@/shared/utils/youtube'
 import YouTubePlayer from '@/app/components/YouTubePlayer.vue'
 
@@ -32,6 +34,8 @@ const saving = ref(false)
 const loading = ref(false)
 const studentsLoading = ref(false)
 const attendanceModalOpen = ref(false)
+const excelAttendanceOpen = ref(false)
+const openAttendanceAfterExcel = ref(false)
 const validationErrors = ref<Record<string, string>>({})
 const optimizingStudentId = ref('')
 const suggestions = ref<Record<string, string>>({})
@@ -129,6 +133,28 @@ function openAttendance() {
   if (!selected.value || studentsLoading.value) return
   validationErrors.value = {}
   attendanceModalOpen.value = true
+}
+
+function openExcelAttendance() {
+  if (!selected.value || selected.value.status !== 'IN_PROGRESS' || studentsLoading.value || !students.value.length) return
+  excelAttendanceOpen.value = true
+}
+
+function applyExcelAttendance(patches: AttendanceExcelPatchRow[]) {
+  const patchByStudentId = new Map(patches.map((row) => [row.student_id, row.patch]))
+  for (const row of students.value) {
+    const patch = patchByStudentId.get(row.student_id)
+    if (patch) Object.assign(row.attendance, patch)
+  }
+  validationErrors.value = {}
+  toast.success(`Đã nạp dữ liệu Excel cho ${patches.length} học sinh. Rà lại rồi lưu biểu mẫu.`)
+  openAttendanceAfterExcel.value = true
+}
+
+function handleExcelAttendanceHidden() {
+  if (!openAttendanceAfterExcel.value) return
+  openAttendanceAfterExcel.value = false
+  openAttendance()
 }
 
 async function saveAttendance() {
@@ -312,14 +338,21 @@ onMounted(load)
         </header>
 
         <div class="teacher-session-panel__actions">
-          <button v-if="selected.status === 'SCHEDULED'" class="btn btn-primary" type="button" :disabled="saving" @click="start">
-            <span v-if="saving" class="app-button__spinner" aria-hidden="true"></span>Bắt đầu buổi học
-          </button>
+          <template v-if="selected.status === 'SCHEDULED'">
+            <button class="btn btn-primary" type="button" :disabled="saving" @click="start">
+              <span v-if="saving" class="app-button__spinner" aria-hidden="true"></span>Bắt đầu buổi học
+            </button>
+            <button class="btn btn-outline-primary" type="button" disabled title="Bắt đầu buổi học trước khi nhập Excel">Điểm danh bằng Excel</button>
+          </template>
           <template v-else-if="selected.status === 'IN_PROGRESS'">
             <button class="btn btn-primary" type="button" :disabled="studentsLoading" @click="openAttendance">Điểm danh <span class="teacher-session-panel__action-count">{{ attendanceCount }}/{{ students.length }}</span></button>
+            <button class="btn btn-outline-primary" type="button" :disabled="studentsLoading || saving || !students.length" @click="openExcelAttendance">Điểm danh bằng Excel</button>
             <button class="btn btn-outline-primary" type="button" :disabled="saving || !canComplete" :title="canComplete ? 'Hoàn thành buổi học' : 'Lưu đủ kết quả điểm danh trước khi hoàn thành'" @click="complete">Hoàn thành</button>
           </template>
-          <button v-else-if="selected.status === 'COMPLETED'" class="btn btn-outline-primary" type="button" :disabled="studentsLoading" @click="openAttendance">Xem kết quả</button>
+          <template v-else-if="selected.status === 'COMPLETED'">
+            <button class="btn btn-outline-primary" type="button" :disabled="studentsLoading" @click="openAttendance">Xem kết quả</button>
+            <button class="btn btn-outline-primary" type="button" disabled title="Buổi đã hoàn tất; giáo viên chỉ có thể xem kết quả">Điểm danh bằng Excel</button>
+          </template>
         </div>
 
         <div v-if="selected.status === 'SCHEDULED'" class="teacher-session-panel__notice" role="status">
@@ -382,6 +415,13 @@ onMounted(load)
       @save="saveAttendance"
       @optimize="optimizeComment"
       @apply-suggestion="applySuggestion"
+    />
+    <SessionAttendanceExcelModal
+      v-model="excelAttendanceOpen"
+      :session="selected"
+      :rows="students"
+      @apply="applyExcelAttendance"
+      @hidden="handleExcelAttendanceHidden"
     />
   </section>
 </template>

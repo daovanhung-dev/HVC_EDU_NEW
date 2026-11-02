@@ -7,6 +7,7 @@
 | Đường dẫn | Subsystem | Loại file | Mục đích và cách dùng |
 |---|---|---|---|
 | .github/workflows/deploy-pages.yml | CI và phát hành | YAML workflow | Build và phát hành SPA tĩnh lên GitHub Pages. |
+| .github/workflows/deploy-supabase-migrations.yml | CI và phát hành | YAML workflow | Cấu hình deploy supabase migrations. |
 | .github/workflows/deploy-supabase.yml | CI và phát hành | YAML workflow | Workflow dispatch để áp migration/deploy Edge Functions và dọn endpoint đã retire. |
 | .github/workflows/quality-check.yml | CI và phát hành | YAML workflow | CI cho typecheck, test, build frontend và quét một số mẫu secret. |
 | .gitignore | Cấu hình ở repo root | Git ignore rules | Quy định file local, credential, cache và artifact không đưa vào Git. |
@@ -123,12 +124,15 @@
 | frontend/src/modules/auth/pages/LoginPage.vue | Frontend / Đăng nhập | Vue SFC | Form đăng nhập bằng định danh tài khoản. |
 | frontend/src/modules/staff/attendance.test.ts | Frontend / Giáo viên | TypeScript | Test hồi quy cho attendance trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/staff/attendance.ts | Frontend / Giáo viên | TypeScript | Chuẩn hóa, validate và chuyển attendance thành payload lưu. |
+| frontend/src/modules/staff/components/SessionAttendanceExcelModal.vue | Frontend / Giáo viên | Vue SFC | Component luồng giáo viên: Session Attendance Excel Modal. |
 | frontend/src/modules/staff/components/StaffAttendanceModal.vue | Frontend / Giáo viên | Vue SFC | Form giáo viên sửa điểm danh, điểm và nhận xét theo học sinh. |
 | frontend/src/modules/staff/pages/SessionsPage.test.ts | Frontend / Giáo viên | TypeScript | Test hồi quy cho Sessions Page trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/staff/pages/SessionsPage.vue | Frontend / Giáo viên | Vue SFC | Màn hình giáo viên xem buổi được giao, cập nhật nội dung/đánh giá và hoàn tất buổi. |
 | frontend/src/modules/staff/pages/StaffProfilePage.vue | Frontend / Giáo viên | Vue SFC | Màn hình giáo viên xem/sửa thông tin liên hệ cá nhân. |
 | frontend/src/modules/staff/pages/StaffTimesheetsPage.test.ts | Frontend / Giáo viên | TypeScript | Test hồi quy cho Staff Timesheets Page trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/staff/pages/StaffTimesheetsPage.vue | Frontend / Giáo viên | Vue SFC | Màn hình giáo viên gửi/xem yêu cầu chấm công theo buổi. |
+| frontend/src/modules/staff/session-attendance-excel.test.ts | Frontend / Giáo viên | TypeScript | Test hồi quy cho session attendance excel trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
+| frontend/src/modules/staff/session-attendance-excel.ts | Frontend / Giáo viên | TypeScript | Logic nghiệp vụ giáo viên: session attendance excel. |
 | frontend/src/modules/student/pages/StudentAiChatPage.test.ts | Frontend / Học sinh | TypeScript | Test hồi quy cho Student Ai Chat Page trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/student/pages/StudentAiChatPage.vue | Frontend / Học sinh | Vue SFC | Chat AI tiếng Việt, tùy chọn ngữ cảnh bài học của học sinh. |
 | frontend/src/modules/student/pages/StudentPage.test.ts | Frontend / Học sinh | TypeScript | Test hồi quy cho Student Page trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
@@ -268,6 +272,7 @@
 | supabase/migrations/0057_delete_month_where_guard.sql | Supabase / migrations | SQL | Sửa RPC xóa tháng để các lệnh xóa mẫu lịch có điều kiện khóa chính, tương thích với cơ chế production chặn DELETE không có WHERE. |
 | supabase/migrations/0058_month_week_schedule_excel_import.sql | Supabase / migrations | SQL | Migration schema; đọc toàn bộ thay đổi và migration sau này có thể thay thế object. |
 | supabase/migrations/0059_admin_session_attendance_timesheets.sql | Supabase / migrations | SQL | Cho Admin chốt điểm danh sau giờ kết thúc và quyết định công theo từng giáo viên trong một giao dịch; giữ luồng gửi công của giáo viên và ghi audit khi duyệt/thu hồi. |
+| supabase/migrations/0060_session_staff_timesheet_eligibility_read.sql | Supabase / migrations | SQL | Migration schema; đọc toàn bộ thay đổi và migration sau này có thể thay thế object. |
 | supabase/seed.sql | Supabase / cấu hình và seed | SQL | Seed cho database local; không dùng làm căn cứ dữ liệu production. |
 | supabase/tests/admin_monthly_session_planning.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra admin monthly session planning bằng fixture database cô lập. |
 | supabase/tests/admin_session_attendance_timesheets.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra admin session attendance timesheets bằng fixture database cô lập. |
@@ -280,7 +285,8 @@
 | supabase/tests/parallel_session_rooms.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra parallel session rooms bằng fixture database cô lập. |
 | supabase/tests/schedule_reset.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra schedule reset bằng fixture database cô lập. |
 | supabase/tests/session_learning_commands.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra session learning commands bằng fixture database cô lập. |
+| supabase/tests/session_staff_timesheet_eligibility.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra session staff timesheet eligibility bằng fixture database cô lập. |
 | supabase/tests/student_future_session_roster_sync.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra student future session roster sync bằng fixture database cô lập. |
 | supabase/tests/timesheet_workflow.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra timesheet workflow bằng fixture database cô lập. |
 
-Tổng: 276 đường dẫn có trong inventory.
+Tổng: 282 đường dẫn có trong inventory.

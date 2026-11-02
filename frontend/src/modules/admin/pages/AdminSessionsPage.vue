@@ -57,6 +57,7 @@ import AppState from '@/app/components/AppState.vue'
 import DetailModal from '@/app/components/DetailModal.vue'
 import YouTubePlayer from '@/app/components/YouTubePlayer.vue'
 import TeacherPicker from '../components/TeacherPicker.vue'
+import SessionAttendanceExcelModal from '@/modules/staff/components/SessionAttendanceExcelModal.vue'
 import {
   addCalendarDays,
   formatBusinessDate,
@@ -76,6 +77,7 @@ import {
   type MonthWeekScheduleParseIssue,
   type MonthWeekScheduleSlot,
 } from '@/modules/admin/utils/month-week-schedule-import'
+import type { AttendanceExcelPatchRow } from '@/modules/staff/session-attendance-excel'
 
 type ViewMode = 'month' | 'week' | 'list'
 type WeeklyTemplateSlotDraft = MonthWeekTemplateSlot & { client_id: string }
@@ -92,6 +94,9 @@ const schedulesByClass = ref<Record<string, ClassScheduleRow[]>>({})
 const students = ref<any[]>([])
 const learningRows = ref<AttendanceStudentRow[]>([])
 const learningEditorOpen = ref(false)
+const excelAttendanceOpen = ref(false)
+const openExcelAfterDetailHidden = ref(false)
+const returnToDetailAfterExcel = ref(false)
 const learningBusy = ref(false)
 const learningValidationErrors = ref<Record<string, string>>({})
 const learningTeacherValidationError = ref('')
@@ -620,6 +625,37 @@ async function selectSession(session: SessionRow) {
     scheduleLoadErrors.value = { ...scheduleLoadErrors.value, [session.class_id]: true }
     if (!errorMessage.value) errorMessage.value = schedulesResult.reason instanceof Error ? schedulesResult.reason.message : 'Không thể tải phân công giáo viên của lớp.'
   }
+}
+
+function openExcelAttendance() {
+  if (!selected.value || !canAdminFinalizeAttendance.value || learningBusy.value || rosterEditorBusy.value || !learningRows.value.length) return
+  openExcelAfterDetailHidden.value = true
+  returnToDetailAfterExcel.value = true
+  selectedDetailOpen.value = false
+}
+
+function handleSelectedDetailHidden() {
+  if (!openExcelAfterDetailHidden.value) return
+  openExcelAfterDetailHidden.value = false
+  excelAttendanceOpen.value = true
+}
+
+function handleExcelAttendanceHidden() {
+  if (!returnToDetailAfterExcel.value) return
+  returnToDetailAfterExcel.value = false
+  selectedDetailOpen.value = Boolean(selected.value)
+}
+
+function applyExcelAttendance(patches: AttendanceExcelPatchRow[]) {
+  const patchByStudentId = new Map(patches.map((row) => [row.student_id, row.patch]))
+  for (const row of learningRows.value) {
+    const patch = patchByStudentId.get(row.student_id)
+    if (patch) Object.assign(row.attendance, patch)
+  }
+  learningValidationErrors.value = {}
+  learningTeacherValidationError.value = ''
+  learningEditorOpen.value = true
+  toast.success(`Đã nạp dữ liệu Excel cho ${patches.length} học sinh. Rà lại quyết định chấm công rồi xác nhận lưu.`)
 }
 
 async function loadSessionRosterCandidates(session: SessionRow, force = false) {
@@ -1811,6 +1847,13 @@ watch(sessionFormIsBackdated, (isBackdated) => {
     <div v-if="errorMessage" class="alert alert-danger mt-3 mb-0" role="alert">{{ errorMessage }}</div>
   </FormModal>
   <ConfirmModal v-model="confirmOpen" v-bind="confirmDetails" :busy="confirmBusy" :error="['delete-month-sessions', 'delete-session', 'sync-session-roster'].includes(confirmActionType) ? deleteError : ''" @confirm="runConfirmation" />
+  <SessionAttendanceExcelModal
+    v-model="excelAttendanceOpen"
+    :session="selected"
+    :rows="learningRows"
+    @apply="applyExcelAttendance"
+    @hidden="handleExcelAttendanceHidden"
+  />
 
   <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
@@ -1931,9 +1974,23 @@ watch(sessionFormIsBackdated, (isBackdated) => {
     </div>
 
     <div class="col-12">
-      <DetailModal v-if="selected" v-model="selectedDetailOpen" :title="className(selected)" :description="`${formatDateTime(selected.scheduled_start_at)} · ${selected.status}`" size="xl">
+      <DetailModal v-if="selected" v-model="selectedDetailOpen" :title="className(selected)" :description="`${formatDateTime(selected.scheduled_start_at)} · ${selected.status}`" size="xl" @hidden="handleSelectedDetailHidden">
           <h2 class="h5">{{ className(selected) }}</h2>
           <div class="text-secondary mb-3">Giáo viên: {{ teachers }} · {{ selected.status }} · {{ sessionRoomInput || 'Chưa xếp phòng' }}</div>
+          <div v-if="selected.status !== 'CANCELLED'" class="d-flex flex-wrap align-items-center gap-2 mb-3">
+            <button
+              class="btn btn-outline-primary btn-sm"
+              type="button"
+              :disabled="!canAdminFinalizeAttendance || learningBusy || rosterEditorBusy || !learningRows.length"
+              :title="canAdminFinalizeAttendance ? 'Tải mẫu hoặc nhập kết quả Excel cho buổi này' : selected.status === 'IN_PROGRESS' ? 'Admin chỉ chốt điểm danh sau khi buổi học kết thúc' : `Admin chỉ chốt điểm danh sau ${formatDateTime(selected.scheduled_end_at)}`"
+              @click="openExcelAttendance"
+            >
+              Điểm danh bằng Excel
+            </button>
+            <span v-if="!canAdminFinalizeAttendance" class="small text-secondary" role="status">
+              {{ selected.status === 'IN_PROGRESS' ? 'Admin chỉ chốt điểm danh sau khi buổi học kết thúc.' : `Có thể nhập sau ${formatDateTime(selected.scheduled_end_at)}.` }}
+            </span>
+          </div>
           <div v-if="canEditSelectedSession" class="row g-2 align-items-end mb-3">
             <div class="col-md-8"><label class="form-label" for="session-detail-teachers">Giáo viên được phân công cho buổi này ({{ teacherCountLabel(selected.class_id, selectedTeacherIds, selected.id) }})</label><TeacherPicker id="session-detail-teachers" :model-value="selectedTeacherIds" :teachers="activeTeachers" multiple placeholder="Tìm theo tên hoặc mã giáo viên" :disabled="teacherSaveBusy || adminAttendanceTakenOver" :disabled-ids="activeTeachers.filter((teacher) => !canSelectSessionTeacher(teacher.id)).map((teacher) => teacher.id)" @update:model-value="updateSelectedTeacherSelection" /></div>
             <div class="col-md-4"><button class="btn btn-outline-primary" :disabled="teacherSaveBusy || adminAttendanceTakenOver || selectedSessionTeacherCount > MAX_CLASS_TEACHERS" @click="saveTeachers">{{ teacherSaveBusy ? 'Đang lưu…' : 'Lưu phân công buổi này' }}</button></div>

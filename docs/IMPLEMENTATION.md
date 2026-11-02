@@ -6,6 +6,7 @@ HVC_EDU quản lý lớp học và hồ sơ học tập liên tục, không tạ
 
 - **Admin:** nhân sự, học sinh, hồ sơ theo dòng thời gian, lớp, lịch lặp và buổi học; xem video bài học trong chi tiết buổi.
 - **Giáo viên:** buổi được phân công, bắt đầu/kết thúc buổi, điểm danh, điểm và nhận xét; nhập nội dung cùng link YouTube khi buổi đang diễn ra; xem video trong chi tiết buổi; gửi chấm công cho buổi đã hoàn tất; tự sửa thông tin liên hệ.
+- **Điểm danh bằng Excel:** Admin và giáo viên có thể tải mẫu `.xlsx` riêng từ chi tiết buổi. Mẫu có sẵn lớp, thời gian, giáo viên, roster và kết quả đã lưu; chỉ nhận lại tệp đúng buổi/ngày/roster. Tệp được kiểm tra rồi nạp vào biểu mẫu để rà và sửa; tải lên không tự lưu. Giáo viên chỉ nhập khi buổi đang diễn ra; Admin chốt sau giờ kết thúc và chọn Tính công/Không tính công cho từng giáo viên như luồng hiện tại.
 - **Admin:** duyệt hoặc từ chối yêu cầu chấm công theo từng buổi; từ chối phải ghi lý do.
 - **Học sinh:** xem lịch, lịch sử, giáo viên, điểm và chuyên cần của chính mình; xem lại video buổi đã hoàn thành trong “Xem lại bài cũ”; hỏi AI bằng tiếng Việt và có thể chọn nội dung một bài học làm ngữ cảnh.
 - ROOT_ADMIN tiếp tục vào giao diện Admin. Tài khoản ASSISTANT hiện có được đổi thành TEACHER trong migration, giữ user id và lịch sử.

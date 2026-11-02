@@ -52,7 +52,14 @@ Hoàn tất yêu cầu mỗi học sinh trong roster có một bản ghi attenda
 | `positive_feedback_count` | nullable, số nguyên không âm ở DB | Số feedback tích cực; học sinh có thể thấy trường này. Không phải thang điểm chung. |
 | `positive_feedback_raw` | nullable text | Giữ nguyên giá trị nguồn không chuẩn hóa. |
 
-Các điểm riêng được phép để trống; không tìm thấy công thức tính điểm tổng hay trọng số trong code/RPC hiện hành. `positive_feedback_count/raw` cùng `assessment_snapshot` lưu giá trị nhập/import lịch sử; modal giáo viên hiện không cung cấp ô nhập feedback count/raw riêng. Từ migration 0056, Admin hiệu chỉnh attendance qua `admin_correct_session_learning`; RPC ghi dữ liệu trước/sau vào audit và chỉ nhận học sinh thuộc roster của buổi.
+Các điểm riêng được phép để trống; không tìm thấy công thức tính điểm tổng hay trọng số trong code/RPC hiện hành. `positive_feedback_count/raw` cùng `assessment_snapshot` lưu giá trị nhập/import. Từ migration 0056, Admin hiệu chỉnh attendance qua `admin_correct_session_learning`; RPC ghi dữ liệu trước/sau vào audit và chỉ nhận học sinh thuộc roster của buổi.
+
+### Nhập điểm danh và kết quả bằng Excel
+
+- Từ chi tiết buổi, Admin và giáo viên được mở hộp thoại **Điểm danh bằng Excel** theo quyền hiện hành. Tệp `.xlsx` có trang thông tin lớp/buổi/ngày/giờ/phòng/giáo viên và trang điểm danh với đầy đủ học sinh, mã học sinh, trạng thái, phút muộn, lý do vắng, điểm/ghi chú BTVN, hiểu bài, thái độ, điểm cộng và nhận xét. Mã nội bộ được ẩn và chỉ dùng ghép đúng học sinh.
+- Mẫu gắn với session, lớp, ngày nghiệp vụ `Asia/Ho_Chi_Minh` và fingerprint roster. Khi nhập, ứng dụng kiểm tra mẫu/trang tính/tiêu đề cột, đúng buổi-ngày-roster, học sinh trùng/lạ/thiếu, trạng thái, số và giới hạn/range theo biểu mẫu hiện hành. Nếu roster thay đổi, cần tải mẫu mới.
+- Ô kết quả để trống giữ giá trị đang có. Tệp hợp lệ chỉ nạp các trường khác biệt vào biểu mẫu có thể sửa; người dùng rà lại và xác nhận theo luồng lưu hiện hành. Upload không ghi dữ liệu. Giáo viên chỉ nhập/lưu khi buổi `IN_PROGRESS`; buổi `COMPLETED` chỉ xem. Admin chỉ chốt sau giờ kết thúc, vẫn phải quyết định tính công theo từng giáo viên; quyền hiệu chỉnh sau đó theo luồng Admin hiện hành.
+- Xử lý Excel chạy phía frontend bằng thư viện `xlsx`; không thêm RPC, Edge Function hay migration.
 
 Học sinh chỉ xem learning result của mình theo chính sách dữ liệu; giao diện hiện có bảng kết quả với chuyên cần, BTVN, hiểu bài, thái độ, feedback và nhận xét. Database/RLS quyết định session/result nào được đọc, không dựa vào việc ẩn hàng ở UI.
 
