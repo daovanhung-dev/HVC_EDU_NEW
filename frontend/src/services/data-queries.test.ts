@@ -42,7 +42,7 @@ vi.mock('./supabase', () => ({
   },
 }))
 
-import { getClassActiveRosterSize, getClassRosterForExport, getMyAttendance, getMySessions, getMyTimesheets, getStudentCurrentClasses, getStudentHistory, getStudentIntakeDuplicateIdentities, getStudentsCurrentClassSummaries, getTimesheets } from './data-queries'
+import { getClassActiveRosterSize, getClassRosterForExport, getMyAttendance, getMySessions, getMyTimesheets, getSessionStudents, getStudentCurrentClasses, getStudentHistory, getStudentIntakeDuplicateIdentities, getStudentsCurrentClassSummaries, getTimesheets } from './data-queries'
 
 const assignedStaffRelation = 'staff!session_staff_staff_id_fkey('
 
@@ -141,6 +141,35 @@ describe('session staff PostgREST relations', () => {
 
     const selection = mockState.selections.find((item) => item.table === 'sessions')
     expect(selection?.columns).toContain(assignedStaffRelation)
+  })
+})
+
+describe('session attendance PostgREST relation', () => {
+  beforeEach(() => {
+    mockState.selections.length = 0
+    mockState.calls.length = 0
+    mockState.responses = {}
+  })
+
+  it('normalizes object, array, and null attendance relations while preserving the source shape', async () => {
+    const savedAttendance = { id: 'qa-attendance-1', status: 'PRESENT', homework_score: 8 }
+    mockState.responses.session_students = [
+      { id: 'qa-roster-1', student_id: 'qa-student-1', student_attendances: savedAttendance },
+      { id: 'qa-roster-2', student_id: 'qa-student-2', student_attendances: [{ id: 'qa-attendance-2', status: 'LATE' }] },
+      { id: 'qa-roster-3', student_id: 'qa-student-3', student_attendances: null },
+      { id: 'qa-roster-4', student_id: 'qa-student-4', student_attendances: [] },
+    ]
+
+    const rows = await getSessionStudents('qa-session')
+
+    expect(rows.map((row) => row.student_attendances)).toEqual([
+      [savedAttendance],
+      [{ id: 'qa-attendance-2', status: 'LATE' }],
+      [],
+      [],
+    ])
+    expect(rows.map((row) => row.attendance_relation_shape)).toEqual(['object', 'array', 'empty', 'empty'])
+    expect(mockState.calls).toContainEqual({ table: 'session_students', method: 'eq', args: ['session_id', 'qa-session'] })
   })
 })
 

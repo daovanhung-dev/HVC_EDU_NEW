@@ -35,6 +35,7 @@ import {
   getSessionStudents,
   getStaff,
 } from '@/services/data-queries'
+import type { SessionStudentQueryRow } from '@/services/data-queries'
 import type { ClassDetailRow, ClassScheduleRow, SessionRow } from '@/shared/types/domain'
 import {
   attendanceIsDirty,
@@ -43,6 +44,7 @@ import {
   attendanceValidationError,
   createAttendanceValue,
   toAttendanceSaveInput,
+  type AttendanceSaveInput,
   type AttendanceStudentRow,
 } from '@/modules/staff/attendance'
 import { formatDateTime } from '@/shared/utils/format'
@@ -91,7 +93,7 @@ const classes = ref<ClassDetailRow[]>([])
 const teachersList = ref<any[]>([])
 const schedules = ref<ClassScheduleRow[]>([])
 const schedulesByClass = ref<Record<string, ClassScheduleRow[]>>({})
-const students = ref<any[]>([])
+const students = ref<SessionStudentQueryRow[]>([])
 const learningRows = ref<AttendanceStudentRow[]>([])
 const learningEditorOpen = ref(false)
 const excelAttendanceOpen = ref(false)
@@ -121,6 +123,7 @@ const scheduleLoading = ref(false)
 const sessionsLoaded = ref(false)
 const scheduleLoadErrors = ref<Record<string, boolean>>({})
 const errorMessage = ref('')
+const attendanceSaveVerification = ref<{ kind: 'success' | 'warning' | 'error'; message: string } | null>(null)
 const startInput = ref('')
 const endInput = ref('')
 const sessionRoomInput = ref('')
@@ -233,6 +236,19 @@ const canCancelOrDeleteSelectedSession = computed(() => !!selected.value
   && selected.value.status === 'SCHEDULED'
   && Date.parse(selected.value.scheduled_start_at) > Date.now())
 const dirtyLearningRows = computed(() => learningRows.value.filter(attendanceIsDirty))
+const attendanceDiagnostics = computed(() => {
+  const records = students.value.map(attendanceRecordForStudent).filter((row): row is Record<string, unknown> => Boolean(row))
+  const hasValue = (value: unknown) => value !== null && value !== undefined && value !== ''
+  return {
+    rosterCount: students.value.length,
+    attendanceCount: records.length,
+    statusCount: records.filter((row) => hasValue(row.status)).length,
+    homeworkCount: records.filter((row) => hasValue(row.homework_score)).length,
+    understandingCount: records.filter((row) => hasValue(row.understanding_score)).length,
+    attitudeCount: records.filter((row) => hasValue(row.attitude_score)).length,
+    objectRelationDetected: students.value.some((row) => row.attendance_relation_shape === 'object'),
+  }
+})
 const teacherEligibilityDirty = computed(() => assignedTeachers.value.some((item) =>
   teacherEligibilityDraft.value[item.staff_id] !== (item.timesheet_eligible ?? null)))
 const adminAttendanceDirty = computed(() => dirtyLearningRows.value.length > 0 || teacherEligibilityDirty.value)
@@ -254,11 +270,18 @@ const rosterSyncDelta = computed(() => {
 function sessionStudentHasHistory(row: any) {
   const snapshot = row.assessment_snapshot
   const hasAssessment = snapshot && typeof snapshot === 'object' && Object.keys(snapshot).length > 0
-  return Boolean(row.student_attendances?.length || hasAssessment)
+  return Boolean(attendanceRecordForStudent(row) || hasAssessment)
+}
+
+function attendanceRecordForStudent(row: { student_attendances?: unknown } | null | undefined): Record<string, unknown> | null {
+  if (!row) return null
+  const relation = row.student_attendances
+  if (Array.isArray(relation)) return (relation[0] as Record<string, unknown> | undefined) || null
+  return relation && typeof relation === 'object' ? relation as Record<string, unknown> : null
 }
 
 function attendanceRowFromSource(row: any): AttendanceStudentRow {
-  const saved = row.student_attendances?.[0]
+  const saved = attendanceRecordForStudent(row)
   const snapshot = row.assessment_snapshot || {}
   const value = createAttendanceValue(saved || {
     status: null,
@@ -273,6 +296,43 @@ function attendanceRowFromSource(row: any): AttendanceStudentRow {
     comment: snapshot.comment_raw,
   })
   return { student_id: row.student_id, students: row.students, attendance: value, initialAttendance: { ...value } }
+}
+
+const attendanceVerificationFields: Array<keyof Omit<AttendanceSaveInput, 'student_id'>> = [
+  'status', 'late_minutes', 'absence_reason', 'homework_score', 'homework_note',
+  'understanding_score', 'attitude_score', 'positive_feedback_count', 'positive_feedback_raw', 'comment',
+]
+
+function attendanceRecordMatchesInput(expected: AttendanceSaveInput, actual: Record<string, unknown>) {
+  return attendanceVerificationFields.every((field) => {
+    const expectedValue = expected[field]
+    const actualValue = actual[field]
+    if (expectedValue === null) return actualValue === null || actualValue === undefined || actualValue === ''
+    if (typeof expectedValue === 'number') return Number.isFinite(Number(actualValue)) && Number(actualValue) === expectedValue
+    return actualValue === expectedValue
+  })
+}
+
+function verifySavedAttendance(expectedRows: AttendanceSaveInput[], rpcCount: number, refreshedRows: SessionStudentQueryRow[]) {
+  const recordByStudentId = new Map(refreshedRows.map((row) => [row.student_id, attendanceRecordForStudent(row)]))
+  const persistedCount = [...recordByStudentId.values()].filter(Boolean).length
+  const mismatchedCount = expectedRows.filter((expected) => {
+    const actual = recordByStudentId.get(expected.student_id)
+    return !actual || !attendanceRecordMatchesInput(expected, actual)
+  }).length
+  const expectedCount = expectedRows.length
+
+  if (rpcCount === expectedCount && persistedCount === expectedCount && mismatchedCount === 0) {
+    return {
+      kind: 'success' as const,
+      message: `Đã xác minh CSDL: RPC xử lý ${rpcCount}/${expectedCount} học sinh; đọc lại đủ bản ghi và kết quả khớp dữ liệu đã gửi.`,
+    }
+  }
+
+  return {
+    kind: 'warning' as const,
+    message: `Cần kiểm tra dữ liệu: RPC báo ${rpcCount}/${expectedCount}; đọc lại thấy ${persistedCount}/${expectedCount} bản ghi điểm danh, ${mismatchedCount} dòng chưa khớp dữ liệu đã gửi. Hãy tải lại buổi trước khi nhập lại.`,
+  }
 }
 
 function refreshTodayDateKey() {
@@ -609,6 +669,7 @@ async function selectSession(session: SessionRow) {
   sessionNoteInput.value = session.session_note || ''
   lessonYoutubeInput.value = session.lesson_youtube_url || ''
   errorMessage.value = ''
+  attendanceSaveVerification.value = null
   const [studentsResult, schedulesResult] = await Promise.allSettled([
     getSessionStudents(session.id),
     loadClassSchedules(session.class_id),
@@ -1438,6 +1499,7 @@ function isYoutubeLessonLink(value: string) {
 async function saveSelectedLearning() {
   if (!selected.value || !canEditSelectedLearning.value || learningBusy.value || !learningDirty.value) return
   errorMessage.value = ''
+  attendanceSaveVerification.value = null
   learningValidationErrors.value = {}
   learningTeacherValidationError.value = ''
   if (!isYoutubeLessonLink(lessonYoutubeInput.value)) {
@@ -1470,14 +1532,17 @@ async function saveSelectedLearning() {
   const sessionNote = sessionNoteInput.value.trim() || null
   const lessonYoutubeUrl = lessonYoutubeInput.value.trim() || null
   const finalizingAttendance = adminAttendanceDirty.value
+  let submittedAttendance: AttendanceSaveInput[] = []
+  let attendanceRpcResult: Awaited<ReturnType<typeof recordAdminSessionAttendance>> | null = null
   learningBusy.value = true
   try {
     if (finalizingAttendance) {
-      await recordAdminSessionAttendance({
+      submittedAttendance = learningRows.value.map(toAttendanceSaveInput)
+      attendanceRpcResult = await recordAdminSessionAttendance({
         session_id: session.id,
         session_note: sessionNote,
         lesson_youtube_url: lessonYoutubeUrl,
-        students: learningRows.value.map(toAttendanceSaveInput),
+        students: submittedAttendance,
         teacher_decisions: assignedTeachers.value.map((item) => ({
           staff_id: item.staff_id,
           eligible: teacherEligibilityDraft.value[item.staff_id] as boolean,
@@ -1506,22 +1571,51 @@ async function saveSelectedLearning() {
     sessionNoteInput.value = sessionNote || ''
     lessonYoutubeInput.value = lessonYoutubeUrl || ''
     learningEditorOpen.value = false
-    toast.success(finalizingAttendance
-      ? 'Đã chốt điểm danh và quyết định chấm công cho buổi học.'
-      : 'Đã lưu nội dung buổi học.')
     try {
-      students.value = await getSessionStudents(session.id) as any[]
+      const refreshedRows = await getSessionStudents(session.id)
+      students.value = refreshedRows
       learningRows.value = students.value.map(attendanceRowFromSource)
-    } catch {
+      if (finalizingAttendance && attendanceRpcResult) {
+        attendanceSaveVerification.value = verifySavedAttendance(
+          submittedAttendance,
+          attendanceRpcResult.students_updated,
+          refreshedRows,
+        )
+        if (attendanceSaveVerification.value.kind === 'success') {
+          toast.success('Đã lưu và xác minh điểm danh, đánh giá trong CSDL.')
+        } else {
+          errorMessage.value = attendanceSaveVerification.value.message
+          toast.error(attendanceSaveVerification.value.message)
+        }
+      } else {
+        toast.success('Đã lưu nội dung buổi học.')
+      }
+    } catch (readError) {
       learningRows.value = learningRows.value.map((row) => ({
         ...row,
         attendance: createAttendanceValue(row.attendance as unknown as Record<string, unknown>),
         initialAttendance: createAttendanceValue(row.attendance as unknown as Record<string, unknown>),
       }))
-      errorMessage.value = 'Đã lưu thay đổi nhưng không tải lại được kết quả. Hãy nhấn “Làm mới” để kiểm tra dữ liệu.'
+      if (finalizingAttendance) {
+        const readMessage = userErrorMessage(readError, 'Không đọc lại được dữ liệu điểm danh từ CSDL.')
+        attendanceSaveVerification.value = {
+          kind: 'warning',
+          message: `RPC đã báo xử lý ${attendanceRpcResult?.students_updated ?? 'không rõ số lượng'}/${submittedAttendance.length} học sinh, nhưng chưa xác minh được dữ liệu đọc lại. ${readMessage}`,
+        }
+        errorMessage.value = attendanceSaveVerification.value.message
+        toast.error(attendanceSaveVerification.value.message)
+      } else {
+        errorMessage.value = 'Đã lưu thay đổi nhưng không tải lại được kết quả. Hãy nhấn “Làm mới” để kiểm tra dữ liệu.'
+      }
     }
   } catch (error) {
     errorMessage.value = userErrorMessage(error, 'Không thể lưu nội dung buổi học, điểm danh và đánh giá. Dữ liệu đang nhập vẫn được giữ.')
+    if (finalizingAttendance) {
+      attendanceSaveVerification.value = {
+        kind: 'error',
+        message: `Chưa nhận được xác nhận lưu từ RPC điểm danh. Hãy tải lại buổi để kiểm tra trước khi nhập lại. ${errorMessage.value}`,
+      }
+    }
   } finally {
     learningBusy.value = false
   }
@@ -2078,6 +2172,27 @@ watch(sessionFormIsBackdated, (isBackdated) => {
               <button class="btn btn-outline-success btn-sm" :disabled="rosterEditorLoading || rosterEditorBusy || rosterEditorOpen" @click="prepareSessionRosterSync">Đồng bộ học sinh theo lớp</button>
             </div>
           </div>
+          <div v-if="students.length" class="alert alert-info py-2 mb-3" role="status" aria-label="Kiểm tra dữ liệu điểm danh">
+            <strong>Kiểm tra dữ liệu trong CSDL:</strong>
+            {{ attendanceDiagnostics.attendanceCount }}/{{ attendanceDiagnostics.rosterCount }} học sinh có bản ghi điểm danh;
+            trạng thái {{ attendanceDiagnostics.statusCount }}/{{ attendanceDiagnostics.rosterCount }};
+            BTVN {{ attendanceDiagnostics.homeworkCount }}/{{ attendanceDiagnostics.rosterCount }};
+            Hiểu bài {{ attendanceDiagnostics.understandingCount }}/{{ attendanceDiagnostics.rosterCount }};
+            Thái độ {{ attendanceDiagnostics.attitudeCount }}/{{ attendanceDiagnostics.rosterCount }}.
+            <div v-if="attendanceDiagnostics.objectRelationDetected" class="mt-1">
+              Nguyên nhân giao diện cũ không hiện kết quả: API trả quan hệ attendance một-một dạng object, còn giao diện cũ đọc như mảng bằng <code>[0]</code>. Bản sửa đã chuẩn hóa dữ liệu.
+            </div>
+            <div v-if="attendanceDiagnostics.homeworkCount < attendanceDiagnostics.rosterCount || attendanceDiagnostics.understandingCount < attendanceDiagnostics.rosterCount || attendanceDiagnostics.attitudeCount < attendanceDiagnostics.rosterCount" class="mt-1">
+              Các ô “—” tương ứng với trường điểm chưa có giá trị lưu trong CSDL.
+            </div>
+          </div>
+          <div
+            v-if="attendanceSaveVerification"
+            class="alert py-2 mb-3"
+            :class="attendanceSaveVerification.kind === 'success' ? 'alert-success' : attendanceSaveVerification.kind === 'warning' ? 'alert-warning' : 'alert-danger'"
+            :role="attendanceSaveVerification.kind === 'success' ? 'status' : 'alert'"
+            aria-label="Kết quả xác minh lưu điểm danh"
+          >{{ attendanceSaveVerification.message }}</div>
           <p v-if="adminAttendanceTakenOver" class="small text-secondary">Roster đã khóa sau khi Admin chốt điểm danh để giữ đủ dữ liệu của buổi.</p>
           <div v-if="rosterEditorError" class="alert alert-danger py-2" role="alert">{{ rosterEditorError }}</div>
           <section v-if="rosterEditorOpen" class="border rounded p-3 mb-3" aria-label="Sửa danh sách học sinh của buổi học">

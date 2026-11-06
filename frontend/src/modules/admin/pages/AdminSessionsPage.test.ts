@@ -666,7 +666,47 @@ describe('AdminSessionsPage calendar', () => {
     expect(mockState.correctSessionSchedule).not.toHaveBeenCalledWith(expect.objectContaining({ session_id: cancelled.id }))
   })
 
-  it('saves historical lesson content and all attendance and assessment fields', async () => {
+  it('shows persisted attendance diagnostics and explains the one-to-one object response', async () => {
+    const pastDate = addCalendarDays(getBusinessDateKey(new Date()), -1)
+    const session = { ...makeSession('qa-session-relation-shape', 'Lớp Quan hệ QA', '10:00', '12:00', pastDate), status: 'COMPLETED' as const }
+    mockState.getMySessions.mockResolvedValue([session])
+    mockState.getSessionStudents.mockResolvedValue([
+      {
+        student_id: 'qa-student-1',
+        students: { full_name: 'QA Học sinh Một', student_code: 'QA-S-001' },
+        assessment_snapshot: {},
+        student_attendances: [{ status: 'PRESENT', homework_score: null, understanding_score: 4, attitude_score: 5 }],
+        attendance_relation_shape: 'object',
+      },
+      {
+        student_id: 'qa-student-2',
+        students: { full_name: 'QA Học sinh Hai', student_code: 'QA-S-002' },
+        assessment_snapshot: {},
+        student_attendances: [{ status: 'LATE', homework_score: null, understanding_score: null, attitude_score: null }],
+        attendance_relation_shape: 'object',
+      },
+    ])
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await clickButtonWithText(wrapper, 'Hiện lịch sử')
+    await wrapper.get('.calendar-event').trigger('click')
+    await flushPromises()
+
+    const diagnostic = getPageOrBody(wrapper, '[aria-label="Kiểm tra dữ liệu điểm danh"]')
+    expect(diagnostic.text()).toContain('2/2 học sinh có bản ghi điểm danh')
+    expect(diagnostic.text()).toContain('trạng thái 2/2')
+    expect(diagnostic.text()).toContain('BTVN 0/2')
+    expect(diagnostic.text()).toContain('Hiểu bài 1/2')
+    expect(diagnostic.text()).toContain('Thái độ 1/2')
+    expect(diagnostic.text()).toContain('giao diện cũ đọc như mảng bằng [0]')
+    expect(pageAndBodyText(wrapper)).toContain('PRESENT')
+    expect(pageAndBodyText(wrapper)).toContain('BTVN —/10')
+    expect(pageAndBodyText(wrapper)).toContain('Hiểu bài 4/5')
+    expect(pageAndBodyText(wrapper)).toContain('Thái độ 5/5')
+  })
+
+  it('saves historical lesson content and verifies all attendance and assessment fields', async () => {
     const pastDate = addCalendarDays(getBusinessDateKey(new Date()), -1)
     const session = { ...makeSession('qa-session-learning-edit', 'Lớp Kết quả QA', '10:00', '12:00', pastDate, ['qa-teacher-1']), status: 'COMPLETED' as const }
     const sourceRow = {
@@ -716,7 +756,44 @@ describe('AdminSessionsPage calendar', () => {
       teacher_decisions: [{ staff_id: 'qa-teacher-1', eligible: true }],
     })
     expect(mockState.correctSessionLearning).not.toHaveBeenCalled()
-    expect(mockState.toastSuccess).toHaveBeenCalledWith('Đã chốt điểm danh và quyết định chấm công cho buổi học.')
+    expect(mockState.toastSuccess).toHaveBeenCalledWith('Đã lưu và xác minh điểm danh, đánh giá trong CSDL.')
+    expect(pageAndBodyText(wrapper)).toContain('Đã xác minh CSDL: RPC xử lý 1/1 học sinh; đọc lại đủ bản ghi và kết quả khớp dữ liệu đã gửi.')
+  })
+
+  it('shows a visible warning when the RPC count or database readback does not match', async () => {
+    const pastDate = addCalendarDays(getBusinessDateKey(new Date()), -1)
+    const session = { ...makeSession('qa-session-attendance-readback-mismatch', 'Lớp Đọc lại QA', '10:00', '12:00', pastDate, ['qa-teacher-1']), status: 'COMPLETED' as const }
+    const sourceRow = {
+      student_id: 'qa-student-readback',
+      students: { full_name: 'QA Học sinh Kiểm tra', student_code: 'QA-S-CHECK' },
+      assessment_snapshot: {},
+      student_attendances: [],
+    }
+    mockState.getMySessions.mockResolvedValue([session])
+    mockState.getSessionStudents.mockReset().mockResolvedValueOnce([sourceRow]).mockResolvedValueOnce([sourceRow])
+    mockState.recordAdminSessionAttendance.mockResolvedValueOnce({
+      session_id: session.id,
+      status: 'COMPLETED',
+      students_updated: 0,
+      timesheets_approved: 1,
+      teachers_not_eligible: 0,
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await clickButtonWithText(wrapper, 'Hiện lịch sử')
+    await wrapper.get('.calendar-event').trigger('click')
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Sửa nội dung, điểm danh và đánh giá')
+    await getPageOrBody(wrapper, '#admin-attendance-status-qa-student-readback').setValue('PRESENT')
+    await getPageOrBody(wrapper, '#admin-homework-qa-student-readback').setValue('8')
+    await getPageOrBody(wrapper, '#admin-timesheet-decision-qa-teacher-1').setValue('true')
+    await clickButtonWithText(wrapper, 'Chốt điểm danh và chấm công')
+    await flushPromises()
+
+    expect(getPageOrBody(wrapper, '[aria-label="Kết quả xác minh lưu điểm danh"]').text())
+      .toContain('RPC báo 0/1; đọc lại thấy 0/1 bản ghi điểm danh, 1 dòng chưa khớp')
+    expect(mockState.toastError).toHaveBeenCalled()
   })
 
   it('preserves unsaved learning edits when the schedule group is saved', async () => {

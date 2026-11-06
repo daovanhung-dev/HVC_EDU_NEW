@@ -274,6 +274,17 @@ interface SessionStaffTimesheetEligibilityRow {
   timesheet_eligible: boolean | null
 }
 
+export type SessionStudentAttendanceRelationShape = 'object' | 'array' | 'empty'
+
+export interface SessionStudentQueryRow {
+  id: string
+  student_id: string
+  assessment_snapshot?: Record<string, unknown> | null
+  students?: { student_code?: string | null; full_name?: string | null } | null
+  student_attendances: Array<Record<string, unknown>>
+  attendance_relation_shape: SessionStudentAttendanceRelationShape
+}
+
 export async function getMySessions(): Promise<SessionRow[]> {
   const sessions = await unwrap<SessionRow[]>(supabase.from('sessions')
     .select('id,class_id,recurrence_schedule_id,recurrence_occurrence_date,scheduled_start_at,scheduled_end_at,status,session_note,lesson_youtube_url,room,schedule_override,classes(id,code,name,subjects(name),grades(name)),class_schedules(room),session_students(student_id,students(id,student_code,full_name)),session_staff(staff_id,assignment_role,staff!session_staff_staff_id_fkey(id,staff_code,full_name))')
@@ -336,8 +347,26 @@ export async function getMyStudent() {
   return unwrap(supabase.from('students').select('id,user_id,student_code,full_name,phone,email,address,parent_name,parent_phone,status').eq('user_id', sessionData.session.user.id).maybeSingle())
 }
 
-export function getSessionStudents(sessionId: string) {
-  return unwrap(supabase.from('session_students').select('id,student_id,assessment_snapshot,students(student_code,full_name),student_attendances(id,status,late_minutes,absence_reason,homework_score,homework_note,understanding_score,attitude_score,positive_feedback_count,positive_feedback_raw,comment,updated_at)').eq('session_id', sessionId).order('created_at'))
+export async function getSessionStudents(sessionId: string): Promise<SessionStudentQueryRow[]> {
+  const rows = await unwrap<any[]>(supabase.from('session_students')
+    .select('id,student_id,assessment_snapshot,students(student_code,full_name),student_attendances(id,status,late_minutes,absence_reason,homework_score,homework_note,understanding_score,attitude_score,positive_feedback_count,positive_feedback_raw,comment,updated_at)')
+    .eq('session_id', sessionId)
+    .order('created_at'))
+
+  return rows.map((row) => {
+    const relation = row.student_attendances
+    const relationShape: SessionStudentAttendanceRelationShape = relation == null
+      ? 'empty'
+      : Array.isArray(relation)
+        ? relation.length ? 'array' : 'empty'
+        : 'object'
+
+    return {
+      ...row,
+      student_attendances: relation == null ? [] : Array.isArray(relation) ? relation : [relation],
+      attendance_relation_shape: relationShape,
+    } as SessionStudentQueryRow
+  })
 }
 
 export function getMyAttendance(studentId?: string) {

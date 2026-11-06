@@ -190,6 +190,27 @@ describe('Staff SessionsPage', () => {
     unmountSessionsPage(wrapper)
   })
 
+  it('renders persisted status and scores from normalized one-to-one attendance data', async () => {
+    mocks.getSessionStudents.mockResolvedValueOnce([{
+      ...makeStudent(),
+      student_attendances: [{
+        status: 'LATE', late_minutes: 5, absence_reason: null, homework_score: null, homework_note: null,
+        understanding_score: 4, attitude_score: 5, positive_feedback_count: null,
+        positive_feedback_raw: null, comment: 'QA nhận xét đã lưu.',
+      }],
+      attendance_relation_shape: 'object',
+    }])
+    const wrapper = await openAttendance('COMPLETED')
+    const modal = attendanceModal()
+
+    expect((modal.get('[aria-label="Trạng thái điểm danh của QA Học sinh"]').element as HTMLSelectElement).value).toBe('LATE')
+    expect((modal.get('[aria-label="Điểm bài tập về nhà của QA Học sinh"]').element as HTMLInputElement).value).toBe('')
+    expect((modal.get('[aria-label="Mức hiểu bài của QA Học sinh"]').element as HTMLInputElement).value).toBe('4')
+    expect((modal.get('[aria-label="Mức thái độ của QA Học sinh"]').element as HTMLInputElement).value).toBe('5')
+    expect((modal.get('[aria-label="Nhận xét dành cho phụ huynh của QA Học sinh"]').element as HTMLTextAreaElement).value).toBe('QA nhận xét đã lưu.')
+    unmountSessionsPage(wrapper)
+  })
+
   it('shows a Gemini draft and does not persist until the teacher saves', async () => {
     const wrapper = await openAttendance()
     await attendanceModal().get('[aria-label="Nhận xét dành cho phụ huynh của QA Học sinh"]').setValue('Em có tiến bộ trong buổi học.')
