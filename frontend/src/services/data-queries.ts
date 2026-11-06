@@ -369,6 +369,46 @@ export async function getSessionStudents(sessionId: string): Promise<SessionStud
   })
 }
 
+export interface SessionAttendanceSummary {
+  roster_count: number
+  attendance_count: number
+}
+
+export async function getSessionAttendanceSummaries(sessionIds: string[]): Promise<Record<string, SessionAttendanceSummary>> {
+  const uniqueSessionIds = [...new Set(sessionIds)].filter(Boolean)
+  const summaries: Record<string, SessionAttendanceSummary> = Object.fromEntries(
+    uniqueSessionIds.map((sessionId) => [sessionId, { roster_count: 0, attendance_count: 0 }]),
+  )
+  if (!uniqueSessionIds.length) return summaries
+
+  const sessionPageSize = 100
+  const rowPageSize = 1000
+  for (let sessionOffset = 0; sessionOffset < uniqueSessionIds.length; sessionOffset += sessionPageSize) {
+    const sessionIdPage = uniqueSessionIds.slice(sessionOffset, sessionOffset + sessionPageSize)
+    for (let rowOffset = 0; ; rowOffset += rowPageSize) {
+      const rows = await unwrap<any[]>(supabase.from('session_students')
+        .select('session_id,student_id,student_attendances(id)')
+        .in('session_id', sessionIdPage)
+        .order('session_id')
+        .order('student_id')
+        .range(rowOffset, rowOffset + rowPageSize - 1))
+
+      for (const row of rows) {
+        const summary = summaries[row.session_id]
+        if (!summary) continue
+        summary.roster_count += 1
+        const attendance = row.student_attendances
+        if (Array.isArray(attendance) ? attendance.length > 0 : attendance !== null && typeof attendance === 'object') {
+          summary.attendance_count += 1
+        }
+      }
+      if (rows.length < rowPageSize) break
+    }
+  }
+
+  return summaries
+}
+
 export function getMyAttendance(studentId?: string) {
   let query = supabase.from('student_attendances').select('id,student_id,status,late_minutes,absence_reason,homework_score,homework_note,understanding_score,attitude_score,positive_feedback_count,positive_feedback_raw,comment,updated_at,students(id,student_code,full_name),sessions(id,class_id,scheduled_start_at,scheduled_end_at,status,session_note,classes(code,name),session_staff(staff_id,staff!session_staff_staff_id_fkey(id,full_name)))').order('updated_at', { ascending: false })
   if (studentId) query = query.eq('student_id', studentId)

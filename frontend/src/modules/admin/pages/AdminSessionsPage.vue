@@ -5,6 +5,7 @@ import {
   addTeacherToClassSchedule,
   createClassSchedule,
   createManualSession,
+  correctCompletedSession,
   deleteSession,
   removeTeacherFromClassSchedule,
   previewDeleteSessionsForMonth,
@@ -32,6 +33,7 @@ import {
   getClassSchedulesForClasses,
   getClasses,
   getMySessions,
+  getSessionAttendanceSummaries,
   getSessionStudents,
   getStaff,
 } from '@/services/data-queries'
@@ -59,6 +61,7 @@ import AppState from '@/app/components/AppState.vue'
 import DetailModal from '@/app/components/DetailModal.vue'
 import YouTubePlayer from '@/app/components/YouTubePlayer.vue'
 import TeacherPicker from '../components/TeacherPicker.vue'
+import CompletedSessionAttendanceEditor from '../components/CompletedSessionAttendanceEditor.vue'
 import SessionAttendanceExcelModal from '@/modules/staff/components/SessionAttendanceExcelModal.vue'
 import {
   addCalendarDays,
@@ -123,7 +126,12 @@ const scheduleLoading = ref(false)
 const sessionsLoaded = ref(false)
 const scheduleLoadErrors = ref<Record<string, boolean>>({})
 const errorMessage = ref('')
+const attendanceSummaryError = ref('')
 const attendanceSaveVerification = ref<{ kind: 'success' | 'warning' | 'error'; message: string } | null>(null)
+const completedSessionCorrectionBusy = ref(false)
+const completedSessionCorrectionError = ref('')
+const completedSessionEditOpen = ref(false)
+const completedSessionDetailMode = ref(false)
 const startInput = ref('')
 const endInput = ref('')
 const sessionRoomInput = ref('')
@@ -160,6 +168,7 @@ const pendingTemplateSlots = ref<MonthWeekTemplateSlot[]>([])
 let weeklyTemplateSlotSequence = 0
 const pendingDeleteMonthStart = ref('')
 const showHistory = ref(false)
+const showAttendedSessions = ref(false)
 const confirmDetails = ref({ title: '', message: '', itemName: '', warning: '', confirmLabel: 'Xác nhận', destructive: false })
 const confirmActionType = ref<'archive-schedule' | 'cancel-session' | 'delete-session' | 'sync-session-roster' | 'delete-month-sessions' | 'replace-month-template' | ''>('')
 const pendingSchedule = ref<ClassScheduleRow | null>(null)
@@ -235,6 +244,8 @@ const adminAttendanceTakenOver = computed(() => assignedTeachers.value.some((ite
 const canCancelOrDeleteSelectedSession = computed(() => !!selected.value
   && selected.value.status === 'SCHEDULED'
   && Date.parse(selected.value.scheduled_start_at) > Date.now())
+const isCompletedAttendanceDetail = computed(() => completedSessionDetailMode.value
+  && selected.value?.status === 'COMPLETED')
 const dirtyLearningRows = computed(() => learningRows.value.filter(attendanceIsDirty))
 const attendanceDiagnostics = computed(() => {
   const records = students.value.map(attendanceRecordForStudent).filter((row): row is Record<string, unknown> => Boolean(row))
@@ -258,6 +269,14 @@ const learningDirty = computed(() => !!selected.value && (
   || adminAttendanceDirty.value
 ))
 const selectedSessionDate = computed(() => selected.value ? getBusinessDateKey(selected.value.scheduled_start_at) : '')
+const completedSessionEditsDirty = computed(() => !!selected.value && isCompletedAttendanceDetail.value && (
+  startInput.value !== toLocalInput(selected.value.scheduled_start_at)
+  || endInput.value !== toLocalInput(selected.value.scheduled_end_at)
+  || sessionRoomInput.value.trim() !== (selected.value.room || selected.value.class_schedules?.room || '').trim()
+  || sessionNoteInput.value.trim() !== (selected.value.session_note || '').trim()
+  || lessonYoutubeInput.value.trim() !== (selected.value.lesson_youtube_url || '').trim()
+  || dirtyLearningRows.value.length > 0
+))
 const rosterSyncDelta = computed(() => {
   const currentIds = new Set(students.value.map((row) => row.student_id))
   const targetIds = new Set(sessionRosterCandidates.value.map((row) => row.student_id))
@@ -361,10 +380,16 @@ const sessionsHiddenByClassFilter = computed(() => selectedClassId.value
   : [])
 const isHiddenByHistoryFilter = (session: SessionRow) => session.status === 'CANCELLED'
   || getBusinessDateKey(session.scheduled_start_at) < todayDateKey.value
+const isFullyAttendedSession = (session: SessionRow) => session.status === 'COMPLETED'
+  && (session.attendance_summary?.roster_count || 0) > 0
+  && session.attendance_summary?.attendance_count === session.attendance_summary?.roster_count
+const attendedSessions = computed(() => classSessions.value.filter(isFullyAttendedSession))
 const hiddenHistorySessions = computed(() => classSessions.value.filter(isHiddenByHistoryFilter))
-const visibleSessions = computed(() => showHistory.value
-  ? classSessions.value
-  : classSessions.value.filter((session) => !isHiddenByHistoryFilter(session)))
+const visibleSessions = computed(() => showAttendedSessions.value
+  ? attendedSessions.value
+  : showHistory.value
+    ? classSessions.value
+    : classSessions.value.filter((session) => !isHiddenByHistoryFilter(session)))
 const visibleSessionsByDate = computed(() => groupSessionsByBusinessDate(visibleSessions.value))
 const monthDateKeys = computed(() => getMonthGridDateKeys(calendarAnchorDate.value))
 const weekDateKeys = computed(() => getWeekDateKeys(calendarAnchorDate.value))
@@ -375,6 +400,9 @@ const visibleSessionsInView = computed(() => visibleSessions.value.filter((sessi
 const hiddenHistorySessionsInView = computed(() => sessionsInView.value.filter(isHiddenByHistoryFilter))
 const sessionsHiddenByClassFilterInView = computed(() => sessionsHiddenByClassFilter.value.filter((session) => sessionDateKeysInView.value.has(getBusinessDateKey(session.scheduled_start_at))))
 const listEmptyMessage = computed(() => {
+  if (showAttendedSessions.value) {
+    return attendanceSummaryError.value || 'Không có buổi đã hoàn tất với đủ điểm danh trong lịch.'
+  }
   if (classSessions.value.length) {
     return hiddenHistorySessions.value.length
       ? `Không có buổi sắp tới. ${hiddenHistorySessions.value.length} buổi cũ hoặc đã hủy đang ẩn.`
@@ -386,6 +414,9 @@ const listEmptyMessage = computed(() => {
   return selectedClassId.value ? 'Lớp đang chọn chưa có buổi học.' : 'Chưa có buổi học nào.'
 })
 const calendarEmptyMessage = computed(() => {
+  if (showAttendedSessions.value) {
+    return attendanceSummaryError.value || 'Không có buổi đã hoàn tất với đủ điểm danh trong kỳ này.'
+  }
   const hiddenReasons = [
     hiddenHistorySessionsInView.value.length
       ? `${hiddenHistorySessionsInView.value.length} buổi cũ hoặc đã hủy đang ẩn`
@@ -455,8 +486,23 @@ function goToToday() {
 }
 
 function revealHiddenHistory() {
+  showAttendedSessions.value = false
   showHistory.value = true
   if (!visibleSessionsInView.value.length && hiddenHistorySessions.value.length) viewMode.value = 'list'
+}
+
+function toggleHistory() {
+  showAttendedSessions.value = false
+  showHistory.value = !showHistory.value
+}
+
+function toggleAttendedSessions() {
+  if (attendanceSummaryError.value) return
+  showAttendedSessions.value = !showAttendedSessions.value
+  if (showAttendedSessions.value) {
+    showHistory.value = false
+    if (selected.value && isFullyAttendedSession(selected.value)) completedSessionDetailMode.value = true
+  }
 }
 
 async function load(): Promise<boolean> {
@@ -464,6 +510,7 @@ async function load(): Promise<boolean> {
   let sessionsRequestSucceeded = false
   refreshTodayDateKey()
   errorMessage.value = ''
+  attendanceSummaryError.value = ''
   try {
     const [sessionResult, classResult, staffResult] = await Promise.allSettled([
       getMySessions(),
@@ -473,7 +520,19 @@ async function load(): Promise<boolean> {
     const loadErrors: string[] = []
 
     if (sessionResult.status === 'fulfilled') {
-      sessions.value = sessionResult.value
+      try {
+        const summarySessionIds = sessionResult.value
+          .filter((session) => session.status === 'COMPLETED')
+          .map((session) => session.id)
+        const summaries = await getSessionAttendanceSummaries(summarySessionIds)
+        sessions.value = sessionResult.value.map((session) => ({
+          ...session,
+          attendance_summary: summaries[session.id] || { roster_count: 0, attendance_count: 0 },
+        }))
+      } catch (error) {
+        sessions.value = sessionResult.value
+        attendanceSummaryError.value = userErrorMessage(error, 'Không thể kiểm tra số bản ghi điểm danh trong CSDL.')
+      }
       sessionsLoaded.value = true
       sessionsRequestSucceeded = true
       if (selected.value) {
@@ -643,15 +702,20 @@ watch(visibleSessions, (rows) => {
   if (selected.value && !rows.some((session) => session.id === selected.value?.id)) {
     selected.value = null
     selectedDetailOpen.value = false
+    completedSessionDetailMode.value = false
+    completedSessionEditOpen.value = false
     students.value = []
     selectedTeacherIds.value = []
     teacherEligibilityDraft.value = {}
   }
 })
 
-async function selectSession(session: SessionRow) {
+async function selectSession(session: SessionRow, attendedDetail = showAttendedSessions.value) {
   selected.value = session
+  completedSessionDetailMode.value = attendedDetail && isFullyAttendedSession(session)
   selectedDetailOpen.value = true
+  completedSessionEditOpen.value = false
+  completedSessionCorrectionError.value = ''
   rosterEditorOpen.value = false
   learningEditorOpen.value = false
   rosterEditorError.value = ''
@@ -1477,6 +1541,116 @@ async function saveSchedule() {
   finally { scheduleSaveBusy.value = false }
 }
 
+function cancelCompletedSessionEdit() {
+  if (!selected.value) return
+  startInput.value = toLocalInput(selected.value.scheduled_start_at)
+  endInput.value = toLocalInput(selected.value.scheduled_end_at)
+  sessionRoomInput.value = selected.value.room ?? selected.value.class_schedules?.room ?? ''
+  sessionNoteInput.value = selected.value.session_note || ''
+  lessonYoutubeInput.value = selected.value.lesson_youtube_url || ''
+  learningRows.value = students.value.map(attendanceRowFromSource)
+  completedSessionCorrectionError.value = ''
+  completedSessionEditOpen.value = false
+}
+
+async function saveCompletedSessionCorrection() {
+  const session = selected.value
+  if (!session || !isCompletedAttendanceDetail.value || !completedSessionEditOpen.value
+      || !completedSessionEditsDirty.value || completedSessionCorrectionBusy.value) return
+
+  completedSessionCorrectionError.value = ''
+  attendanceSaveVerification.value = null
+  if (!startInput.value || !endInput.value) {
+    completedSessionCorrectionError.value = 'Hãy nhập đầy đủ ngày giờ bắt đầu và kết thúc.'
+    return
+  }
+  const start = fromLocalInput(startInput.value)
+  const end = fromLocalInput(endInput.value)
+  const startAt = Date.parse(start)
+  const endAt = Date.parse(end)
+  if (!Number.isFinite(startAt) || !Number.isFinite(endAt) || endAt <= startAt
+      || getBusinessDateKey(new Date(startAt)) !== getBusinessDateKey(new Date(endAt))) {
+    completedSessionCorrectionError.value = 'Giờ kết thúc phải sau giờ bắt đầu và cùng ngày với giờ bắt đầu.'
+    return
+  }
+  if (endAt > Date.now()) {
+    completedSessionCorrectionError.value = 'Buổi đã hoàn tất chỉ được hiệu chỉnh về thời điểm đã qua.'
+    return
+  }
+  if (!isYoutubeLessonLink(lessonYoutubeInput.value)) {
+    completedSessionCorrectionError.value = 'Chỉ chấp nhận link video YouTube hợp lệ.'
+    return
+  }
+  const invalidRow = learningRows.value.find((row) => attendanceValidationError(row.attendance))
+  if (invalidRow) {
+    completedSessionCorrectionError.value = `Dữ liệu điểm danh không hợp lệ. ${attendanceValidationError(invalidRow.attendance)}`
+    return
+  }
+
+  const submittedAttendance = learningRows.value.map(toAttendanceSaveInput)
+  completedSessionCorrectionBusy.value = true
+  try {
+    const rpcResult = await correctCompletedSession({
+      session_id: session.id,
+      scheduled_start_at: start,
+      scheduled_end_at: end,
+      room: sessionRoomInput.value.trim() || null,
+      session_note: sessionNoteInput.value.trim() || null,
+      lesson_youtube_url: lessonYoutubeInput.value.trim() || null,
+      students: submittedAttendance,
+    })
+
+    let refreshedRows: SessionStudentQueryRow[]
+    try {
+      refreshedRows = await getSessionStudents(session.id)
+      await load()
+    } catch (readError) {
+      const safeMessage = userErrorMessage(readError, 'Không thể đọc lại dữ liệu sau khi lưu.')
+      attendanceSaveVerification.value = {
+        kind: 'warning',
+        message: `RPC đã xử lý ${rpcResult.students_updated}/${submittedAttendance.length} học sinh nhưng chưa xác minh được dữ liệu đọc lại. ${safeMessage}`,
+      }
+      completedSessionCorrectionError.value = attendanceSaveVerification.value.message
+      return
+    }
+
+    const refreshedSession = sessions.value.find((item) => item.id === session.id)
+    const attendanceCheck = verifySavedAttendance(submittedAttendance, rpcResult.students_updated, refreshedRows)
+    const sessionCheck = Boolean(refreshedSession
+      && refreshedSession.status === 'COMPLETED'
+      && Date.parse(refreshedSession.scheduled_start_at) === startAt
+      && Date.parse(refreshedSession.scheduled_end_at) === endAt
+      && (refreshedSession.room || null) === (sessionRoomInput.value.trim() || null)
+      && (refreshedSession.session_note || null) === (sessionNoteInput.value.trim() || null)
+      && (refreshedSession.lesson_youtube_url || null) === (lessonYoutubeInput.value.trim() || null))
+    const verification = attendanceCheck.kind === 'success' && !sessionCheck
+      ? { kind: 'warning' as const, message: 'Điểm danh đã được đọc lại, nhưng thông tin buổi học chưa khớp dữ liệu vừa gửi. Hãy tải lại trước khi sửa tiếp.' }
+      : attendanceCheck
+    attendanceSaveVerification.value = verification
+
+    if (verification.kind !== 'success' || !refreshedSession) {
+      completedSessionCorrectionError.value = verification.message
+      return
+    }
+
+    selected.value = refreshedSession
+    students.value = refreshedRows
+    learningRows.value = refreshedRows.map(attendanceRowFromSource)
+    startInput.value = toLocalInput(refreshedSession.scheduled_start_at)
+    endInput.value = toLocalInput(refreshedSession.scheduled_end_at)
+    sessionRoomInput.value = refreshedSession.room ?? refreshedSession.class_schedules?.room ?? ''
+    sessionNoteInput.value = refreshedSession.session_note || ''
+    lessonYoutubeInput.value = refreshedSession.lesson_youtube_url || ''
+    completedSessionEditOpen.value = false
+    toast.success('Đã lưu và xác minh thông tin buổi học trong CSDL.')
+  } catch (error) {
+    completedSessionCorrectionError.value = userErrorMessage(error, 'Không thể lưu thông tin buổi học đã điểm danh. Dữ liệu đang nhập vẫn được giữ.')
+    attendanceSaveVerification.value = { kind: 'error', message: completedSessionCorrectionError.value }
+  } finally {
+    completedSessionCorrectionBusy.value = false
+  }
+}
+
 function isYoutubeLessonLink(value: string) {
   if (!value.trim()) return true
   try {
@@ -1958,10 +2132,20 @@ watch(sessionFormIsBackdated, (isBackdated) => {
             <button class="btn" :class="viewMode === 'week' ? 'btn-primary' : 'btn-outline-primary'" :aria-pressed="viewMode === 'week'" @click="viewMode = 'week'">Tuần</button>
             <button class="btn" :class="viewMode === 'list' ? 'btn-primary' : 'btn-outline-primary'" :aria-pressed="viewMode === 'list'" @click="viewMode = 'list'">Danh sách</button>
           </div>
-          <button class="btn btn-sm" :class="showHistory ? 'btn-primary' : 'btn-outline-secondary'" :aria-pressed="showHistory" @click="showHistory = !showHistory">
+          <button class="btn btn-sm" :class="showHistory ? 'btn-primary' : 'btn-outline-secondary'" :aria-pressed="showHistory" @click="toggleHistory">
             {{ showHistory ? 'Ẩn lịch sử' : 'Hiện lịch sử' }}
           </button>
+          <button
+            class="btn btn-sm"
+            :class="showAttendedSessions ? 'btn-primary' : 'btn-outline-primary'"
+            type="button"
+            :aria-pressed="showAttendedSessions"
+            :disabled="Boolean(attendanceSummaryError)"
+            :title="attendanceSummaryError || 'Hiển thị các buổi hoàn tất có đủ bản ghi điểm danh trong CSDL'"
+            @click="toggleAttendedSessions"
+          >Các buổi học đã điểm danh</button>
         </div>
+        <small v-if="attendanceSummaryError" class="text-danger" role="alert">{{ attendanceSummaryError }}</small>
         <div v-if="viewMode !== 'list'" class="d-flex flex-wrap align-items-center gap-2">
           <button class="btn btn-outline-secondary btn-sm" aria-label="Kỳ trước" @click="changePeriod(-1)">‹ Trước</button>
           <h2 class="h6 mb-0 text-capitalize text-center calendar-period-title">{{ periodTitle }}</h2>
@@ -2069,6 +2253,24 @@ watch(sessionFormIsBackdated, (isBackdated) => {
 
     <div class="col-12">
       <DetailModal v-if="selected" v-model="selectedDetailOpen" :title="className(selected)" :description="`${formatDateTime(selected.scheduled_start_at)} · ${selected.status}`" size="xl" @hidden="handleSelectedDetailHidden">
+          <CompletedSessionAttendanceEditor
+            v-if="isCompletedAttendanceDetail"
+            v-model:rows="learningRows"
+            v-model:start-input="startInput"
+            v-model:end-input="endInput"
+            v-model:room-input="sessionRoomInput"
+            v-model:session-note-input="sessionNoteInput"
+            v-model:lesson-youtube-input="lessonYoutubeInput"
+            :session="selected"
+            :editing="completedSessionEditOpen"
+            :saving="completedSessionCorrectionBusy"
+            :dirty="completedSessionEditsDirty"
+            :error="completedSessionCorrectionError"
+            @edit="completedSessionEditOpen = true; completedSessionCorrectionError = ''"
+            @cancel="cancelCompletedSessionEdit"
+            @save="saveCompletedSessionCorrection"
+          />
+          <template v-else>
           <h2 class="h5">{{ className(selected) }}</h2>
           <div class="text-secondary mb-3">Giáo viên: {{ teachers }} · {{ selected.status }} · {{ sessionRoomInput || 'Chưa xếp phòng' }}</div>
           <div v-if="selected.status !== 'CANCELLED'" class="d-flex flex-wrap align-items-center gap-2 mb-3">
@@ -2230,6 +2432,7 @@ watch(sessionFormIsBackdated, (isBackdated) => {
           </div>
           <div v-if="!students.length" class="text-secondary small">Buổi học chưa có danh sách học sinh.</div>
           <div v-if="errorMessage" class="alert alert-danger mt-3" role="alert">{{ errorMessage }}</div>
+          </template>
           <template #footer><button class="btn btn-outline-secondary" type="button" @click="selectedDetailOpen = false">Đóng</button></template>
       </DetailModal>
     </div>

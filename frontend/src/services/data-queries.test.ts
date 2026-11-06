@@ -42,7 +42,7 @@ vi.mock('./supabase', () => ({
   },
 }))
 
-import { getClassActiveRosterSize, getClassRosterForExport, getMyAttendance, getMySessions, getMyTimesheets, getSessionStudents, getStudentCurrentClasses, getStudentHistory, getStudentIntakeDuplicateIdentities, getStudentsCurrentClassSummaries, getTimesheets } from './data-queries'
+import { getClassActiveRosterSize, getClassRosterForExport, getMyAttendance, getMySessions, getMyTimesheets, getSessionAttendanceSummaries, getSessionStudents, getStudentCurrentClasses, getStudentHistory, getStudentIntakeDuplicateIdentities, getStudentsCurrentClassSummaries, getTimesheets } from './data-queries'
 
 const assignedStaffRelation = 'staff!session_staff_staff_id_fkey('
 
@@ -170,6 +170,23 @@ describe('session attendance PostgREST relation', () => {
     ])
     expect(rows.map((row) => row.attendance_relation_shape)).toEqual(['object', 'array', 'empty', 'empty'])
     expect(mockState.calls).toContainEqual({ table: 'session_students', method: 'eq', args: ['session_id', 'qa-session'] })
+  })
+
+  it('counts attendance rows when the one-to-one relation is an object, array, or null', async () => {
+    mockState.responses.session_students = [
+      { session_id: 'qa-object', student_id: 'qa-s1', student_attendances: { id: 'qa-a1' } },
+      { session_id: 'qa-array', student_id: 'qa-s2', student_attendances: [{ id: 'qa-a2' }] },
+      { session_id: 'qa-array', student_id: 'qa-s3', student_attendances: [] },
+      { session_id: 'qa-null', student_id: 'qa-s4', student_attendances: null },
+    ]
+
+    await expect(getSessionAttendanceSummaries(['qa-object', 'qa-array', 'qa-null'])).resolves.toEqual({
+      'qa-object': { roster_count: 1, attendance_count: 1 },
+      'qa-array': { roster_count: 2, attendance_count: 1 },
+      'qa-null': { roster_count: 1, attendance_count: 0 },
+    })
+    expect(mockState.selections.find((item) => item.table === 'session_students')?.columns)
+      .toBe('session_id,student_id,student_attendances(id)')
   })
 })
 

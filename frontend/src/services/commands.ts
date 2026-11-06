@@ -471,6 +471,28 @@ export interface AdminSessionAttendanceInput {
   comment: string | null
 }
 
+export async function correctCompletedSession(input: {
+  session_id: string
+  scheduled_start_at: string
+  scheduled_end_at: string
+  room: string | null
+  session_note: string | null
+  lesson_youtube_url: string | null
+  students: AdminSessionAttendanceInput[]
+}): Promise<{ session_id: string; status: 'COMPLETED'; students_updated: number }> {
+  const { data, error } = await supabase.rpc('admin_correct_completed_session', {
+    p_session_id: input.session_id,
+    p_scheduled_start_at: input.scheduled_start_at,
+    p_scheduled_end_at: input.scheduled_end_at,
+    p_room: input.room,
+    p_session_note: input.session_note,
+    p_lesson_youtube_url: input.lesson_youtube_url,
+    p_students: input.students,
+  })
+  if (error) throw error
+  return data as { session_id: string; status: 'COMPLETED'; students_updated: number }
+}
+
 export async function correctSessionLearning(input: {
   session_id: string
   session_note: string | null

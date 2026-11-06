@@ -154,6 +154,17 @@ export function getClassSchedulesForClasses(classIds: string[]) {
   return query(schedules.filter((row) => classIds.includes(row.class_id) && row.status === 'ACTIVE'))
 }
 export function getMySessions() { return query(sessions) }
+export function getSessionAttendanceSummaries(sessionIds: string[]) {
+  const summaries = Object.fromEntries(sessionIds.map((id) => [id, { roster_count: 0, attendance_count: 0 }]))
+  for (const session of sessions.filter((item) => sessionIds.includes(item.id))) {
+    const roster = session.session_students || []
+    summaries[session.id] = {
+      roster_count: roster.length,
+      attendance_count: roster.filter((student: any) => attendance.some((row) => row.session_id === session.id && row.student_id === student.student_id)).length,
+    }
+  }
+  return query(summaries).then((result) => result || summaries)
+}
 export function getSessionStudents(sessionId: string) {
   const session = sessions.find((item) => item.id === sessionId)
   return query((session?.session_students || []).map((item: any) => {
@@ -335,6 +346,23 @@ export async function correctSessionSchedule(input: any) {
     row.room = input.room
   }
   return { session_id: input.session_id, status: row?.status, room: input.room }
+}
+export async function correctCompletedSession(input: any) {
+  await query(true)
+  const row = sessions.find((item) => item.id === input.session_id)
+  if (!row || row.status !== 'COMPLETED') throw new Error('SESSION_NOT_COMPLETED')
+  Object.assign(row, {
+    scheduled_start_at: input.scheduled_start_at,
+    scheduled_end_at: input.scheduled_end_at,
+    room: input.room,
+    session_note: input.session_note,
+    lesson_youtube_url: input.lesson_youtube_url,
+  })
+  for (const change of input.students || []) {
+    const existing = attendance.find((item) => item.session_id === input.session_id && item.student_id === change.student_id)
+    if (existing) Object.assign(existing, change)
+  }
+  return { session_id: input.session_id, status: 'COMPLETED', students_updated: (input.students || []).length }
 }
 export async function correctSessionLearning(input: any) {
   await query(true)

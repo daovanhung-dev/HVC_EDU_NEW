@@ -10,6 +10,7 @@ import AdminSessionsPage from './AdminSessionsPage.vue'
 const mockState = vi.hoisted(() => ({
   route: { query: { class_id: '' } },
   getMySessions: vi.fn(),
+  getSessionAttendanceSummaries: vi.fn(),
   getSessionStudents: vi.fn(),
   getClasses: vi.fn(),
   getStaff: vi.fn(),
@@ -20,6 +21,7 @@ const mockState = vi.hoisted(() => ({
   updateSessionOccurrence: vi.fn(),
   correctSessionSchedule: vi.fn(),
   correctSessionLearning: vi.fn(),
+  correctCompletedSession: vi.fn(),
   recordAdminSessionAttendance: vi.fn(),
   createManualSession: vi.fn(),
   previewMonthWeekTemplateReplacement: vi.fn(),
@@ -42,6 +44,7 @@ const mockState = vi.hoisted(() => ({
 
 vi.mock('@/services/data-queries', () => ({
   getMySessions: mockState.getMySessions,
+  getSessionAttendanceSummaries: mockState.getSessionAttendanceSummaries,
   getSessionStudents: mockState.getSessionStudents,
   getClasses: mockState.getClasses,
   getStaff: mockState.getStaff,
@@ -55,6 +58,7 @@ vi.mock('@/services/commands', () => ({
   updateSessionOccurrence: mockState.updateSessionOccurrence,
   correctSessionSchedule: mockState.correctSessionSchedule,
   correctSessionLearning: mockState.correctSessionLearning,
+  correctCompletedSession: mockState.correctCompletedSession,
   recordAdminSessionAttendance: mockState.recordAdminSessionAttendance,
   createManualSession: mockState.createManualSession,
   previewMonthWeekTemplateReplacement: mockState.previewMonthWeekTemplateReplacement,
@@ -178,6 +182,7 @@ describe('AdminSessionsPage calendar', () => {
   beforeEach(() => {
     mockState.route.query.class_id = ''
     mockState.getMySessions.mockReset().mockResolvedValue([])
+    mockState.getSessionAttendanceSummaries.mockReset().mockImplementation(async (sessionIds: string[]) => Object.fromEntries(sessionIds.map((id) => [id, { roster_count: 0, attendance_count: 0 }])))
     mockState.getSessionStudents.mockReset().mockResolvedValue([])
     mockState.getClasses.mockReset().mockResolvedValue([
       { id: 'qa-class-1', code: 'QA-CODE-1', name: 'Lớp Toán QA', status: 'ACTIVE' },
@@ -200,6 +205,7 @@ describe('AdminSessionsPage calendar', () => {
     mockState.updateSessionOccurrence.mockReset().mockResolvedValue(undefined)
     mockState.correctSessionSchedule.mockReset().mockResolvedValue(undefined)
     mockState.correctSessionLearning.mockReset().mockResolvedValue({ session_id: 'qa-session-1', students_updated: 1 })
+    mockState.correctCompletedSession.mockReset().mockResolvedValue({ session_id: 'qa-session-1', status: 'COMPLETED', students_updated: 1 })
     mockState.recordAdminSessionAttendance.mockReset().mockResolvedValue({ session_id: 'qa-session-1', status: 'COMPLETED', students_updated: 1, timesheets_approved: 1, teachers_not_eligible: 0 })
     mockState.createManualSession.mockReset().mockResolvedValue({ session_id: 'qa-new-session' })
     mockState.previewMonthWeekTemplateReplacement.mockReset().mockResolvedValue({
@@ -593,6 +599,98 @@ describe('AdminSessionsPage calendar', () => {
     expect(findAllPageOrBody(wrapper, '.app-modal .modal-title').map((title) => title.text())).toContain('Lớp Toán QA')
     expect(pageAndBodyText(wrapper)).not.toContain('QA-CLASS-1')
     expect(findPageOrBody(wrapper, '.app-modal iframe').attributes('src')).toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ')
+  })
+
+  it('filters to fully attended completed sessions and opens the Excel-style correction table', async () => {
+    const today = getBusinessDateKey(new Date())
+    const completed = { ...makeSession('qa-completed-full', 'QA Buổi đủ điểm danh', '10:00', '12:00', today), status: 'COMPLETED' as const }
+    const partial = { ...makeSession('qa-completed-partial', 'QA Buổi thiếu điểm danh', '13:00', '15:00', today), status: 'COMPLETED' as const }
+    const empty = { ...makeSession('qa-completed-empty', 'QA Buổi chưa có roster', '15:00', '17:00', today), status: 'COMPLETED' as const }
+    const inProgress = { ...makeSession('qa-in-progress', 'QA Buổi đang diễn ra', '08:00', '09:00', today), status: 'IN_PROGRESS' as const }
+    mockState.getMySessions.mockResolvedValue([completed, partial, empty, inProgress])
+    mockState.getSessionAttendanceSummaries.mockResolvedValue({
+      [completed.id]: { roster_count: 1, attendance_count: 1 },
+      [partial.id]: { roster_count: 2, attendance_count: 1 },
+      [empty.id]: { roster_count: 0, attendance_count: 0 },
+      [inProgress.id]: { roster_count: 1, attendance_count: 1 },
+    })
+    mockState.getSessionStudents.mockResolvedValue([{
+      student_id: 'qa-student-1',
+      students: { full_name: 'QA Học sinh Một', student_code: 'QA-S-001' },
+      assessment_snapshot: {},
+      student_attendances: [{ status: 'PRESENT', homework_score: 8, homework_note: 'QA bài tập', understanding_score: 4, attitude_score: 5, positive_feedback_count: 1, positive_feedback_raw: 'QA nỗ lực', comment: 'QA nhận xét' }],
+    }])
+
+    const wrapper = mountPage()
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Danh sách')
+    await clickButtonWithText(wrapper, 'Các buổi học đã điểm danh')
+
+    expect(wrapper.findAll('.session-list tbody tr')).toHaveLength(1)
+    expect(wrapper.find('.session-list').text()).toContain('QA Buổi đủ điểm danh')
+    expect(wrapper.find('.session-list').text()).not.toContain('QA Buổi thiếu điểm danh')
+    expect(wrapper.find('.session-list').text()).not.toContain('QA Buổi chưa có roster')
+    expect(wrapper.find('.session-list').text()).not.toContain('QA Buổi đang diễn ra')
+
+    await wrapper.get('.session-list tbody tr').trigger('click')
+    await flushPromises()
+    const detail = findAllPageOrBody(wrapper, '.app-modal').find((modal) => modal.text().includes('Mã học sinh'))
+    expect(detail).toBeDefined()
+    expect(detail?.text()).toContain('QA-S-001')
+    expect(detail?.text()).toContain('QA Học sinh Một')
+    expect(detail?.text()).toContain('Điểm BTVN /10')
+    expect(detail?.text()).toContain('Ghi chú BTVN')
+    expect(detail?.text()).toContain('Hiểu bài /5')
+    expect(detail?.text()).toContain('Thái độ /5')
+    expect(detail?.text()).toContain('Ghi nhận điểm cộng')
+    expect(detail?.text()).toContain('QA nhận xét')
+  })
+
+  it('saves corrections for a completed session through the RPC and verifies readback', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-07T12:00:00+07:00'))
+    const date = getBusinessDateKey(new Date())
+    const session = { ...makeSession('qa-completed-correction', 'QA Buổi cần sửa', '10:00', '11:00', date), status: 'COMPLETED' as const }
+    const sourceAttendance = {
+      status: 'PRESENT', late_minutes: null, absence_reason: null, homework_score: 7, homework_note: 'QA bài tập',
+      understanding_score: 4, attitude_score: 5, positive_feedback_count: 1, positive_feedback_raw: 'QA nỗ lực', comment: 'QA nhận xét',
+    }
+    const sourceRow = {
+      student_id: 'qa-student-1', students: { full_name: 'QA Học sinh Một', student_code: 'QA-S-001' },
+      assessment_snapshot: {}, student_attendances: [{ id: 'qa-attendance-1', ...sourceAttendance }],
+    }
+    const savedRow = { ...sourceRow, student_attendances: [{ id: 'qa-attendance-1', ...sourceAttendance, homework_score: 8 }] }
+    mockState.getMySessions.mockResolvedValueOnce([session]).mockResolvedValueOnce([session])
+    mockState.getSessionAttendanceSummaries.mockResolvedValue({ [session.id]: { roster_count: 1, attendance_count: 1 } })
+    mockState.getSessionStudents.mockReset().mockResolvedValueOnce([sourceRow]).mockResolvedValueOnce([savedRow])
+    mockState.correctCompletedSession.mockResolvedValue({ session_id: session.id, status: 'COMPLETED', students_updated: 1 })
+
+    const wrapper = mountPage()
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Danh sách')
+    await clickButtonWithText(wrapper, 'Các buổi học đã điểm danh')
+    await wrapper.get('.session-list tbody tr').trigger('click')
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Chỉnh sửa thông tin buổi')
+    await getPageOrBody(wrapper, 'input[aria-label^="Điểm BTVN"]').setValue('8')
+    await clickButtonWithText(wrapper, 'Lưu tất cả thay đổi')
+    await flushPromises()
+
+    expect(mockState.correctCompletedSession).toHaveBeenCalledWith(expect.objectContaining({
+      session_id: session.id,
+      students: [expect.objectContaining({ student_id: 'qa-student-1', homework_score: 8 })],
+    }))
+    expect(mockState.getSessionStudents).toHaveBeenCalledTimes(2)
+    expect(mockState.toastSuccess).toHaveBeenCalledWith('Đã lưu và xác minh thông tin buổi học trong CSDL.')
+    expect(pageAndBodyText(wrapper)).toContain('Chỉnh sửa thông tin buổi')
+
+    await clickButtonWithText(wrapper, 'Chỉnh sửa thông tin buổi')
+    await getPageOrBody(wrapper, 'input[aria-label^="Điểm BTVN"]').setValue('9')
+    mockState.correctCompletedSession.mockRejectedValueOnce(new Error('SCHEDULE_CONFLICT'))
+    await clickButtonWithText(wrapper, 'Lưu tất cả thay đổi')
+    await flushPromises()
+    expect((getPageOrBody(wrapper, 'input[aria-label^="Điểm BTVN"]').element as HTMLInputElement).value).toBe('9')
+    expect(findPageOrBody(wrapper, '.app-modal [role="alert"]').exists()).toBe(true)
   })
 
   it.each(['SCHEDULED', 'IN_PROGRESS', 'COMPLETED'] as const)(

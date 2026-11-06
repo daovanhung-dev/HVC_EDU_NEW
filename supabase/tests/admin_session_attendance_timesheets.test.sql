@@ -1,6 +1,6 @@
 begin;
 
-select plan(33);
+select plan(48);
 
 insert into auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -42,6 +42,10 @@ insert into public.session_students (session_id, student_id) values
   ('f0590000-0000-0000-0000-000000000404', 'f0590000-0000-0000-0000-000000000201'),
   ('f0590000-0000-0000-0000-000000000405', 'f0590000-0000-0000-0000-000000000201'),
   ('f0590000-0000-0000-0000-000000000406', 'f0590000-0000-0000-0000-000000000201');
+update public.session_students
+set assessment_snapshot = '{"preserved":"QA snapshot"}'::jsonb
+where session_id = 'f0590000-0000-0000-0000-000000000401'
+  and student_id = 'f0590000-0000-0000-0000-000000000201';
 insert into public.session_staff (session_id, staff_id, assignment_role) values
   ('f0590000-0000-0000-0000-000000000401', 'f0590000-0000-0000-0000-000000000101', 'TEACHER'),
   ('f0590000-0000-0000-0000-000000000401', 'f0590000-0000-0000-0000-000000000102', 'TEACHER'),
@@ -140,6 +144,62 @@ select throws_ok($$select public.admin_correct_session_learning(
   'f0590000-0000-0000-0000-000000000401', null, null,
   '[{"student_id":"f0590000-0000-0000-0000-000000000201","status":"PRESENT"}]'::jsonb
 )$$, 'P0001', 'ADMIN_ATTENDANCE_REQUIRES_TIMESHEET_DECISION', 'legacy learning RPC cannot write attendance without teacher decisions');
+
+select ok(
+  not has_function_privilege('anon', 'public.admin_correct_completed_session(uuid,timestamptz,timestamptz,text,text,text,jsonb)', 'EXECUTE')
+  and has_function_privilege('authenticated', 'public.admin_correct_completed_session(uuid,timestamptz,timestamptz,text,text,text,jsonb)', 'EXECUTE'),
+  'completed-session correction is available only through the permission-checked authenticated RPC'
+);
+select set_config('request.jwt.claim.sub', 'f0590000-0000-0000-0000-000000000004', true);
+select throws_ok($$select public.admin_correct_completed_session(
+  'f0590000-0000-0000-0000-000000000404', now() - interval '3 days', now() - interval '3 days' + interval '2 hours',
+  'QA-ROOM', 'QA forbidden', null,
+  '[{"student_id":"f0590000-0000-0000-0000-000000000201","status":"PRESENT"}]'::jsonb
+)$$, 'P0001', 'FORBIDDEN', 'students cannot correct completed sessions');
+select set_config('request.jwt.claim.sub', 'f0590000-0000-0000-0000-000000000001', true);
+select lives_ok($$select public.admin_correct_completed_session(
+  'f0590000-0000-0000-0000-000000000401', now() - interval '3 days', now() - interval '3 days' + interval '2 hours',
+  'QA-CORRECTED-ROOM', 'QA corrected session note', null,
+  '[{"student_id":"f0590000-0000-0000-0000-000000000201","status":"PRESENT","homework_score":8.5,"homework_note":"QA corrected homework","understanding_score":4,"attitude_score":5,"positive_feedback_count":1,"positive_feedback_raw":"QA feedback","comment":"QA corrected comment"}]'::jsonb
+)$$, 'completed session attendance and session information can be corrected atomically');
+select is((select status::text from public.sessions where id = 'f0590000-0000-0000-0000-000000000401'), 'COMPLETED'::text, 'correction preserves lifecycle status');
+select ok((select scheduled_start_at < now() and room = 'QA-CORRECTED-ROOM' and session_note = 'QA corrected session note' from public.sessions where id = 'f0590000-0000-0000-0000-000000000401'), 'correction updates historical schedule, room, and session note');
+select ok((select status = 'PRESENT' and homework_score = 8.5 and homework_note = 'QA corrected homework' and understanding_score = 4 and attitude_score = 5 and positive_feedback_count = 1 and positive_feedback_raw = 'QA feedback' and comment = 'QA corrected comment' from public.student_attendances where session_id = 'f0590000-0000-0000-0000-000000000401' and student_id = 'f0590000-0000-0000-0000-000000000201'), 'all Excel assessment columns are updated');
+select ok(
+  (select count(*) = 1 from public.session_students where session_id = 'f0590000-0000-0000-0000-000000000401' and student_id = 'f0590000-0000-0000-0000-000000000201')
+  and (select assessment_snapshot = '{"preserved":"QA snapshot"}'::jsonb from public.session_students where session_id = 'f0590000-0000-0000-0000-000000000401' and student_id = 'f0590000-0000-0000-0000-000000000201')
+  and (select timesheet_eligible from public.session_staff where session_id = 'f0590000-0000-0000-0000-000000000401' and staff_id = 'f0590000-0000-0000-0000-000000000101')
+  and (select status::text = 'APPROVED' from public.timesheets where session_id = 'f0590000-0000-0000-0000-000000000401' and staff_id = 'f0590000-0000-0000-0000-000000000101'),
+  'correction preserves roster, teacher eligibility, and approved timesheet'
+);
+select is((select count(*)::integer from public.audit_logs where entity_id = 'f0590000-0000-0000-0000-000000000401' and action = 'SESSION_COMPLETED_CORRECTION'), 1, 'completed-session correction writes an audit entry');
+select throws_ok($$select public.admin_correct_completed_session(
+  'f0590000-0000-0000-0000-000000000401', now() - interval '3 days', now() - interval '3 days' + interval '2 hours',
+  'QA-CORRECTED-ROOM', 'QA must roll back', null,
+  '[{"student_id":"f0590000-0000-0000-0000-000000000201","status":"PRESENT","homework_score":11}]'::jsonb
+)$$, 'P0001', 'INVALID_HOMEWORK_SCORE', 'invalid scores reject the whole correction');
+select ok((select session_note = 'QA corrected session note' from public.sessions where id = 'f0590000-0000-0000-0000-000000000401') and (select homework_score = 8.5 from public.student_attendances where session_id = 'f0590000-0000-0000-0000-000000000401'), 'invalid correction leaves existing session and attendance values unchanged');
+select throws_ok($$select public.admin_correct_completed_session(
+  'f0590000-0000-0000-0000-000000000401', now() - interval '3 days', now() - interval '3 days' + interval '2 hours',
+  'QA-CORRECTED-ROOM', 'QA wrong roster', null,
+  '[{"student_id":"f0590000-0000-0000-0000-000000000202","status":"PRESENT"}]'::jsonb
+)$$, 'P0001', 'SESSION_ROSTER_MISMATCH', 'correction cannot change the saved student roster');
+select throws_ok($$select public.admin_correct_completed_session(
+  'f0590000-0000-0000-0000-000000000401', now() - interval '1 day', now() - interval '1 day' + interval '2 hours',
+  'QA-CORRECTED-ROOM', 'QA schedule conflict', null,
+  '[{"student_id":"f0590000-0000-0000-0000-000000000201","status":"PRESENT"}]'::jsonb
+)$$, 'P0001', 'SCHEDULE_CONFLICT', 'overlapping completed session cannot be moved into a class conflict');
+select is((select scheduled_start_at < now() - interval '2 days' and session_note = 'QA corrected session note' from public.sessions where id = 'f0590000-0000-0000-0000-000000000401'), true, 'schedule conflict rolls back the attempted correction');
+select throws_ok($$select public.admin_correct_completed_session(
+  'f0590000-0000-0000-0000-000000000404', now() - interval '1 day', now() - interval '1 day' + interval '2 hours',
+  'QA-ROOM', 'QA attendance incomplete', null,
+  '[{"student_id":"f0590000-0000-0000-0000-000000000201","status":"PRESENT"}]'::jsonb
+)$$, 'P0001', 'SESSION_ATTENDANCE_INCOMPLETE', 'completed session without complete attendance cannot be corrected');
+select throws_ok($$select public.admin_correct_completed_session(
+  'f0590000-0000-0000-0000-000000000402', now() - interval '3 days', now() - interval '3 days' + interval '2 hours',
+  'QA-ROOM', 'QA not completed', null,
+  '[{"student_id":"f0590000-0000-0000-0000-000000000201","status":"PRESENT"}]'::jsonb
+)$$, 'P0001', 'SESSION_NOT_COMPLETED', 'scheduled sessions cannot use the completed-session correction RPC');
 
 reset role;
 set local role service_role;

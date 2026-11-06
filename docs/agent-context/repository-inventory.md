@@ -95,6 +95,7 @@
 | frontend/src/main.ts | Frontend / nền tảng và dịch vụ | TypeScript | Bootstrap Vue, Pinia, router, Bootstrap và style gốc. |
 | frontend/src/modules/admin/components/bulk-password-reset.types.ts | Frontend / Admin | TypeScript | Kiểu input/kết quả cho luồng reset mật khẩu hàng loạt. |
 | frontend/src/modules/admin/components/BulkPasswordResetModal.vue | Frontend / Admin | Vue SFC | Giao diện xác nhận và thu thập lựa chọn reset mật khẩu hàng loạt. |
+| frontend/src/modules/admin/components/CompletedSessionAttendanceEditor.vue | Frontend / Admin | Vue SFC | Component luồng Admin: Completed Session Attendance Editor. |
 | frontend/src/modules/admin/components/StudentQuickEnrollmentModal.vue | Frontend / Admin | Vue SFC | Component luồng Admin: Student Quick Enrollment Modal. |
 | frontend/src/modules/admin/components/TeacherPicker.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho Teacher Picker trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/admin/components/TeacherPicker.vue | Frontend / Admin | Vue SFC | Chọn hoặc chỉnh danh sách teacher được giao cho lịch/buổi. |
@@ -273,6 +274,7 @@
 | supabase/migrations/0058_month_week_schedule_excel_import.sql | Supabase / migrations | SQL | Migration schema; đọc toàn bộ thay đổi và migration sau này có thể thay thế object. |
 | supabase/migrations/0059_admin_session_attendance_timesheets.sql | Supabase / migrations | SQL | Cho Admin chốt điểm danh sau giờ kết thúc và quyết định công theo từng giáo viên trong một giao dịch; giữ luồng gửi công của giáo viên và ghi audit khi duyệt/thu hồi. |
 | supabase/migrations/0060_session_staff_timesheet_eligibility_read.sql | Supabase / migrations | SQL | Migration schema; đọc toàn bộ thay đổi và migration sau này có thể thay thế object. |
+| supabase/migrations/0061_admin_completed_session_correction.sql | Supabase / migrations | SQL | Migration schema; đọc toàn bộ thay đổi và migration sau này có thể thay thế object. |
 | supabase/seed.sql | Supabase / cấu hình và seed | SQL | Seed cho database local; không dùng làm căn cứ dữ liệu production. |
 | supabase/tests/admin_monthly_session_planning.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra admin monthly session planning bằng fixture database cô lập. |
 | supabase/tests/admin_session_attendance_timesheets.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra admin session attendance timesheets bằng fixture database cô lập. |
@@ -289,4 +291,4 @@
 | supabase/tests/student_future_session_roster_sync.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra student future session roster sync bằng fixture database cô lập. |
 | supabase/tests/timesheet_workflow.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra timesheet workflow bằng fixture database cô lập. |
 
-Tổng: 282 đường dẫn có trong inventory.
+Tổng: 284 đường dẫn có trong inventory.

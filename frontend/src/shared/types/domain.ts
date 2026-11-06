@@ -103,6 +103,7 @@ export interface SessionRow {
   class_schedules?: { room: string | null } | null
   session_students?: Array<{ student_id: string; students?: { id: string; student_code: string; full_name: string } | null }>
   session_staff?: SessionStaffRow[]
+  attendance_summary?: { roster_count: number; attendance_count: number }
 }
 
 export interface AttendanceHistoryRow {
