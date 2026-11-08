@@ -294,6 +294,46 @@ export type DeleteSessionsForMonthResult = {
   deleted_payroll_items: number
 }
 
+export type DeleteSessionPreview = {
+  session_id: string
+  class_id: string
+  status: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
+  scheduled_start_at: string
+  scheduled_end_at: string
+  recurring: boolean
+  can_delete: boolean
+  blocked_reason: string | null
+  session_students: number
+  session_staff: number
+  staff_replacements: number
+  attendances: number
+  timesheets: number
+  payroll_items: number
+  month_week_occurrences: number
+  financial_snapshot_rows: number
+  has_revenue_snapshot: boolean
+}
+
+export type DeleteSessionResult = {
+  session_id: string
+  deleted: boolean
+  excluded_occurrence: boolean
+  deleted_sessions: number
+  deleted_session_students: number
+  deleted_session_staff: number
+  deleted_staff_replacements: number
+  deleted_attendances: number
+  deleted_timesheets: number
+  deleted_payroll_items: number
+  deleted_month_week_occurrences: number
+}
+
+export async function previewDeleteSession(sessionId: string): Promise<DeleteSessionPreview> {
+  const { data, error } = await supabase.rpc('admin_preview_delete_session', { p_session_id: sessionId })
+  if (error) throw error
+  return data as DeleteSessionPreview
+}
+
 export async function previewDeleteSessionsForMonth(monthStart: string): Promise<DeleteSessionsForMonthPreview> {
   const { data, error } = await supabase.rpc('admin_preview_delete_sessions_for_month', { p_month_start: monthStart })
   if (error) throw error
@@ -535,6 +575,30 @@ export async function recordAdminSessionAttendance(input: {
     students_updated: number
     timesheets_approved: number
     teachers_not_eligible: number
+    ended_at: string
+    ended_by: string | null
+  }
+}
+
+export async function setCompletedSessionTimesheets(input: {
+  session_id: string
+  teacher_decisions: AdminSessionTeacherTimesheetDecision[]
+}): Promise<{
+  session_id: string
+  status: 'COMPLETED'
+  timesheets_approved: number
+  teachers_not_eligible: number
+}> {
+  const { data, error } = await supabase.rpc('admin_set_completed_session_timesheets', {
+    p_session_id: input.session_id,
+    p_teacher_decisions: input.teacher_decisions,
+  })
+  if (error) throw error
+  return data as {
+    session_id: string
+    status: 'COMPLETED'
+    timesheets_approved: number
+    teachers_not_eligible: number
   }
 }
 
@@ -561,10 +625,10 @@ export async function syncSessionStudentRoster(sessionId: string): Promise<Sessi
   return data as SessionRosterMutationResult
 }
 
-export async function deleteSession(sessionId: string): Promise<{ session_id: string; deleted: boolean; excluded_occurrence: boolean }> {
+export async function deleteSession(sessionId: string): Promise<DeleteSessionResult> {
   const { data, error } = await supabase.rpc('admin_delete_session', { p_session_id: sessionId })
   if (error) throw error
-  return data as { session_id: string; deleted: boolean; excluded_occurrence: boolean }
+  return data as DeleteSessionResult
 }
 
 export async function createManualSession(input: {

@@ -9,13 +9,17 @@ import {
   adminExportStudentLogins,
   adminResetPasswordBulk,
   createManualSession,
+  deleteSession,
   deleteSessionsForMonth,
   getMonthWeekScheduleTemplate,
   importMonthWeekSchedule,
   previewDeleteSessionsForMonth,
+  previewDeleteSession,
   previewMonthWeekScheduleImport,
   previewMonthWeekTemplateReplacement,
   replaceMonthWithWeekTemplate,
+  recordAdminSessionAttendance,
+  setCompletedSessionTimesheets,
   updateSessionOccurrence,
 } from './commands'
 
@@ -84,6 +88,45 @@ describe('session room scheduling commands', () => {
 
     expect(mockState.rpc).toHaveBeenNthCalledWith(1, 'admin_preview_delete_sessions_for_month', { p_month_start: '2026-10-01' })
     expect(mockState.rpc).toHaveBeenNthCalledWith(2, 'admin_delete_sessions_for_month', { p_month_start: '2026-10-01' })
+  })
+
+  it('sends early completion through the atomic attendance and teacher-decision RPC', async () => {
+    const input = {
+      session_id: 'qa-session',
+      session_note: 'QA note',
+      lesson_youtube_url: null,
+      students: [{
+        student_id: 'qa-student', status: 'PRESENT' as const, late_minutes: null, absence_reason: null,
+        homework_score: null, homework_note: null, understanding_score: null, attitude_score: null,
+        positive_feedback_count: null, positive_feedback_raw: null, comment: null,
+      }],
+      teacher_decisions: [{ staff_id: 'qa-teacher', eligible: true }],
+    }
+    await recordAdminSessionAttendance(input)
+
+    expect(mockState.rpc).toHaveBeenCalledWith('admin_record_session_attendance', {
+      p_session_id: 'qa-session',
+      p_session_note: 'QA note',
+      p_lesson_youtube_url: null,
+      p_students: input.students,
+      p_teacher_decisions: input.teacher_decisions,
+    })
+  })
+
+  it('uses the narrow completed-timesheet RPC and selected-session delete preview and confirmation RPCs', async () => {
+    await setCompletedSessionTimesheets({
+      session_id: 'qa-session',
+      teacher_decisions: [{ staff_id: 'qa-teacher', eligible: false }],
+    })
+    await previewDeleteSession('qa-session')
+    await deleteSession('qa-session')
+
+    expect(mockState.rpc).toHaveBeenNthCalledWith(1, 'admin_set_completed_session_timesheets', {
+      p_session_id: 'qa-session',
+      p_teacher_decisions: [{ staff_id: 'qa-teacher', eligible: false }],
+    })
+    expect(mockState.rpc).toHaveBeenNthCalledWith(2, 'admin_preview_delete_session', { p_session_id: 'qa-session' })
+    expect(mockState.rpc).toHaveBeenNthCalledWith(3, 'admin_delete_session', { p_session_id: 'qa-session' })
   })
 
   it('sends the complete weekly template to preview and atomic month replacement RPCs', async () => {

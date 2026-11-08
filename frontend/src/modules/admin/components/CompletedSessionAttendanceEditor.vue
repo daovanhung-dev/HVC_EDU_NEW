@@ -9,12 +9,19 @@ const props = defineProps<{
   saving: boolean
   dirty: boolean
   error: string
+  timesheetSaving: boolean
+  timesheetDirty: boolean
+  timesheetError: string
+  deletable: boolean
+  deleting: boolean
 }>()
 
 const emit = defineEmits<{
   edit: []
   cancel: []
   save: []
+  saveTimesheets: []
+  delete: []
 }>()
 
 const rows = defineModel<AttendanceStudentRow[]>('rows', { required: true })
@@ -23,6 +30,7 @@ const endInput = defineModel<string>('endInput', { required: true })
 const roomInput = defineModel<string>('roomInput', { required: true })
 const sessionNoteInput = defineModel<string>('sessionNoteInput', { required: true })
 const lessonYoutubeInput = defineModel<string>('lessonYoutubeInput', { required: true })
+const teacherEligibilityDraft = defineModel<Record<string, boolean | null>>('teacherEligibilityDraft', { required: true })
 
 type NumericAttendanceKey = 'late_minutes' | 'homework_score' | 'understanding_score' | 'attitude_score' | 'positive_feedback_count'
 
@@ -64,9 +72,14 @@ function rowText(row: AttendanceStudentRow, key: keyof AttendanceValue) {
           {{ rows.length }} học sinh · attendance đầy đủ trong CSDL
         </div>
       </div>
-      <button v-if="!editing" class="btn btn-outline-primary btn-sm" type="button" @click="emit('edit')">
-        Chỉnh sửa thông tin buổi
-      </button>
+      <div class="d-flex flex-wrap gap-2">
+        <button v-if="!editing" class="btn btn-outline-primary btn-sm" type="button" @click="emit('edit')">
+          Chỉnh sửa thông tin buổi
+        </button>
+        <button v-if="deletable" class="btn btn-outline-danger btn-sm" type="button" :disabled="deleting" @click="emit('delete')">
+          {{ deleting ? 'Đang xem dữ liệu…' : 'Xóa buổi học' }}
+        </button>
+      </div>
     </div>
 
     <div class="row g-2 mb-3">
@@ -79,6 +92,34 @@ function rowText(row: AttendanceStudentRow, key: keyof AttendanceValue) {
         Lớp, mã/tên học sinh, roster và giáo viên là dữ liệu cố định của buổi.
       </div>
     </div>
+
+    <section class="border rounded p-3 mb-3" aria-label="Chấm công giáo viên cho buổi đã hoàn tất">
+      <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-2">
+        <div>
+          <h3 class="h6 mb-1">Chấm công giáo viên</h3>
+          <p class="small text-secondary mb-0">Admin có thể ghi nhận hoặc điều chỉnh chấm công trực tiếp sau khi buổi hoàn tất.</p>
+        </div>
+      </div>
+      <div v-if="!session.session_staff?.some((item) => !item.assignment_role || item.assignment_role === 'TEACHER')" class="small text-secondary">
+        Buổi học chưa có giáo viên được phân công.
+      </div>
+      <div v-for="teacher in session.session_staff?.filter((item) => !item.assignment_role || item.assignment_role === 'TEACHER') || []" :key="teacher.staff_id" class="row align-items-center g-2 py-1">
+        <label class="col-md-6" :for="`completed-timesheet-${teacher.staff_id}`">{{ teacher.staff?.full_name || teacher.staff_id }}</label>
+        <div class="col-md-6">
+          <select :id="`completed-timesheet-${teacher.staff_id}`" v-model="teacherEligibilityDraft[teacher.staff_id]" class="form-select" :disabled="timesheetSaving" :aria-label="`Quyết định chấm công của ${teacher.staff?.full_name || teacher.staff_id}`">
+            <option :value="null">Chọn quyết định</option>
+            <option :value="true">Tính công</option>
+            <option :value="false">Không tính công</option>
+          </select>
+        </div>
+      </div>
+      <div v-if="timesheetError" class="alert alert-danger py-2 mt-2 mb-2" role="alert">{{ timesheetError }}</div>
+      <div class="d-flex justify-content-end mt-2">
+        <button class="btn btn-outline-primary btn-sm" type="button" :disabled="timesheetSaving || !timesheetDirty" @click="emit('saveTimesheets')">
+          {{ timesheetSaving ? 'Đang lưu…' : 'Lưu quyết định chấm công' }}
+        </button>
+      </div>
+    </section>
 
     <div class="table-responsive completed-session-table-wrap">
       <table class="table table-sm table-bordered table-hover align-middle mb-0 completed-session-table" aria-label="Điểm danh và kết quả học tập theo cột Excel">

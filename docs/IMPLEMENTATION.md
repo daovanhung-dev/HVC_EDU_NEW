@@ -6,7 +6,7 @@ HVC_EDU quản lý lớp học và hồ sơ học tập liên tục, không tạ
 
 - **Admin:** nhân sự, học sinh, hồ sơ theo dòng thời gian, lớp, lịch lặp và buổi học; xem video bài học trong chi tiết buổi.
 - **Giáo viên:** buổi được phân công, bắt đầu/kết thúc buổi, điểm danh, điểm và nhận xét; nhập nội dung cùng link YouTube khi buổi đang diễn ra; xem video trong chi tiết buổi; gửi chấm công cho buổi đã hoàn tất; tự sửa thông tin liên hệ.
-- **Điểm danh bằng Excel:** Admin và giáo viên có thể tải mẫu `.xlsx` riêng từ chi tiết buổi. Mẫu có sẵn lớp, thời gian, giáo viên, roster và kết quả đã lưu; chỉ nhận lại tệp đúng buổi/ngày/roster. Tệp được kiểm tra rồi nạp vào biểu mẫu để rà và sửa; tải lên không tự lưu. Giáo viên chỉ nhập khi buổi đang diễn ra; Admin chốt sau giờ kết thúc và chọn Tính công/Không tính công cho từng giáo viên như luồng hiện tại.
+- **Điểm danh bằng Excel:** Admin và giáo viên có thể tải mẫu `.xlsx` riêng từ chi tiết buổi. Mẫu có sẵn lớp, thời gian, giáo viên, roster và kết quả đã lưu; chỉ nhận lại tệp đúng buổi/ngày/roster. Tệp được kiểm tra rồi nạp vào biểu mẫu để rà và sửa; tải lên không tự lưu. Giáo viên chỉ nhập khi buổi đang diễn ra; Admin có thể kết thúc sớm buổi `IN_PROGRESS`, hoặc chốt buổi `SCHEDULED` sau giờ kết thúc, sau khi nhập đủ điểm danh và chọn Tính công/Không tính công cho từng giáo viên.
 - **Admin:** duyệt hoặc từ chối yêu cầu chấm công theo từng buổi; từ chối phải ghi lý do.
 - **Học sinh:** xem lịch, lịch sử, giáo viên, điểm và chuyên cần của chính mình; xem lại video buổi đã hoàn thành trong “Xem lại bài cũ”; hỏi AI bằng tiếng Việt và có thể chọn nội dung một bài học làm ngữ cảnh.
 - ROOT_ADMIN tiếp tục vào giao diện Admin. Tài khoản ASSISTANT hiện có được đổi thành TEACHER trong migration, giữ user id và lịch sử.
@@ -21,13 +21,15 @@ Migration `0039_continuous_learning.sql` sao chép lịch gần nhất từ Clas
 
 Supabase Cron lưu kết quả từng lần chạy trong `cron.job_run_details`, có thể theo dõi trong Dashboard Cron hoặc truy vấn trực tiếp. Supabase mô tả Cron là bộ lập lịch Postgres dựa trên `pg_cron` và lưu chi tiết trạng thái các lần chạy trong bảng này ([tài liệu Cron](https://supabase.com/docs/guides/cron)).
 
-Admin có thể hủy hoặc đổi giờ một buổi SCHEDULED trong tương lai. Thao tác riêng của buổi được đánh dấu để job lịch không ghi đè. Các buổi, điểm danh, điểm, nhận xét và phân công lịch sử được giữ nguyên.
+Admin có thể hủy hoặc đổi giờ một buổi `SCHEDULED` trong tương lai. Thao tác riêng của buổi được đánh dấu để job lịch không ghi đè. Admin cũng có thể kết thúc sớm một buổi `IN_PROGRESS` sau khi đủ điểm danh và quyết định công; buổi `SCHEDULED` chưa bắt đầu phải chờ hết giờ theo lịch. Với buổi đã hoàn tất, Admin sửa điểm danh/nội dung theo luồng hiệu chỉnh và cập nhật quyết định công riêng mà không ghi lại attendance.
+
+Admin có thể xem trước và xác nhận xóa mọi buổi chưa hủy, gồm buổi đã diễn ra. Giao dịch xóa roster, phân công/thay giáo viên, điểm danh, snapshot học tập/tài chính, chấm công và payroll item gắn với buổi; giữ kỳ payroll, audit và tombstone ngày cho buổi lịch lặp. Buổi `CANCELLED` không thuộc phạm vi xóa này. Xóa buổi có dữ liệu là thao tác phá hủy lịch sử và không dùng để sửa lịch thường ngày.
 
 Các lớp khác nhau có thể xếp buổi trùng giờ nếu dùng phòng khác nhau; giáo viên cũng có thể được phân công cho cả hai buổi. Cùng lớp hoặc có học sinh chung vẫn là xung đột. Nếu giờ giao nhau mà một buổi chưa có phòng, thao tác bị chặn với thông báo cần nhập phòng. So sánh tên phòng không phân biệt hoa thường và bỏ khoảng trắng đầu/cuối.
 
 ## Chấm công theo buổi
 
-Giáo viên được phân công gửi một yêu cầu chấm công sau khi buổi COMPLETED. Admin duyệt hoặc từ chối yêu cầu; từ chối yêu cầu lý do, và giáo viên có thể gửi lại sau khi bị từ chối. Đây là theo dõi yêu cầu theo buổi, không ghi giờ vào/ra và không khôi phục payroll, lương hay kế toán.
+Giáo viên được phân công gửi một yêu cầu chấm công sau khi buổi `COMPLETED`. Admin duyệt hoặc từ chối yêu cầu; từ chối yêu cầu lý do, và giáo viên có thể gửi lại sau khi bị từ chối. Admin cũng có thể ghi hoặc đổi quyết định Tính công/Không tính công ngay trong chi tiết buổi hoàn tất. Đây là theo dõi công dạy theo buổi, không ghi giờ vào/ra và không mở lại giao diện payroll, lương hay kế toán.
 
 ## Quyền và dữ liệu lưu trữ
 

@@ -382,7 +382,10 @@ export async function recordAdminSessionAttendance(input: any) {
   await query(true)
   const session = sessions.find((item) => item.id === input.session_id)
   if (!session) throw new Error('SESSION_NOT_FOUND')
+  const wasInProgress = session.status === 'IN_PROGRESS'
   session.status = 'COMPLETED'
+  session.ended_at = session.ended_at || new Date().toISOString()
+  session.ended_by = session.ended_by || 'qa-admin'
   session.session_note = input.session_note
   session.lesson_youtube_url = input.lesson_youtube_url
   for (const change of input.students || []) {
@@ -390,21 +393,60 @@ export async function recordAdminSessionAttendance(input: any) {
     if (existing) Object.assign(existing, change)
     else attendance.push({ id: `qa-attendance-${Date.now()}-${change.student_id}`, session_id: input.session_id, ...change })
   }
+  let timesheetsApproved = 0
+  let teachersNotEligible = 0
   for (const decision of input.teacher_decisions || []) {
     const assignment = session.session_staff?.find((item: any) => item.staff_id === decision.staff_id)
     if (!assignment) continue
     assignment.timesheet_eligible = decision.eligible
     const row = timesheets.find((item) => item.session_id === input.session_id && item.staff_id === decision.staff_id)
     if (decision.eligible) {
+      timesheetsApproved += 1
       if (row) Object.assign(row, { status: 'APPROVED', approved_at: new Date().toISOString(), approved_by: 'qa-admin', rejection_reason: null, revoked_at: null, revoked_by: null, revoked_reason: null })
       else timesheets.unshift({ id: `qa-timesheet-${Date.now()}`, session_id: input.session_id, staff_id: decision.staff_id, status: 'APPROVED', submitted_at: new Date().toISOString(), approved_at: new Date().toISOString(), approved_by: 'qa-admin', rejection_reason: null, revoked_at: null, revoked_by: null, revoked_reason: null, notes: null, sessions: { ...session, classes: session.classes }, staff: assignment.staff })
     } else if (row?.status === 'APPROVED') {
+      teachersNotEligible += 1
       Object.assign(row, { status: 'REVOKED', revoked_at: new Date().toISOString(), revoked_by: 'qa-admin', revoked_reason: 'Admin xác nhận buổi học không tính công.', rejection_reason: null })
     } else if (row?.status === 'PENDING') {
+      teachersNotEligible += 1
       Object.assign(row, { status: 'REJECTED', rejection_reason: 'Admin xác nhận buổi học không tính công.' })
+    } else {
+      teachersNotEligible += 1
     }
   }
-  return { session_id: input.session_id, status: 'COMPLETED', students_updated: (input.students || []).length }
+  return {
+    session_id: input.session_id,
+    status: 'COMPLETED',
+    students_updated: (input.students || []).length,
+    timesheets_approved: timesheetsApproved,
+    teachers_not_eligible: teachersNotEligible,
+    ended_at: session.ended_at,
+    ended_by: session.ended_by,
+    ended_early: wasInProgress && new Date(session.ended_at).getTime() < new Date(session.scheduled_end_at).getTime(),
+  }
+}
+export async function setCompletedSessionTimesheets(input: any) {
+  await query(true)
+  const session = sessions.find((item) => item.id === input.session_id)
+  if (!session || session.status !== 'COMPLETED') throw new Error('SESSION_NOT_COMPLETED')
+  let timesheetsApproved = 0
+  let teachersNotEligible = 0
+  for (const decision of input.teacher_decisions || []) {
+    const assignment = session.session_staff?.find((item: any) => item.staff_id === decision.staff_id)
+    if (!assignment) throw new Error('SESSION_TEACHER_DECISION_REQUIRED')
+    assignment.timesheet_eligible = decision.eligible
+    const row = timesheets.find((item) => item.session_id === input.session_id && item.staff_id === decision.staff_id)
+    if (decision.eligible) {
+      timesheetsApproved += 1
+      if (row) Object.assign(row, { status: 'APPROVED', approved_at: new Date().toISOString(), approved_by: 'qa-admin', rejection_reason: null, revoked_at: null, revoked_by: null, revoked_reason: null })
+      else timesheets.unshift({ id: `qa-timesheet-${Date.now()}`, session_id: input.session_id, staff_id: decision.staff_id, status: 'APPROVED', submitted_at: new Date().toISOString(), approved_at: new Date().toISOString(), approved_by: 'qa-admin', rejection_reason: null, revoked_at: null, revoked_by: null, revoked_reason: null, notes: null, sessions: { ...session, classes: session.classes }, staff: assignment.staff })
+    } else {
+      teachersNotEligible += 1
+      if (row?.status === 'APPROVED') Object.assign(row, { status: 'REVOKED', revoked_at: new Date().toISOString(), revoked_by: 'qa-admin', revoked_reason: 'Admin xác nhận buổi học không tính công.', rejection_reason: null })
+      else if (row?.status === 'PENDING') Object.assign(row, { status: 'REJECTED', rejection_reason: 'Admin xác nhận buổi học không tính công.' })
+    }
+  }
+  return { session_id: input.session_id, status: 'COMPLETED', timesheets_approved: timesheetsApproved, teachers_not_eligible: teachersNotEligible }
 }
 export async function updateSessionStudentRoster(input: any) {
   await query(true)
@@ -428,11 +470,52 @@ export async function syncSessionStudentRoster(sessionId: string) {
     && row.students?.status === 'ACTIVE').map((row) => row.student_id)
   return updateSessionStudentRoster({ session_id: sessionId, student_ids: target })
 }
+export async function previewDeleteSession(sessionId: string) {
+  await query(true)
+  const session = sessions.find((row) => row.id === sessionId)
+  if (!session) throw new Error('SESSION_NOT_FOUND')
+  const sessionAttendance = attendance.filter((row) => row.session_id === sessionId)
+  const sessionTimesheets = timesheets.filter((row) => row.session_id === sessionId)
+  const hasHistory = sessionAttendance.length > 0 || sessionTimesheets.length > 0 || Boolean(session.session_note)
+  const isFutureScheduled = session.status === 'SCHEDULED' && new Date(session.scheduled_start_at).getTime() > Date.now()
+  return {
+    session_id: session.id,
+    class_id: session.class_id,
+    status: session.status,
+    scheduled_start_at: session.scheduled_start_at,
+    scheduled_end_at: session.scheduled_end_at,
+    recurring: Boolean(session.recurrence_schedule_id),
+    can_delete: session.status !== 'CANCELLED' && (!isFutureScheduled || !hasHistory),
+    blocked_reason: session.status === 'CANCELLED' ? 'SESSION_DELETE_NOT_ALLOWED' : isFutureScheduled && hasHistory ? 'SESSION_HAS_HISTORY' : null,
+    session_students: session.session_students?.length || 0,
+    session_staff: session.session_staff?.length || 0,
+    staff_replacements: 0,
+    attendances: sessionAttendance.length,
+    timesheets: sessionTimesheets.length,
+    payroll_items: 0,
+    month_week_occurrences: 0,
+    financial_snapshot_rows: session.session_students?.filter((row: any) => row.monthly_fee_snapshot != null || row.session_unit_value != null).length || 0,
+    has_revenue_snapshot: session.revenue_snapshot != null && session.revenue_snapshot !== 0,
+  }
+}
 export async function deleteSession(sessionId: string) {
   await query(true)
   const index = sessions.findIndex((row) => row.id === sessionId)
-  if (index >= 0) sessions.splice(index, 1)
-  return { session_id: sessionId, deleted: true, excluded_occurrence: false }
+  const session = index >= 0 ? sessions[index] : null
+  if (!session) throw new Error('SESSION_NOT_FOUND')
+  const deletedSessionStudents = session.session_students?.length || 0
+  const deletedSessionStaff = session.session_staff?.length || 0
+  const deletedAttendances = attendance.filter((row) => row.session_id === sessionId).length
+  const deletedTimesheets = timesheets.filter((row) => row.session_id === sessionId).length
+  sessions.splice(index, 1)
+  attendance.splice(0, attendance.length, ...attendance.filter((row) => row.session_id !== sessionId))
+  timesheets.splice(0, timesheets.length, ...timesheets.filter((row) => row.session_id !== sessionId))
+  return {
+    session_id: sessionId, deleted: true, excluded_occurrence: Boolean(session.recurrence_schedule_id),
+    deleted_sessions: 1, deleted_session_students: deletedSessionStudents, deleted_session_staff: deletedSessionStaff,
+    deleted_staff_replacements: 0, deleted_attendances: deletedAttendances, deleted_timesheets: deletedTimesheets,
+    deleted_payroll_items: 0, deleted_month_week_occurrences: 0,
+  }
 }
 export async function applyWeekToMonth() { return { created: 3 } }
 export async function previewMonthWeekTemplateReplacement(monthStart: string, slots: any[]) {

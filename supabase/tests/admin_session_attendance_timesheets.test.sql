@@ -1,6 +1,6 @@
 begin;
 
-select plan(48);
+select plan(54);
 
 insert into auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -70,18 +70,18 @@ select throws_ok($$select public.admin_record_session_attendance(
   '[{"staff_id":"f0590000-0000-0000-0000-000000000101","eligible":true}]'::jsonb
 )$$, 'P0001', 'ADMIN_SESSION_NOT_FINISHED', 'scheduled end time blocks future and in-progress admin finalization');
 select is((select count(*)::integer from public.student_attendances where session_id = 'f0590000-0000-0000-0000-000000000402'), 0, 'future rejection leaves attendance untouched');
-select throws_ok($$select public.admin_record_session_attendance(
+select lives_ok($$select public.admin_record_session_attendance(
   'f0590000-0000-0000-0000-000000000405', null, null,
   '[{"student_id":"f0590000-0000-0000-0000-000000000201","status":"PRESENT"}]'::jsonb,
   '[{"staff_id":"f0590000-0000-0000-0000-000000000101","eligible":true}]'::jsonb
-)$$, 'P0001', 'ADMIN_SESSION_IN_PROGRESS', 'in-progress sessions are rejected before checking their scheduled end');
-select is((select count(*)::integer from public.student_attendances where session_id = 'f0590000-0000-0000-0000-000000000405'), 0, 'in-progress rejection leaves attendance untouched');
-select throws_ok($$select public.admin_record_session_attendance(
+)$$, 'admin can end an in-progress session before its scheduled end');
+select ok((select status = 'COMPLETED' and ended_at < scheduled_end_at and ended_by = 'f0590000-0000-0000-0000-000000000001' from public.sessions where id = 'f0590000-0000-0000-0000-000000000405'), 'early completion records the acting admin and actual end time');
+select lives_ok($$select public.admin_record_session_attendance(
   'f0590000-0000-0000-0000-000000000406', null, null,
   '[{"student_id":"f0590000-0000-0000-0000-000000000201","status":"PRESENT"}]'::jsonb,
   '[{"staff_id":"f0590000-0000-0000-0000-000000000101","eligible":true}]'::jsonb
-)$$, 'P0001', 'ADMIN_SESSION_IN_PROGRESS', 'in-progress status remains blocked even after its scheduled end');
-select is((select count(*)::integer from public.student_attendances where session_id = 'f0590000-0000-0000-0000-000000000406'), 0, 'overdue in-progress rejection leaves attendance untouched');
+)$$, 'an overdue in-progress session can also be ended by Admin');
+select is((select status::text from public.sessions where id = 'f0590000-0000-0000-0000-000000000406'), 'COMPLETED'::text, 'overdue in-progress session is finalized');
 select throws_ok($$select public.admin_record_session_attendance(
   'f0590000-0000-0000-0000-000000000403', null, null,
   '[{"student_id":"f0590000-0000-0000-0000-000000000201","status":"PRESENT"}]'::jsonb,
@@ -200,6 +200,25 @@ select throws_ok($$select public.admin_correct_completed_session(
   'QA-ROOM', 'QA not completed', null,
   '[{"student_id":"f0590000-0000-0000-0000-000000000201","status":"PRESENT"}]'::jsonb
 )$$, 'P0001', 'SESSION_NOT_COMPLETED', 'scheduled sessions cannot use the completed-session correction RPC');
+
+select ok(
+  not has_function_privilege('anon', 'public.admin_set_completed_session_timesheets(uuid,jsonb)', 'EXECUTE')
+  and has_function_privilege('authenticated', 'public.admin_set_completed_session_timesheets(uuid,jsonb)', 'EXECUTE'),
+  'completed-session timesheet updates are available only through the permission-checked authenticated RPC'
+);
+select set_config('request.jwt.claim.sub', 'f0590000-0000-0000-0000-000000000004', true);
+select throws_ok($$select public.admin_set_completed_session_timesheets(
+  'f0590000-0000-0000-0000-000000000401',
+  '[{"staff_id":"f0590000-0000-0000-0000-000000000101","eligible":false},{"staff_id":"f0590000-0000-0000-0000-000000000102","eligible":false}]'::jsonb
+)$$, 'P0001', 'FORBIDDEN', 'students cannot update completed-session timesheets');
+select set_config('request.jwt.claim.sub', 'f0590000-0000-0000-0000-000000000001', true);
+select lives_ok($$select public.admin_set_completed_session_timesheets(
+  'f0590000-0000-0000-0000-000000000401',
+  '[{"staff_id":"f0590000-0000-0000-0000-000000000101","eligible":false},{"staff_id":"f0590000-0000-0000-0000-000000000102","eligible":false}]'::jsonb
+)$$, 'Admin can update completed-session timesheets without submitting attendance');
+select is((select comment from public.student_attendances where session_id = 'f0590000-0000-0000-0000-000000000401' and student_id = 'f0590000-0000-0000-0000-000000000201'), 'QA corrected comment'::text, 'timesheet-only update leaves the attendance comment untouched');
+select is((select timesheet_eligible from public.session_staff where session_id = 'f0590000-0000-0000-0000-000000000401' and staff_id = 'f0590000-0000-0000-0000-000000000101'), false, 'timesheet-only update stores the teacher decision');
+select is((select status::text from public.timesheets where session_id = 'f0590000-0000-0000-0000-000000000401' and staff_id = 'f0590000-0000-0000-0000-000000000101'), 'REVOKED'::text, 'timesheet-only update revokes a previously approved timesheet');
 
 reset role;
 set local role service_role;

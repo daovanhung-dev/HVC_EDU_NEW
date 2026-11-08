@@ -7,6 +7,7 @@ import {
   createManualSession,
   correctCompletedSession,
   deleteSession,
+  previewDeleteSession,
   removeTeacherFromClassSchedule,
   previewDeleteSessionsForMonth,
   deleteSessionsForMonth,
@@ -18,6 +19,7 @@ import {
   correctSessionSchedule,
   correctSessionLearning,
   recordAdminSessionAttendance,
+  setCompletedSessionTimesheets,
   setClassScheduleStatus,
   updateClassSchedule,
   updateSessionOccurrence,
@@ -25,7 +27,7 @@ import {
   syncSessionStudentRoster,
   updateSessionTeachers,
 } from '@/services/commands'
-import type { MonthWeekScheduleImportPreview, MonthWeekTemplateSlot } from '@/services/commands'
+import type { DeleteSessionPreview, MonthWeekScheduleImportPreview, MonthWeekTemplateSlot } from '@/services/commands'
 import {
   getClassActiveRosterSize,
   getClassMembershipsForSessionDate,
@@ -132,6 +134,9 @@ const completedSessionCorrectionBusy = ref(false)
 const completedSessionCorrectionError = ref('')
 const completedSessionEditOpen = ref(false)
 const completedSessionDetailMode = ref(false)
+const completedTimesheetBusy = ref(false)
+const completedTimesheetError = ref('')
+const deleteSessionPreview = ref<DeleteSessionPreview | null>(null)
 const startInput = ref('')
 const endInput = ref('')
 const sessionRoomInput = ref('')
@@ -150,6 +155,7 @@ const confirmOpen = ref(false)
 const confirmBusy = ref(false)
 const deleteError = ref('')
 const deletePreviewBusy = ref(false)
+const deleteSessionPreviewBusy = ref(false)
 const templateEditorOpen = ref(false)
 const templatePreviewBusy = ref(false)
 const templateError = ref('')
@@ -236,14 +242,22 @@ const canEditSelectedLearning = computed(() => !!selected.value
   && (selected.value.status !== 'SCHEDULED' || Date.parse(selected.value.scheduled_start_at) <= Date.now()))
 const canAdminFinalizeAttendance = computed(() => !!selected.value
   && selected.value.status !== 'CANCELLED'
-  && selected.value.status !== 'IN_PROGRESS'
-  && Date.parse(selected.value.scheduled_end_at) <= Date.now())
+  && (selected.value.status === 'IN_PROGRESS'
+    || selected.value.status === 'COMPLETED'
+    || Date.parse(selected.value.scheduled_end_at) <= Date.now()))
 const assignedTeachers = computed(() => (selected.value?.session_staff || [])
   .filter((item) => !item.assignment_role || item.assignment_role === 'TEACHER'))
 const adminAttendanceTakenOver = computed(() => assignedTeachers.value.some((item) => item.timesheet_eligible !== null && item.timesheet_eligible !== undefined))
 const canCancelOrDeleteSelectedSession = computed(() => !!selected.value
   && selected.value.status === 'SCHEDULED'
   && Date.parse(selected.value.scheduled_start_at) > Date.now())
+const canDeleteSelectedSession = computed(() => !!selected.value && selected.value.status !== 'CANCELLED')
+const completedTimesheetOnlyChange = computed(() => !!selected.value
+  && selected.value.status === 'COMPLETED'
+  && teacherEligibilityDirty.value
+  && dirtyLearningRows.value.length === 0
+  && sessionNoteInput.value.trim() === (selected.value.session_note || '').trim()
+  && lessonYoutubeInput.value.trim() === (selected.value.lesson_youtube_url || '').trim())
 const isCompletedAttendanceDetail = computed(() => completedSessionDetailMode.value
   && selected.value?.status === 'COMPLETED')
 const dirtyLearningRows = computed(() => learningRows.value.filter(attendanceIsDirty))
@@ -712,10 +726,12 @@ watch(visibleSessions, (rows) => {
 
 async function selectSession(session: SessionRow, attendedDetail = showAttendedSessions.value) {
   selected.value = session
+  deleteSessionPreview.value = null
   completedSessionDetailMode.value = attendedDetail && isFullyAttendedSession(session)
   selectedDetailOpen.value = true
   completedSessionEditOpen.value = false
   completedSessionCorrectionError.value = ''
+  completedTimesheetError.value = ''
   rosterEditorOpen.value = false
   learningEditorOpen.value = false
   rosterEditorError.value = ''
@@ -1651,6 +1667,49 @@ async function saveCompletedSessionCorrection() {
   }
 }
 
+async function saveCompletedSessionTimesheets() {
+  const session = selected.value
+  if (!session || session.status !== 'COMPLETED' || completedTimesheetBusy.value || !teacherEligibilityDirty.value) return
+  completedTimesheetError.value = ''
+  if (!assignedTeachers.value.length) {
+    completedTimesheetError.value = 'Buổi học cần có ít nhất một giáo viên được phân công.'
+    return
+  }
+  if (assignedTeachers.value.some((teacher) => teacherEligibilityDraft.value[teacher.staff_id] === null
+      || teacherEligibilityDraft.value[teacher.staff_id] === undefined)) {
+    completedTimesheetError.value = 'Hãy chọn Tính công hoặc Không tính công cho từng giáo viên được phân công.'
+    return
+  }
+
+  completedTimesheetBusy.value = true
+  try {
+    const decisions = assignedTeachers.value.map((teacher) => ({
+      staff_id: teacher.staff_id,
+      eligible: teacherEligibilityDraft.value[teacher.staff_id] as boolean,
+    }))
+    const result = await setCompletedSessionTimesheets({ session_id: session.id, teacher_decisions: decisions })
+    const loaded = await load()
+    const refreshed = sessions.value.find((row) => row.id === session.id)
+    const refreshedDecisions = new Map((refreshed?.session_staff || []).map((teacher) => [teacher.staff_id, teacher.timesheet_eligible ?? null]))
+    const matches = decisions.every((decision) => refreshedDecisions.get(decision.staff_id) === decision.eligible)
+    if (!loaded || !refreshed || !matches) {
+      completedTimesheetError.value = 'RPC đã xử lý quyết định chấm công nhưng dữ liệu đọc lại chưa khớp. Hãy tải lại buổi trước khi nhập tiếp.'
+      return
+    }
+    selected.value = refreshed
+    teacherEligibilityDraft.value = Object.fromEntries(assignedTeachers.value.map((teacher) => [
+      teacher.staff_id,
+      teacher.timesheet_eligible ?? null,
+    ]))
+    learningEditorOpen.value = false
+    toast.success(`Đã lưu và xác minh quyết định chấm công. ${result.timesheets_approved} giáo viên được tính công.`)
+  } catch (error) {
+    completedTimesheetError.value = userErrorMessage(error, 'Không thể cập nhật chấm công cho buổi đã hoàn tất.')
+  } finally {
+    completedTimesheetBusy.value = false
+  }
+}
+
 function isYoutubeLessonLink(value: string) {
   if (!value.trim()) return true
   try {
@@ -1681,6 +1740,12 @@ async function saveSelectedLearning() {
     return
   }
 
+  const session = selected.value
+  if (completedTimesheetOnlyChange.value) {
+    await saveCompletedSessionTimesheets()
+    return
+  }
+
   const rowErrors: Record<string, string> = {}
   if (adminAttendanceDirty.value) {
     if (!canAdminFinalizeAttendance.value) {
@@ -1702,7 +1767,6 @@ async function saveSelectedLearning() {
   }
   if (Object.keys(rowErrors).length || learningTeacherValidationError.value) return
 
-  const session = selected.value
   const sessionNote = sessionNoteInput.value.trim() || null
   const lessonYoutubeUrl = lessonYoutubeInput.value.trim() || null
   const finalizingAttendance = adminAttendanceDirty.value
@@ -1733,6 +1797,8 @@ async function saveSelectedLearning() {
     const updatedSession = {
       ...session,
       status: finalizingAttendance ? 'COMPLETED' as const : session.status,
+      ended_at: finalizingAttendance ? attendanceRpcResult?.ended_at || session.ended_at : session.ended_at,
+      ended_by: finalizingAttendance ? attendanceRpcResult?.ended_by ?? session.ended_by : session.ended_by,
       session_note: sessionNote,
       lesson_youtube_url: lessonYoutubeUrl,
       session_staff: (session.session_staff || []).map((item) => ({
@@ -1756,7 +1822,9 @@ async function saveSelectedLearning() {
           refreshedRows,
         )
         if (attendanceSaveVerification.value.kind === 'success') {
-          toast.success('Đã lưu và xác minh điểm danh, đánh giá trong CSDL.')
+          toast.success(session.status === 'IN_PROGRESS'
+            ? 'Đã kết thúc buổi học và xác minh điểm danh, chấm công trong CSDL.'
+            : 'Đã lưu và xác minh điểm danh, đánh giá trong CSDL.')
         } else {
           errorMessage.value = attendanceSaveVerification.value.message
           toast.error(attendanceSaveVerification.value.message)
@@ -1802,38 +1870,70 @@ async function cancel() {
   confirmOpen.value = true
 }
 
-function confirmDeleteSession() {
-  if (!selected.value || !canCancelOrDeleteSelectedSession.value) return
-  confirmActionType.value = 'delete-session'
-  confirmDetails.value = {
-    title: 'Xóa buổi học?',
-    message: 'Buổi học chỉ được xóa khi chưa diễn ra và chưa có điểm danh, đánh giá, bài học hoặc chấm công.',
-    itemName: `${className(selected.value)} · ${formatDateTime(selected.value.scheduled_start_at)}`,
-    warning: selected.value.recurrence_schedule_id
-      ? 'Buổi thuộc lịch lặp. Hệ thống sẽ xóa buổi hiện tại và ghi nhận ngày này để lịch lặp không tạo lại.'
-      : 'Buổi riêng sẽ bị xóa khỏi lịch. Buổi đã có lịch sử sẽ bị từ chối và cần dùng thao tác Hủy buổi học.',
-    confirmLabel: 'Xóa buổi học',
-    destructive: true,
-  }
+async function confirmDeleteSession() {
+  const session = selected.value
+  if (!session || !canDeleteSelectedSession.value || deleteSessionPreviewBusy.value) return
+  deleteSessionPreviewBusy.value = true
   deleteError.value = ''
-  confirmOpen.value = true
+  try {
+    const preview = await previewDeleteSession(session.id)
+    if (selected.value?.id !== session.id) return
+    deleteSessionPreview.value = preview
+    if (!preview.can_delete) {
+      toast.error(userErrorMessage(
+        new Error(preview.blocked_reason || 'SESSION_DELETE_NOT_ALLOWED'),
+        'Buổi học hiện không thể xóa. Hãy tải lại và kiểm tra trạng thái.',
+      ))
+      return
+    }
+    const dependentCounts = [
+      `${preview.session_students} học sinh trong roster`,
+      `${preview.session_staff} phân công giáo viên`,
+      `${preview.staff_replacements} lượt thay giáo viên`,
+      `${preview.attendances} bản ghi điểm danh`,
+      `${preview.timesheets} bản ghi chấm công`,
+      `${preview.payroll_items} dòng payroll`,
+      `${preview.financial_snapshot_rows} dòng snapshot tài chính`,
+      `${preview.month_week_occurrences} liên kết lịch tháng`,
+    ]
+    if (preview.has_revenue_snapshot) dependentCounts.push('snapshot doanh thu của buổi')
+    confirmActionType.value = 'delete-session'
+    confirmDetails.value = {
+      title: 'Xóa buổi học và dữ liệu liên quan?',
+      message: 'Xác nhận xóa buổi cùng toàn bộ dữ liệu gắn với buổi. Nhật ký kiểm toán và kỳ payroll được giữ lại.',
+      itemName: `${className(session)} · ${formatDateTime(session.scheduled_start_at)} · ${preview.status}`,
+      warning: `Sẽ xóa: ${dependentCounts.join('; ')}.${preview.recurring ? ' Buổi thuộc lịch lặp; ngày này sẽ được ghi nhận để không sinh lại.' : ''} Thao tác không thể hoàn tác.`,
+      confirmLabel: 'Xóa buổi học',
+      destructive: true,
+    }
+    confirmOpen.value = true
+  } catch (error) {
+    toast.error(userErrorMessage(error, 'Không thể xem trước dữ liệu sẽ xóa. Buổi học chưa bị thay đổi.'))
+  } finally {
+    deleteSessionPreviewBusy.value = false
+  }
 }
 
 async function deleteSelectedSession() {
   if (!selected.value) return
   const sessionId = selected.value.id
   try {
-    await deleteSession(sessionId)
+    if (!deleteSessionPreview.value || deleteSessionPreview.value.session_id !== sessionId) {
+      deleteError.value = 'Hãy đóng xác nhận và xem lại dữ liệu sẽ xóa trước khi tiếp tục.'
+      return
+    }
+    const result = await deleteSession(sessionId)
     confirmBusy.value = false
     confirmOpen.value = false
     selectedDetailOpen.value = false
     selected.value = null
+    deleteSessionPreview.value = null
     students.value = []
     sessionRosterCandidates.value = []
-    toast.success('Đã xóa buổi học khỏi lịch.')
+    toast.success(`Đã xóa buổi học và dữ liệu liên quan: ${result.deleted_attendances} điểm danh, ${result.deleted_timesheets} chấm công, ${result.deleted_payroll_items} dòng payroll.`)
     await load()
   } catch (error) {
-    deleteError.value = userErrorMessage(error, 'Không thể xóa buổi học. Nếu buổi đã có dữ liệu, hãy dùng thao tác hủy để giữ lịch sử.')
+    deleteError.value = userErrorMessage(error, 'Không thể xóa buổi học. Dữ liệu vẫn được giữ nguyên.')
   }
 }
 
@@ -2261,14 +2361,22 @@ watch(sessionFormIsBackdated, (isBackdated) => {
             v-model:room-input="sessionRoomInput"
             v-model:session-note-input="sessionNoteInput"
             v-model:lesson-youtube-input="lessonYoutubeInput"
+            v-model:teacher-eligibility-draft="teacherEligibilityDraft"
             :session="selected"
             :editing="completedSessionEditOpen"
             :saving="completedSessionCorrectionBusy"
             :dirty="completedSessionEditsDirty"
             :error="completedSessionCorrectionError"
+            :timesheet-saving="completedTimesheetBusy"
+            :timesheet-dirty="teacherEligibilityDirty"
+            :timesheet-error="completedTimesheetError"
+            :deletable="canDeleteSelectedSession"
+            :deleting="deleteSessionPreviewBusy"
             @edit="completedSessionEditOpen = true; completedSessionCorrectionError = ''"
             @cancel="cancelCompletedSessionEdit"
             @save="saveCompletedSessionCorrection"
+            @save-timesheets="saveCompletedSessionTimesheets"
+            @delete="confirmDeleteSession"
           />
           <template v-else>
           <h2 class="h5">{{ className(selected) }}</h2>
@@ -2278,13 +2386,13 @@ watch(sessionFormIsBackdated, (isBackdated) => {
               class="btn btn-outline-primary btn-sm"
               type="button"
               :disabled="!canAdminFinalizeAttendance || learningBusy || rosterEditorBusy || !learningRows.length"
-              :title="canAdminFinalizeAttendance ? 'Tải mẫu hoặc nhập kết quả Excel cho buổi này' : selected.status === 'IN_PROGRESS' ? 'Admin chỉ chốt điểm danh sau khi buổi học kết thúc' : `Admin chỉ chốt điểm danh sau ${formatDateTime(selected.scheduled_end_at)}`"
+              :title="canAdminFinalizeAttendance ? 'Tải mẫu hoặc nhập kết quả Excel cho buổi này' : `Admin chỉ chốt điểm danh sau ${formatDateTime(selected.scheduled_end_at)}`"
               @click="openExcelAttendance"
             >
               Điểm danh bằng Excel
             </button>
             <span v-if="!canAdminFinalizeAttendance" class="small text-secondary" role="status">
-              {{ selected.status === 'IN_PROGRESS' ? 'Admin chỉ chốt điểm danh sau khi buổi học kết thúc.' : `Có thể nhập sau ${formatDateTime(selected.scheduled_end_at)}.` }}
+              {{ `Có thể nhập sau ${formatDateTime(selected.scheduled_end_at)}.` }}
             </span>
           </div>
           <div v-if="canEditSelectedSession" class="row g-2 align-items-end mb-3">
@@ -2300,7 +2408,7 @@ watch(sessionFormIsBackdated, (isBackdated) => {
           <div v-if="canEditSelectedSession" class="d-flex flex-wrap gap-2 mb-4">
             <button class="btn btn-primary btn-sm" :disabled="scheduleSaveBusy" @click="saveSchedule">{{ scheduleSaveBusy ? 'Đang lưu…' : 'Lưu thông tin buổi học' }}</button>
             <button v-if="canCancelOrDeleteSelectedSession" class="btn btn-outline-danger btn-sm" @click="cancel">Hủy buổi học</button>
-            <button v-if="canCancelOrDeleteSelectedSession" class="btn btn-danger btn-sm" @click="confirmDeleteSession">Xóa buổi học</button>
+            <button v-if="canDeleteSelectedSession" class="btn btn-danger btn-sm" :disabled="deleteSessionPreviewBusy" @click="confirmDeleteSession">{{ deleteSessionPreviewBusy ? 'Đang xem dữ liệu…' : 'Xóa buổi học' }}</button>
           </div>
           <p v-if="selected.session_note && (!canEditSelectedLearning || !learningEditorOpen)" class="border-start border-3 ps-3">{{ selected.session_note }}</p>
           <YouTubePlayer v-if="selected.lesson_youtube_url && (!canEditSelectedLearning || !learningEditorOpen)" class="mb-3" :url="selected.lesson_youtube_url" :title="`Video bài học ${className(selected)}`" />
@@ -2322,7 +2430,8 @@ watch(sessionFormIsBackdated, (isBackdated) => {
                 <small class="text-secondary">Để trống nếu buổi học không có video.</small>
               </div>
             </div>
-            <div v-if="!canAdminFinalizeAttendance" class="alert alert-info py-2" role="status">{{ selected.status === 'IN_PROGRESS' ? 'Buổi học đang diễn ra nên Admin chưa thể chốt điểm danh và chấm công.' : `Admin chỉ có thể chốt điểm danh và chấm công sau ${formatDateTime(selected.scheduled_end_at)}.` }} Có thể lưu ghi chú hoặc video trước thời điểm này.</div>
+            <div v-if="selected.status === 'IN_PROGRESS'" class="alert alert-info py-2" role="status">Buổi đang diễn ra. Admin có thể kết thúc sớm sau khi nhập đủ điểm danh và chọn quyết định chấm công cho từng giáo viên.</div>
+            <div v-else-if="!canAdminFinalizeAttendance" class="alert alert-info py-2" role="status">{{ `Admin chỉ có thể chốt điểm danh và chấm công sau ${formatDateTime(selected.scheduled_end_at)}.` }} Có thể lưu ghi chú hoặc video trước thời điểm này.</div>
             <p class="small text-secondary">Mỗi học sinh cần có trạng thái điểm danh. Hãy chọn quyết định công cho từng giáo viên trước khi chốt. Điểm bài tập 0–10, hiểu bài và thái độ 1–5; các điểm được phép để trống.</p>
             <div v-for="row in learningRows" :key="row.student_id" class="border rounded p-3 mb-3">
               <div class="fw-semibold mb-2">{{ row.students?.full_name || 'Học sinh' }} <small class="text-secondary">{{ row.students?.student_code }}</small></div>
@@ -2363,7 +2472,7 @@ watch(sessionFormIsBackdated, (isBackdated) => {
               <small v-else-if="adminAttendanceTakenOver" class="text-secondary">Admin có thể đổi quyết định; lần đổi được ghi vào lịch sử.</small>
             </section>
             <div class="d-flex flex-wrap align-items-center gap-2">
-              <button class="btn btn-primary btn-sm" type="button" :disabled="learningBusy || rosterEditorBusy || !learningDirty || (adminAttendanceDirty && !canAdminFinalizeAttendance)" @click="saveSelectedLearning">{{ learningBusy ? 'Đang lưu…' : adminAttendanceDirty ? 'Chốt điểm danh và chấm công' : 'Lưu nội dung buổi học' }}</button>
+              <button class="btn btn-primary btn-sm" type="button" :disabled="learningBusy || rosterEditorBusy || !learningDirty || (adminAttendanceDirty && !canAdminFinalizeAttendance)" @click="saveSelectedLearning">{{ learningBusy ? 'Đang lưu…' : completedTimesheetOnlyChange ? 'Lưu quyết định chấm công' : adminAttendanceDirty ? selected.status === 'IN_PROGRESS' ? 'Kết thúc buổi và chốt điểm danh, chấm công' : 'Chốt điểm danh và chấm công' : 'Lưu nội dung buổi học' }}</button>
               <span v-if="dirtyLearningRows.length" class="small text-secondary">{{ dirtyLearningRows.length }} học sinh có thay đổi.</span>
             </div>
           </section>
