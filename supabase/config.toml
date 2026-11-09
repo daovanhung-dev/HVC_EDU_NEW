@@ -15,6 +15,9 @@ major_version = 17
 enabled = true
 port = 54323
 
+[functions.admin-month-week-template-addition]
+verify_jwt = true
+
 [auth]
 enabled = true
 site_url = "http://localhost:5173"

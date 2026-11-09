@@ -538,14 +538,19 @@ export async function previewMonthWeekTemplateAddition(
   range: MonthWeekTemplateAdditionRange,
   duplicateAction: MonthWeekTemplateDuplicateAction,
 ): Promise<MonthWeekTemplateAdditionPreview> {
-  const { data, error } = await supabase.rpc('admin_preview_month_week_template_addition', {
-    p_month_start: monthStart,
-    p_template: slots,
-    p_range: range,
-    p_duplicate_action: duplicateAction,
+  return invokeFunction<{
+    operation: 'preview'
+    month_start: string
+    template: MonthWeekTemplateSlot[]
+    range: MonthWeekTemplateAdditionRange
+    duplicate_action: MonthWeekTemplateDuplicateAction
+  }, MonthWeekTemplateAdditionPreview>('admin-month-week-template-addition', {
+    operation: 'preview',
+    month_start: monthStart,
+    template: slots,
+    range,
+    duplicate_action: duplicateAction,
   })
-  if (error) throw error
-  return data as MonthWeekTemplateAdditionPreview
 }
 
 export async function addMonthWithWeekTemplate(
@@ -554,14 +559,19 @@ export async function addMonthWithWeekTemplate(
   range: MonthWeekTemplateAdditionRange,
   duplicateAction: MonthWeekTemplateDuplicateAction,
 ): Promise<MonthWeekTemplateAdditionResult> {
-  const { data, error } = await supabase.rpc('admin_add_month_week_template', {
-    p_month_start: monthStart,
-    p_template: slots,
-    p_range: range,
-    p_duplicate_action: duplicateAction,
+  return invokeFunction<{
+    operation: 'apply'
+    month_start: string
+    template: MonthWeekTemplateSlot[]
+    range: MonthWeekTemplateAdditionRange
+    duplicate_action: MonthWeekTemplateDuplicateAction
+  }, MonthWeekTemplateAdditionResult>('admin-month-week-template-addition', {
+    operation: 'apply',
+    month_start: monthStart,
+    template: slots,
+    range,
+    duplicate_action: duplicateAction,
   })
-  if (error) throw error
-  return data as MonthWeekTemplateAdditionResult
 }
 
 export async function updateSessionOccurrence(input: { session_id: string; start?: string; end?: string; cancel?: boolean; room?: string | null }) {

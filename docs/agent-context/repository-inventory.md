@@ -188,6 +188,15 @@
 | supabase/functions/admin-export-student-logins/handler.test.ts | Supabase / Edge Functions | TypeScript | Kiểm thử handler của route admin-export-student-logins với phụ thuộc giả lập. |
 | supabase/functions/admin-export-student-logins/handler.ts | Supabase / Edge Functions | TypeScript | Logic có thể kiểm thử tách biệt cho route: tạo export thông tin đăng nhập học sinh; xử lý dữ liệu nhạy cảm. |
 | supabase/functions/admin-export-student-logins/index.ts | Supabase / Edge Functions | TypeScript | HTTP entrypoint cho route: tạo export thông tin đăng nhập học sinh; xử lý dữ liệu nhạy cảm. |
+| supabase/functions/admin-month-week-template-addition/database.integration.test.ts | Supabase / Edge Functions | TypeScript | Test hồi quy cho database integration. |
+| supabase/functions/admin-month-week-template-addition/deno.json | Supabase / Edge Functions | JSON/config | Cấu hình deno. |
+| supabase/functions/admin-month-week-template-addition/deno.lock | Supabase / Edge Functions | Deno lockfile | File Deno lockfile thuộc Supabase / Edge Functions: deno. |
+| supabase/functions/admin-month-week-template-addition/handler.test.ts | Supabase / Edge Functions | TypeScript | Kiểm thử handler của route admin-month-week-template-addition với phụ thuộc giả lập. |
+| supabase/functions/admin-month-week-template-addition/handler.ts | Supabase / Edge Functions | TypeScript | Logic có thể kiểm thử tách biệt cho route: Edge Function admin month week template addition. |
+| supabase/functions/admin-month-week-template-addition/index.ts | Supabase / Edge Functions | TypeScript | HTTP entrypoint cho route: Edge Function admin month week template addition. |
+| supabase/functions/admin-month-week-template-addition/planner_sql.ts | Supabase / Edge Functions | TypeScript | File TypeScript thuộc Supabase / Edge Functions: planner sql. |
+| supabase/functions/admin-month-week-template-addition/store.ts | Supabase / Edge Functions | TypeScript | File TypeScript thuộc Supabase / Edge Functions: store. |
+| supabase/functions/admin-month-week-template-addition/types.ts | Supabase / Edge Functions | TypeScript | File TypeScript thuộc Supabase / Edge Functions: types. |
 | supabase/functions/admin-reset-password-bulk/config.toml | Supabase / Edge Functions | TOML/config | Cấu hình JWT/deploy riêng cho route admin-reset-password-bulk. |
 | supabase/functions/admin-reset-password-bulk/handler.test.ts | Supabase / Edge Functions | TypeScript | Kiểm thử handler của route admin-reset-password-bulk với phụ thuộc giả lập. |
 | supabase/functions/admin-reset-password-bulk/handler.ts | Supabase / Edge Functions | TypeScript | Logic có thể kiểm thử tách biệt cho route: reset mật khẩu theo lô và ghi kết quả/audit. |
@@ -279,6 +288,7 @@
 | supabase/migrations/0062_admin_session_completion_and_delete.sql | Supabase / migrations | SQL | Migration schema; đọc toàn bộ thay đổi và migration sau này có thể thay thế object. |
 | supabase/migrations/0063_admin_membership_start_date_sync.sql | Supabase / migrations | SQL | Cho Admin sửa ngày bắt đầu membership và đồng bộ roster buổi tương lai nguyên tử, có kiểm tra quyền, bảo toàn lịch sử và rollback khi xung đột. |
 | supabase/migrations/0064_add_month_week_template.sql | Supabase / migrations | SQL | Migration schema; đọc toàn bộ thay đổi và migration sau này có thể thay thế object. |
+| supabase/migrations/0065_remove_month_template_addition_rpcs.sql | Supabase / migrations | SQL | Migration schema; đọc toàn bộ thay đổi và migration sau này có thể thay thế object. |
 | supabase/seed.sql | Supabase / cấu hình và seed | SQL | Seed cho database local; không dùng làm căn cứ dữ liệu production. |
 | supabase/tests/admin_monthly_session_planning.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra admin monthly session planning bằng fixture database cô lập. |
 | supabase/tests/admin_session_attendance_timesheets.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra admin session attendance timesheets bằng fixture database cô lập. |
@@ -297,4 +307,4 @@
 | supabase/tests/student_future_session_roster_sync.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra student future session roster sync bằng fixture database cô lập. |
 | supabase/tests/timesheet_workflow.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra timesheet workflow bằng fixture database cô lập. |
 
-Tổng: 290 đường dẫn có trong inventory.
+Tổng: 300 đường dẫn có trong inventory.

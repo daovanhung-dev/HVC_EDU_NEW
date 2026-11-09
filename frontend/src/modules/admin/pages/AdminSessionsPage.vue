@@ -1342,8 +1342,9 @@ async function addMonthTemplateNow() {
     }
   } catch (error) {
     const message = error && typeof error === 'object' && 'message' in error ? String(error.message) : ''
+    const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : ''
     templateAdditionPreview.value = null
-    if (message.includes('TEMPLATE_ADDITION_BLOCKED')) {
+    if (code === 'TEMPLATE_ADDITION_BLOCKED' || message.includes('TEMPLATE_ADDITION_BLOCKED')) {
       await requestMonthTemplateAdditionPreview()
       if (templateAdditionPreview.value && !templateAdditionPreview.value.blockers.length) {
         templateError.value = 'Dữ liệu lịch vừa thay đổi. Preview đã được cập nhật; hãy kiểm tra lại trước khi thêm.'

@@ -197,13 +197,13 @@ describe('session room scheduling commands', () => {
     await previewMonthWeekTemplateAddition('2026-10-01', slots, 'REMAINING_DAYS', 'OVERWRITE_SAFE')
     await addMonthWithWeekTemplate('2026-10-01', slots, 'REMAINING_DAYS', 'OVERWRITE_SAFE')
 
-    expect(mockState.rpc).toHaveBeenNthCalledWith(1, 'admin_preview_month_week_template_addition', {
-      p_month_start: '2026-10-01', p_template: slots,
-      p_range: 'REMAINING_DAYS', p_duplicate_action: 'OVERWRITE_SAFE',
+    expect(mockState.invokeFunction).toHaveBeenNthCalledWith(1, 'admin-month-week-template-addition', {
+      operation: 'preview', month_start: '2026-10-01', template: slots,
+      range: 'REMAINING_DAYS', duplicate_action: 'OVERWRITE_SAFE',
     })
-    expect(mockState.rpc).toHaveBeenNthCalledWith(2, 'admin_add_month_week_template', {
-      p_month_start: '2026-10-01', p_template: slots,
-      p_range: 'REMAINING_DAYS', p_duplicate_action: 'OVERWRITE_SAFE',
+    expect(mockState.invokeFunction).toHaveBeenNthCalledWith(2, 'admin-month-week-template-addition', {
+      operation: 'apply', month_start: '2026-10-01', template: slots,
+      range: 'REMAINING_DAYS', duplicate_action: 'OVERWRITE_SAFE',
     })
   })
 

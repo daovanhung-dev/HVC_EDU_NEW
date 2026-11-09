@@ -4,7 +4,7 @@
 
 ## Database và quyền
 
-- Migration hiện có chạy đến 0064 trong worktree này. Thêm migration mới với số tiếp theo; tuyệt đối không sửa, xóa hoặc đổi số migration lịch sử.
+- Migration hiện có chạy đến 0065 trong worktree này. Thêm migration mới với số tiếp theo; tuyệt đối không sửa, xóa hoặc đổi số migration lịch sử.
 - Rà quyền đọc/ghi, RLS policy, helper, RPC/SECURITY DEFINER, search_path, grants và vai trò bị ảnh hưởng cho mọi thay đổi schema hoặc API.
 - Không dùng client-side role, route, id từ trình duyệt hay hidden button làm căn cứ cấp quyền.
 - Bảo toàn audit và lịch sử học tập; dùng fixture tổng hợp QA- cho kiểm thử.
@@ -12,6 +12,7 @@
 ## Edge Functions
 
 - Dùng helper trong supabase/functions/_shared/ cho xác thực caller, CORS và response/error. Xác thực người gọi và quyền trên server trước thao tác đặc quyền.
+- Luồng thêm lịch mẫu chạy qua `admin-month-week-template-addition`; Edge Function dùng transaction PostgreSQL trực tiếp và không gọi các RPC template đã bị migration 0065 gỡ bỏ.
 - Secret chỉ ở môi trường server/secret manager; không in hoặc ghi credential/token vào log, test hay context.
 - Khi tạo Edge Function mới, phải deploy lên Supabase project đích đã xác minh và smoke test endpoint trong cùng tác vụ; không coi source/test local là hoàn tất. Chỉ deploy đúng function cần thiết và giữ cấu hình JWT theo thiết kế.
 - Nếu bị chặn bởi project, quyền, mạng hoặc cấu hình secret, nêu rõ bước deploy/xác minh còn thiếu và không báo tính năng đã hoàn tất.

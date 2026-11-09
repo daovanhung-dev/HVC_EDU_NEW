@@ -30,7 +30,7 @@ Import assessment có thể giữ hàng nguồn kể cả khi chưa có attendan
 
 ## Lịch sử migration trong repo
 
-Migration phải được đọc theo thứ tự và kiểm tra migration sau có `CREATE OR REPLACE`, revoke/grant hoặc thay đổi cùng object. Hiện repo có `0001–0064`:
+Migration phải được đọc theo thứ tự và kiểm tra migration sau có `CREATE OR REPLACE`, revoke/grant hoặc thay đổi cùng object. Hiện repo có `0001–0065`:
 
 - `0001–0006`: extension, enum, Auth/profile, RBAC, hồ sơ student/staff và danh mục học thuật/lớp.
 - `0007–0019`: mô hình ClassMonth/session/attendance/timesheet và các bảng tài chính/notification/audit/function/RLS/index/seed của giai đoạn đầu. Phần tháng và tài chính hiện là lịch sử hoặc bị khóa khỏi app.
@@ -52,7 +52,8 @@ Migration phải được đọc theo thứ tự và kiểm tra migration sau c�
 - `0061`: cho Admin hiệu chỉnh schedule, metadata và attendance của session đã `COMPLETED`, giữ nguyên roster, phân công teacher, quyết định công và financial snapshots.
 - `0062`: cho Admin kết thúc `IN_PROGRESS` sớm sau khi đủ attendance/teacher decisions; thêm RPC quyết định timesheet riêng cho completed session; preview và mở rộng xóa một session chưa hủy cùng dữ liệu phụ thuộc, giữ audit, kỳ payroll và tombstone lịch lặp.
 - `0063`: cho Admin có `CLASS_MANAGE` sửa ngày bắt đầu membership và đồng bộ roster các buổi `SCHEDULED` tương lai chưa bắt đầu trong cùng lớp; giữ nguyên buổi có attendance, audit membership/roster và rollback toàn bộ khi có xung đột.
-- `0064`: thêm RPC preview/apply lịch mẫu theo tháng; chỉ cập nhật buổi trùng tương lai đủ điều kiện, bảo toàn lịch cũ và lịch sử, kiểm tra xung đột trong cùng transaction, đồng thời không đặt override toàn tháng cho lịch lặp.
+- `0064`: lịch sử thêm RPC preview/apply lịch mẫu theo tháng; chỉ cập nhật buổi trùng tương lai đủ điều kiện, bảo toàn lịch cũ và lịch sử, kiểm tra xung đột trong cùng transaction, đồng thời không đặt override toàn tháng cho lịch lặp.
+- `0065`: gỡ hai RPC template và planner bền vững; luồng thêm lịch mẫu hiện dùng Edge Function `admin-month-week-template-addition` với transaction PostgreSQL trực tiếp.
 
 Không sửa, xóa hoặc đổi số migration đã có thể chạy ở môi trường khác. Thay đổi schema bằng migration tiếp theo. Migration production cần nằm trong phạm vi công việc và phải kiểm tra target/backup/migration history trực tiếp; local test không cần áp vào production.
 
@@ -60,7 +61,7 @@ Không sửa, xóa hoặc đổi số migration đã có thể chạy ở môi t
 
 - `supabase/functions/_shared/auth.ts`: xác thực caller/hồ sơ; `cors.ts`: preflight; `response.ts`: success/error/trace id; `password-reset.ts`: helper reset.
 - Account handlers tạo/khóa/reset tài khoản hoặc bootstrap ROOT là đường đặc quyền; chỉ trả thông tin cần thiết và giữ audit.
-- `session-start`, `session-complete`, `session-learning-update` xác thực teacher và gọi RPC service-only.
+- `session-start`, `session-complete`, `session-learning-update` xác thực teacher và gọi RPC service-only. `admin-month-week-template-addition` xác thực Admin có `CLASS_MANAGE`, dựng planner trong `pg_temp` của transaction hiện hành, rồi ghi buổi/roster/audit trực tiếp; không gọi PostgREST RPC.
 - `timesheet-submit` và `timesheet-review` thực thi submit/review theo role và trạng thái.
 - `student-ai-tutor` kiểm tra học sinh/session; chỉ gửi prompt và ngữ cảnh học được cho phép. `teacher-comment-optimize` gửi comment giáo viên tới Gemini; coi đây là dữ liệu truyền cho dịch vụ bên ngoài.
 - Đọc handler/index/config cụ thể trước khi sửa. Không dùng danh sách function trong báo cáo cũ để kết luận endpoint production hiện còn deploy hay không.
