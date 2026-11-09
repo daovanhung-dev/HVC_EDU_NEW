@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deleteRpcErrorMessage, normalizeAppError } from './errors'
+import { deleteRpcErrorMessage, normalizeAppError, userErrorMessage } from './errors'
 
 describe('error normalization', () => {
   it('maps a forbidden domain error to a safe Vietnamese message', () => {
@@ -56,6 +56,20 @@ describe('error normalization', () => {
 
   it('uses a contextual fallback for unknown errors', () => {
     expect(normalizeAppError(new Error('secret database detail'), 'Không thể tải dữ liệu.').message).toBe('Không thể tải dữ liệu.')
+  })
+
+  it('explains PostgREST RPC lookup failures without exposing backend details', () => {
+    const fallback = 'Không thể xem trước phạm vi thêm lịch mẫu.'
+    const missing = userErrorMessage({
+      code: 'PGRST202',
+      message: 'Could not find the function in the schema cache',
+      details: 'internal schema details',
+    }, fallback)
+    const ambiguous = userErrorMessage({ code: 'PGRST203', message: 'ambiguous function overload' }, fallback)
+
+    expect(missing).toContain('Backend chưa nhận diện RPC')
+    expect(missing).not.toContain('internal schema details')
+    expect(ambiguous).toContain('Backend nhận diện RPC không nhất quán')
   })
 
   it('explains a deletion blocked by a linked-row constraint without exposing database details', () => {

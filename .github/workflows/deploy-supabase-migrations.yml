@@ -4,10 +4,11 @@ on:
   push:
     branches:
       - ops/admin-attendance-0061-0062
+      - main
   workflow_dispatch:
     inputs:
       deploy_production:
-        description: Apply Admin completed-session migrations 0061 and 0062 after tests pass and a production recovery point is available. Production must have exactly those two migrations pending.
+        description: Apply pending migrations 0061 through 0064 after tests pass and a production recovery point is available. Production must have exactly those four migrations pending.
         required: false
         type: boolean
         default: false
@@ -74,6 +75,10 @@ jobs:
         run: supabase test db --local supabase/tests/admin_session_attendance_timesheets.test.sql
       - name: Test Admin session deletion controls
         run: supabase test db --local supabase/tests/admin_session_deletion.test.sql
+      - name: Test membership start-date roster synchronization
+        run: supabase test db --local supabase/tests/student_future_session_roster_sync.test.sql
+      - name: Test additive month template scheduling
+        run: supabase test db --local supabase/tests/month_week_template_addition.test.sql
       - name: Test eligibility access control
         run: supabase test db --local supabase/tests/session_staff_timesheet_eligibility.test.sql
 
@@ -103,9 +108,9 @@ jobs:
           dry_run="$(supabase db push --linked --dry-run --skip-vault 2>&1)"
           printf '%s\n' "$dry_run"
           pending="$(printf '%s\n' "$dry_run" | grep -Eo '[0-9]{4}_[a-z0-9_]+' | sort -u || true)"
-          expected=$'0061_admin_completed_session_correction\n0062_admin_session_completion_and_delete'
+          expected=$'0061_admin_completed_session_correction\n0062_admin_session_completion_and_delete\n0063_admin_membership_start_date_sync\n0064_add_month_week_template'
           if [[ "$pending" != "$expected" ]]; then
-            echo "Refusing to push: expected only migrations 0061 and 0062 to be pending." >&2
+            echo "Refusing to push: expected only migrations 0061 through 0064 to be pending." >&2
             exit 1
           fi
       - name: Verify a production recovery point exists
@@ -132,3 +137,18 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      - name: Verify additive template RPCs
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          rpc_state="$(supabase db query --linked --output-format json "select to_regprocedure('public.admin_preview_month_week_template_addition(date,jsonb,text,text)') is not null as preview_rpc_exists, to_regprocedure('public.admin_add_month_week_template(date,jsonb,text,text)') is not null as apply_rpc_exists;")"
+          printf '%s\n' "$rpc_state"
+          preview_exists="$(printf '%s' "$rpc_state" | jq -r '.rows[0].preview_rpc_exists // false')"
+          apply_exists="$(printf '%s' "$rpc_state" | jq -r '.rows[0].apply_rpc_exists // false')"
+          if [[ "$preview_exists" != "true" || "$apply_exists" != "true" ]]; then
+            echo "Refusing to report success: additive template RPCs are missing." >&2
+            exit 1
+          fi

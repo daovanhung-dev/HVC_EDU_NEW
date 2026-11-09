@@ -65,6 +65,8 @@ const publicMessages: Record<string, string> = {
   MEMBERSHIP_ROSTER_SYNC_CONFLICT: 'Không thể đồng bộ roster buổi tương lai do xung đột lịch. Ngày và roster đã được giữ nguyên.',
   NO_REMAINING_OCCURRENCES: 'Không còn buổi nào có giờ bắt đầu trong tương lai ở phần còn lại của tháng đã chọn.',
   TEMPLATE_ADDITION_BLOCKED: 'Lịch đã thay đổi hoặc có xung đột. Hãy xem lại preview; chưa có buổi nào được thêm.',
+  PGRST202: 'Backend chưa nhận diện RPC cần dùng. Hãy tải lại trang; nếu lỗi còn, liên hệ quản trị viên để kiểm tra migration.',
+  PGRST203: 'Backend nhận diện RPC không nhất quán. Hãy tải lại trang; nếu lỗi còn, liên hệ quản trị viên để kiểm tra migration.',
   INVALID_HOMEWORK_SCORE: 'Điểm BTVN phải nằm trong khoảng 0–10.',
   INVALID_UNDERSTANDING_SCORE: 'Điểm hiểu bài phải nằm trong khoảng 1–5.',
   INVALID_ATTITUDE_SCORE: 'Điểm thái độ phải nằm trong khoảng 1–5.',
