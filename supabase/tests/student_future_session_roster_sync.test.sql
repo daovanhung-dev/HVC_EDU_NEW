@@ -164,7 +164,7 @@ select ok(
 -- The generator conflict above is intentional. End this QA membership before
 -- the later successful membership edit so that the two scenarios stay isolated.
 update public.class_memberships
-set end_date = current_setting('qa.roster_month')::date + 2
+set status = 'INACTIVE'
 where class_id = 'f0540000-0000-0000-0000-000000000301'
   and student_id = 'f0540000-0000-0000-0000-000000000104';
 select is(
@@ -172,6 +172,7 @@ select is(
    from public.class_memberships
    where class_id = 'f0540000-0000-0000-0000-000000000301'
      and student_id = 'f0540000-0000-0000-0000-000000000104'
+     and status = 'ACTIVE'
      and start_date <= current_setting('qa.roster_month')::date + 3
      and (end_date is null or end_date >= current_setting('qa.roster_month')::date + 3)),
   0,
