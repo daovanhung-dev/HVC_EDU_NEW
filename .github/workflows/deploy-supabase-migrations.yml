@@ -8,7 +8,12 @@ on:
   workflow_dispatch:
     inputs:
       deploy_production:
-        description: Apply pending migrations 0061 through 0064 after tests pass and a production recovery point is available. Production must have exactly those four migrations pending.
+        description: Apply pending migrations 0061 through 0064 after tests pass. A recovery point is required unless the one-run override is selected; production must have exactly those four migrations pending.
+        required: false
+        type: boolean
+        default: false
+      allow_without_recovery:
+        description: Allow this manual deployment without physical backup or PITR. Use only when the data owner explicitly accepts the recovery risk.
         required: false
         type: boolean
         default: false
@@ -113,22 +118,31 @@ jobs:
             echo "Refusing to push: expected only migrations 0061 through 0064 to be pending." >&2
             exit 1
           fi
-      - name: Verify a production recovery point exists
+      - name: Verify recovery point or explicit one-run override
         shell: bash
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          ALLOW_WITHOUT_RECOVERY: ${{ inputs.allow_without_recovery }}
         run: |
           set -euo pipefail
           backup_state="$(supabase backups list --project-ref dtftytlyaqmxjgynicqs --output-format json)"
           pitr_enabled="$(printf '%s' "$backup_state" | jq -r '.pitr_enabled // false')"
           backup_count="$(printf '%s' "$backup_state" | jq '.backups | length')"
           if [[ "$pitr_enabled" != "true" && "$backup_count" -eq 0 ]]; then
-            echo "Refusing to push: project has no listed physical backup and PITR is disabled." >&2
-            exit 1
+            if [[ "$ALLOW_WITHOUT_RECOVERY" != "true" ]]; then
+              echo "Refusing to push: project has no listed physical backup and PITR is disabled." >&2
+              exit 1
+            fi
+            echo "::warning::Proceeding without a production recovery point because allow_without_recovery was explicitly selected."
           fi
       - name: Push the reviewed migrations
         run: supabase db push --linked --yes --skip-vault
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      - name: Reload PostgREST schema cache
+        run: supabase db query --linked --output-format json "notify pgrst, 'reload schema';"
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
