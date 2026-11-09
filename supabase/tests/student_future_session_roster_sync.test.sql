@@ -90,6 +90,13 @@ insert into public.class_memberships (class_id, student_id, start_date, end_date
   ('f0540000-0000-0000-0000-000000000301', 'f0540000-0000-0000-0000-000000000103', current_setting('qa.roster_month')::date + 3, null, 'ACTIVE'),
   ('f0540000-0000-0000-0000-000000000301', 'f0540000-0000-0000-0000-000000000104', current_setting('qa.roster_month')::date + 3, null, 'ACTIVE');
 
+-- Session 610 represents an already synchronized recurring roster; leave only
+-- the membership under test absent so students_added measures its two additions.
+insert into public.session_students (session_id, student_id) values
+  ('f0540000-0000-0000-0000-000000000610', 'f0540000-0000-0000-0000-000000000101'),
+  ('f0540000-0000-0000-0000-000000000610', 'f0540000-0000-0000-0000-000000000103'),
+  ('f0540000-0000-0000-0000-000000000610', 'f0540000-0000-0000-0000-000000000104');
+
 select ok(
   not has_function_privilege('authenticated', 'public.sync_future_manual_session_student_rosters(uuid)', 'EXECUTE')
   and not has_function_privilege('anon', 'public.sync_future_manual_session_student_rosters(uuid)', 'EXECUTE'),
