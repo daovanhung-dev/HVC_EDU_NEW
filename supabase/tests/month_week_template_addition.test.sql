@@ -146,32 +146,29 @@ select
   )), 'preview lists the exact duplicate and selected action')
 from result;
 
-with added as materialized (
-  select public.admin_add_month_week_template(
-    current_setting('qa.template_add_month')::date,
-    jsonb_build_array(jsonb_build_object(
-      'day_of_week', 1, 'class_id', 'f0640000-0000-0000-0000-000000000303',
-      'start_time', '08:00', 'end_time', '09:00', 'room', 'QA-NEW-ROOM',
-      'staff_ids', jsonb_build_array('f0640000-0000-0000-0000-000000000102')
-    )),
-    'FULL_MONTH', 'OVERWRITE_SAFE'
-  ) as result
-)
+select set_config('qa.template_add_apply_result', public.admin_add_month_week_template(
+  current_setting('qa.template_add_month')::date,
+  jsonb_build_array(jsonb_build_object(
+    'day_of_week', 1, 'class_id', 'f0640000-0000-0000-0000-000000000303',
+    'start_time', '08:00', 'end_time', '09:00', 'room', 'QA-NEW-ROOM',
+    'staff_ids', jsonb_build_array('f0640000-0000-0000-0000-000000000102')
+  )),
+  'FULL_MONTH', 'OVERWRITE_SAFE'
+)::text, true);
 select
-  is((result->>'created_sessions')::integer, (
+  is((current_setting('qa.template_add_apply_result')::jsonb->>'created_sessions')::integer, (
     select count(*)::integer from generate_series(
       current_setting('qa.template_add_month')::date,
       (current_setting('qa.template_add_month')::date + interval '1 month - 1 day')::date,
       interval '1 day'
     ) d where extract(isodow from d)::integer = 1
   ) - 2, 'apply adds every nonduplicate Monday'),
-  is((result->>'updated_sessions')::integer, 1, 'apply updates the safe exact duplicate'),
-  is((result->>'protected_duplicates')::integer, 1, 'apply keeps the cancelled exact duplicate'),
+  is((current_setting('qa.template_add_apply_result')::jsonb->>'updated_sessions')::integer, 1, 'apply updates the safe exact duplicate'),
+  is((current_setting('qa.template_add_apply_result')::jsonb->>'protected_duplicates')::integer, 1, 'apply keeps the cancelled exact duplicate'),
   is((select room from public.sessions where id = 'f0640000-0000-0000-0000-000000000501'), 'QA-NEW-ROOM', 'safe duplicate receives the requested room'),
   is((select staff_id from public.session_staff where session_id = 'f0640000-0000-0000-0000-000000000501' and assignment_role = 'TEACHER'), 'f0640000-0000-0000-0000-000000000102'::uuid, 'safe duplicate receives the requested teacher'),
   is((select count(*)::integer from public.session_students where session_id = 'f0640000-0000-0000-0000-000000000501'), 1, 'safe duplicate roster follows effective membership'),
-  is((select room from public.sessions where id = 'f0640000-0000-0000-0000-000000000502'), 'QA-CANCELLED-ROOM', 'cancelled duplicate remains unchanged')
-from added;
+  is((select room from public.sessions where id = 'f0640000-0000-0000-0000-000000000502'), 'QA-CANCELLED-ROOM', 'cancelled duplicate remains unchanged');
 
 select lives_ok($$ select public.generate_upcoming_sessions(90) $$, 'recurring generation still runs after additive template application');
 select ok((
