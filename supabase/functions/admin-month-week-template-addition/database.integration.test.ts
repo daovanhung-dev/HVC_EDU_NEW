@@ -266,7 +266,7 @@ if (!databaseUrl) {
       });
       assert(
         skipPreview.response.status === 200,
-        "seeded preview should succeed",
+        `seeded preview should succeed: ${JSON.stringify(skipPreview.body)}`,
       );
       assert(
         skipPreview.body.data.overwriteable_duplicate_count === 1,

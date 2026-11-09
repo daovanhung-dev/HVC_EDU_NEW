@@ -48,10 +48,13 @@ async function buildPlan(
 ): Promise<TemplatePlan> {
   await setActorContext(tx, actorUserId);
   await tx.unsafe(MONTH_TEMPLATE_PLAN_SQL);
+  const templateJson = tx.json(
+    input.template as unknown as Parameters<typeof tx.json>[0],
+  );
   const rows = await tx<PlannedRow[]>`
     select pg_temp._build_month_week_template_addition_plan(
       ${input.month_start}::date,
-      ${JSON.stringify(input.template)}::jsonb,
+      ${templateJson}::jsonb,
       ${input.range},
       ${input.duplicate_action}
     ) as plan
@@ -76,14 +79,20 @@ async function writeAudit(
   newData: unknown,
   reason: string,
 ) {
+  const oldDataJson = oldData == null
+    ? null
+    : tx.json(oldData as Parameters<typeof tx.json>[0]);
+  const newDataJson = newData == null
+    ? null
+    : tx.json(newData as Parameters<typeof tx.json>[0]);
   await tx`
     select public.write_audit(
       ${actorUserId}::uuid,
       ${action},
       'sessions',
       ${entityId}::uuid,
-      ${oldData === null ? null : JSON.stringify(oldData)}::jsonb,
-      ${newData === null ? null : JSON.stringify(newData)}::jsonb,
+      ${oldDataJson}::jsonb,
+      ${newDataJson}::jsonb,
       ${reason}
     )
   `;
