@@ -8,16 +8,18 @@ insert into auth.users (
 ) values
   ('f0620000-0000-0000-0000-000000000001', 'authenticated', 'authenticated', 'qa-session-delete-admin@example.invalid', '', now(), now(), now(), '{}'::jsonb, '{}'::jsonb),
   ('f0620000-0000-0000-0000-000000000002', 'authenticated', 'authenticated', 'qa-session-delete-teacher@example.invalid', '', now(), now(), now(), '{}'::jsonb, '{}'::jsonb),
-  ('f0620000-0000-0000-0000-000000000003', 'authenticated', 'authenticated', 'qa-session-delete-student@example.invalid', '', now(), now(), now(), '{}'::jsonb, '{}'::jsonb);
+  ('f0620000-0000-0000-0000-000000000003', 'authenticated', 'authenticated', 'qa-session-delete-student@example.invalid', '', now(), now(), now(), '{}'::jsonb, '{}'::jsonb),
+  ('f0620000-0000-0000-0000-000000000004', 'authenticated', 'authenticated', 'qa-session-delete-replacement@example.invalid', '', now(), now(), now(), '{}'::jsonb, '{}'::jsonb);
 
 insert into public.profiles (user_id, role, username, display_name, status, force_password_change) values
   ('f0620000-0000-0000-0000-000000000001', 'ROOT_ADMIN', 'QA-SESSION-DELETE-ADMIN', 'QA Session Delete Admin', 'ACTIVE', false),
   ('f0620000-0000-0000-0000-000000000002', 'TEACHER', 'QA-SESSION-DELETE-TEACHER', 'QA Session Delete Teacher', 'ACTIVE', false),
-  ('f0620000-0000-0000-0000-000000000003', 'STUDENT', 'QA-SESSION-DELETE-STUDENT', 'QA Session Delete Student', 'ACTIVE', false);
+  ('f0620000-0000-0000-0000-000000000003', 'STUDENT', 'QA-SESSION-DELETE-STUDENT', 'QA Session Delete Student', 'ACTIVE', false),
+  ('f0620000-0000-0000-0000-000000000004', 'TEACHER', 'QA-SESSION-DELETE-REPLACEMENT', 'QA Session Delete Replacement', 'ACTIVE', false);
 
 insert into public.staff (id, user_id, staff_code, staff_type, full_name, status) values
   ('f0620000-0000-0000-0000-000000000101', 'f0620000-0000-0000-0000-000000000002', 'QA-SESSION-DELETE-T1', 'TEACHER', 'QA Session Delete Teacher', 'ACTIVE'),
-  ('f0620000-0000-0000-0000-000000000102', null, 'QA-SESSION-DELETE-T2', 'TEACHER', 'QA Session Delete Replacement', 'ACTIVE');
+  ('f0620000-0000-0000-0000-000000000102', 'f0620000-0000-0000-0000-000000000004', 'QA-SESSION-DELETE-T2', 'TEACHER', 'QA Session Delete Replacement', 'ACTIVE');
 insert into public.students (id, user_id, student_code, full_name, status)
 values ('f0620000-0000-0000-0000-000000000201', 'f0620000-0000-0000-0000-000000000003', 'QA-SESSION-DELETE-S1', 'QA Session Delete Student', 'ACTIVE');
 insert into public.subjects (id, code, name, status)
