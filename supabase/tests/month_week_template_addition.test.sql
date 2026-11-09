@@ -171,7 +171,6 @@ select
   is((select staff_id from public.session_staff where session_id = 'f0640000-0000-0000-0000-000000000501' and assignment_role = 'TEACHER'), 'f0640000-0000-0000-0000-000000000102'::uuid, 'safe duplicate receives the requested teacher'),
   is((select count(*)::integer from public.session_students where session_id = 'f0640000-0000-0000-0000-000000000501'), 1, 'safe duplicate roster follows effective membership'),
   is((select room from public.sessions where id = 'f0640000-0000-0000-0000-000000000502'), 'QA-CANCELLED-ROOM', 'cancelled duplicate remains unchanged'),
-  is((select count(*)::integer from public.class_schedule_month_overrides where month_start = current_setting('qa.template_add_month')::date), 0, 'additive template does not suppress recurring generation for the whole month'),
   is((select count(*)::integer from public.audit_logs where action = 'SESSION_MONTH_TEMPLATE_ADD_UPDATE' and entity_id = 'f0640000-0000-0000-0000-000000000501'), 1, 'safe duplicate update is audited')
 from added;
 
@@ -208,5 +207,10 @@ select is((
 ), current_setting('qa.template_add_session_count'), 'a conflict leaves all existing and previously added sessions unchanged');
 
 reset role;
+select is(
+  (select count(*)::integer from public.class_schedule_month_overrides where month_start = current_setting('qa.template_add_month')::date),
+  0,
+  'additive template does not suppress recurring generation for the whole month'
+);
 select * from finish();
 rollback;
