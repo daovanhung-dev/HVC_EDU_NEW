@@ -160,6 +160,23 @@ select ok(
   (current_setting('qa.roster_generation')::jsonb ->> 'manual_roster_conflicts')::integer >= 1,
   'generator reports blocked manual roster additions'
 );
+
+-- The generator conflict above is intentional. End this QA membership before
+-- the later successful membership edit so that the two scenarios stay isolated.
+update public.class_memberships
+set end_date = current_setting('qa.roster_month')::date + 2
+where class_id = 'f0540000-0000-0000-0000-000000000301'
+  and student_id = 'f0540000-0000-0000-0000-000000000104';
+select is(
+  (select count(*)::integer
+   from public.class_memberships
+   where class_id = 'f0540000-0000-0000-0000-000000000301'
+     and student_id = 'f0540000-0000-0000-0000-000000000104'
+     and start_date <= current_setting('qa.roster_month')::date + 3
+     and (end_date is null or end_date >= current_setting('qa.roster_month')::date + 3)),
+  0,
+  'the generator conflict fixture is no longer effective for later membership synchronization'
+);
 select is(
   (select count(*)::integer from public.session_students where session_id = 'f0540000-0000-0000-0000-000000000605' and student_id = 'f0540000-0000-0000-0000-000000000103'),
   0,
