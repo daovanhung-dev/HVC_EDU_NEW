@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
-import { addClassMembership, updateClassMembership } from '@/services/commands'
+import { addClassMembership, updateClassMembership, updateClassMembershipStartDateAndSyncFutureRosters } from '@/services/commands'
 import { getClassActiveMemberships, getClassDetail, getStudents } from '@/services/data-queries'
 import type { ClassDetailRow, ClassMembershipDetailRow } from '@/shared/types/domain'
+import { userErrorMessage } from '@/shared/utils/errors'
 import { useToastStore } from '@/stores/toast.store'
 import AppField from '@/app/components/AppField.vue'
 import AppPageHeader from '@/app/components/AppPageHeader.vue'
@@ -22,12 +23,44 @@ const errorMessage = ref('')
 const showMembership = ref(false)
 const membershipBusy = ref(false)
 const membershipDirty = ref(false)
+const editingMembership = ref<ClassMembershipDetailRow | null>(null)
+const showStartDateEdit = ref(false)
+const startDateEditBusy = ref(false)
+const startDateEditError = ref('')
+const startDateForm = ref({ start_date: '' })
 const endingMembership = ref<ClassMembershipDetailRow | null>(null)
 const confirmEnd = ref(false)
 const confirmBusy = ref(false)
 const localDate = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date())
 const membershipForm = ref({ student_id: '', start_date: localDate() })
 const availableStudents = computed(() => students.value.filter((student) => !memberships.value.some((row) => row.student_id === student.id)))
+const startDateEditDirty = computed(() => Boolean(editingMembership.value && startDateForm.value.start_date !== editingMembership.value.start_date))
+const startDateEditInvalid = computed(() => Boolean(
+  !startDateForm.value.start_date
+  || (editingMembership.value?.end_date && startDateForm.value.start_date > editingMembership.value.end_date),
+))
+
+function membershipStartDateErrorMessage(error: unknown): string {
+  const value = error && typeof error === 'object' ? error as { message?: unknown; details?: unknown } : {}
+  if (value.message === 'MEMBERSHIP_ROSTER_SYNC_CONFLICT') {
+    let detail: Record<string, unknown> = {}
+    if (typeof value.details === 'string') {
+      try { detail = JSON.parse(value.details) as Record<string, unknown> } catch { detail = {} }
+    } else if (value.details && typeof value.details === 'object') {
+      detail = value.details as Record<string, unknown>
+    }
+    const date = typeof detail.session_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(detail.session_date)
+      ? detail.session_date
+      : null
+    const reason = detail.reason === 'ROOM_REQUIRED_FOR_OVERLAP'
+      ? 'cần khai báo phòng cho cả hai buổi trùng giờ'
+      : detail.reason === 'ROOM_ALREADY_BOOKED'
+        ? 'phòng đã có buổi học khác trong cùng khung giờ'
+        : 'học sinh hoặc lớp có buổi học trùng giờ'
+    return `Không thể đồng bộ buổi${date ? ` ngày ${date}` : ''}: ${reason}. Ngày bắt đầu và các roster đã được giữ nguyên.`
+  }
+  return userErrorMessage(error, 'Không thể sửa ngày bắt đầu. Ngày và roster buổi học được giữ nguyên.')
+}
 
 async function load() {
   if (!classId.value) return
@@ -65,6 +98,37 @@ async function addStudent() {
     await load()
   } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể thêm học sinh vào lớp.' }
   finally { membershipBusy.value = false }
+}
+
+function editMembershipStartDate(row: ClassMembershipDetailRow) {
+  editingMembership.value = row
+  startDateForm.value = { start_date: row.start_date }
+  startDateEditError.value = ''
+  showStartDateEdit.value = true
+}
+
+async function saveMembershipStartDate() {
+  const row = editingMembership.value
+  if (!row || !startDateEditDirty.value || startDateEditInvalid.value || startDateEditBusy.value) return
+  startDateEditError.value = ''
+  startDateEditBusy.value = true
+  try {
+    const result = await updateClassMembershipStartDateAndSyncFutureRosters({
+      membership_id: row.id,
+      start_date: startDateForm.value.start_date,
+    })
+    showStartDateEdit.value = false
+    editingMembership.value = null
+    const skipped = result.sessions_skipped_with_attendance
+    toast.success(
+      `Đã sửa ngày bắt đầu. Đồng bộ ${result.sessions_updated} buổi tương lai (thêm ${result.students_added}, gỡ ${result.students_removed} học sinh); giữ nguyên ${skipped} buổi có attendance.`,
+    )
+    await load()
+  } catch (error) {
+    startDateEditError.value = membershipStartDateErrorMessage(error)
+  } finally {
+    startDateEditBusy.value = false
+  }
 }
 
 function endMembership(row: ClassMembershipDetailRow) {
@@ -122,7 +186,10 @@ onMounted(load)
               <td><RouterLink :to="`/admin/students/${membership.student_id}`">{{ membership.students?.full_name }}</RouterLink></td>
               <td>{{ membership.students?.phone || '—' }}</td>
               <td>{{ membership.start_date }}</td>
-              <td><button class="btn btn-sm btn-outline-danger" @click="endMembership(membership)">Kết thúc</button></td>
+              <td class="text-nowrap">
+                <button class="btn btn-sm btn-outline-primary me-2" type="button" @click="editMembershipStartDate(membership)">Sửa ngày</button>
+                <button class="btn btn-sm btn-outline-danger" type="button" @click="endMembership(membership)">Kết thúc</button>
+              </td>
             </tr>
             <tr v-if="!memberships.length"><td colspan="5" class="text-center text-secondary py-4">Chưa có học sinh trong lớp.</td></tr>
           </tbody>
@@ -138,6 +205,30 @@ onMounted(load)
       <AppField id="membership-start" class="col-12" label="Ngày bắt đầu" required><template #default="field"><input :id="field.id" v-model="membershipForm.start_date" type="date" class="form-control" required /></template></AppField>
     </div>
     <div v-if="errorMessage" class="alert alert-danger mt-3 mb-0" role="alert">{{ errorMessage }}</div>
+  </FormModal>
+  <FormModal
+    v-model="showStartDateEdit"
+    title="Sửa ngày bắt đầu"
+    :description="`Cập nhật ngày bắt đầu xếp lớp của ${editingMembership?.students?.full_name || 'học sinh'}. Các buổi SCHEDULED chưa bắt đầu trong lớp này sẽ đồng bộ roster theo ngày mới.`"
+    :busy="startDateEditBusy"
+    :dirty="startDateEditDirty"
+    :submit-disabled="!startDateEditDirty || startDateEditInvalid"
+    submit-label="Lưu ngày bắt đầu"
+    @submit="saveMembershipStartDate"
+    @cancel="showStartDateEdit = false"
+  >
+    <div class="row g-3" @change="startDateEditError = ''">
+      <AppField id="membership-edit-start" class="col-12" label="Ngày bắt đầu" required>
+        <template #default="field"><input :id="field.id" v-model="startDateForm.start_date" :max="editingMembership?.end_date || undefined" type="date" class="form-control" required data-modal-autofocus /></template>
+      </AppField>
+    </div>
+    <div class="alert alert-info mt-3 mb-0" role="note">
+      Buổi đã có attendance được giữ nguyên. Nếu roster tương lai phát sinh xung đột lịch hoặc phòng, toàn bộ thay đổi sẽ được hoàn tác.
+    </div>
+    <div v-if="startDateEditInvalid && startDateForm.start_date" class="alert alert-danger mt-3 mb-0" role="alert">
+      Ngày bắt đầu không được sau ngày kết thúc xếp lớp hiện có.
+    </div>
+    <div v-if="startDateEditError" class="alert alert-danger mt-3 mb-0" role="alert">{{ startDateEditError }}</div>
   </FormModal>
   <ConfirmModal v-model="confirmEnd" title="Kết thúc xếp lớp?" :message="`Membership của ${endingMembership?.students?.full_name || 'học sinh'} sẽ kết thúc từ hôm nay. Lịch sử các buổi học vẫn được giữ.`" :item-name="classRow?.name || ''" warning="Thao tác này chỉ kết thúc quan hệ hiện hành; dữ liệu lịch sử không bị xóa." confirm-label="Kết thúc xếp lớp" destructive :busy="confirmBusy" @confirm="confirmEndMembership" />
 </template>

@@ -214,6 +214,30 @@ export async function updateClassMembership(id: string, input: { start_date: str
   return data
 }
 
+export interface MembershipStartDateUpdateResult {
+  membership_id: string
+  previous_start_date: string
+  start_date: string
+  changed: boolean
+  sessions_updated: number
+  students_added: number
+  students_removed: number
+  sessions_skipped_with_attendance: number
+  roster_rows_retained_with_history: number
+}
+
+export async function updateClassMembershipStartDateAndSyncFutureRosters(input: {
+  membership_id: string
+  start_date: string
+}): Promise<MembershipStartDateUpdateResult> {
+  const { data, error } = await supabase.rpc('admin_update_membership_start_date_and_sync_future_rosters', {
+    p_membership_id: input.membership_id,
+    p_start_date: input.start_date,
+  })
+  if (error) throw error
+  return data as MembershipStartDateUpdateResult
+}
+
 export async function createClassSchedule(input: { class_id: string; day_of_week: number; start_time: string; end_time: string; room?: string | null; status?: 'ACTIVE' | 'INACTIVE' }) {
   const { data, error } = await supabase.from('class_schedules').insert({ ...input, room: input.room || null, status: input.status || 'INACTIVE' }).select('id,class_id,day_of_week,start_time,end_time,room,status,reviewed_at').single()
   if (error) throw error
@@ -389,6 +413,45 @@ export interface MonthWeekTemplateReplacementResult {
   created_sessions: number
 }
 
+export type MonthWeekTemplateAdditionRange = 'FULL_MONTH' | 'REMAINING_DAYS'
+export type MonthWeekTemplateDuplicateAction = 'OVERWRITE_SAFE' | 'SKIP'
+
+export interface MonthWeekTemplateAdditionMatch {
+  date: string
+  class_id: string
+  action: 'UPDATE' | 'CREATE' | 'SKIP' | 'PRESERVE' | 'BLOCKED'
+  reason: string | null
+}
+
+export interface MonthWeekTemplateAdditionBlocker {
+  date: string
+  class_id: string
+  code: string
+  message: string
+}
+
+export interface MonthWeekTemplateAdditionPreview {
+  month_start: string
+  range: MonthWeekTemplateAdditionRange
+  create_count: number
+  update_count: number
+  overwriteable_duplicate_count: number
+  recurring_duplicate_count: number
+  skipped_duplicate_count: number
+  protected_duplicate_count: number
+  blockers: MonthWeekTemplateAdditionBlocker[]
+  matches: MonthWeekTemplateAdditionMatch[]
+}
+
+export interface MonthWeekTemplateAdditionResult {
+  month_start: string
+  range: MonthWeekTemplateAdditionRange
+  created_sessions: number
+  updated_sessions: number
+  skipped_duplicates: number
+  protected_duplicates: number
+}
+
 export interface MonthWeekScheduleImportBlocker {
   slot_id?: string
   date?: string
@@ -467,6 +530,38 @@ export async function replaceMonthWithWeekTemplate(
   })
   if (error) throw error
   return data as MonthWeekTemplateReplacementResult
+}
+
+export async function previewMonthWeekTemplateAddition(
+  monthStart: string,
+  slots: MonthWeekTemplateSlot[],
+  range: MonthWeekTemplateAdditionRange,
+  duplicateAction: MonthWeekTemplateDuplicateAction,
+): Promise<MonthWeekTemplateAdditionPreview> {
+  const { data, error } = await supabase.rpc('admin_preview_month_week_template_addition', {
+    p_month_start: monthStart,
+    p_template: slots,
+    p_range: range,
+    p_duplicate_action: duplicateAction,
+  })
+  if (error) throw error
+  return data as MonthWeekTemplateAdditionPreview
+}
+
+export async function addMonthWithWeekTemplate(
+  monthStart: string,
+  slots: MonthWeekTemplateSlot[],
+  range: MonthWeekTemplateAdditionRange,
+  duplicateAction: MonthWeekTemplateDuplicateAction,
+): Promise<MonthWeekTemplateAdditionResult> {
+  const { data, error } = await supabase.rpc('admin_add_month_week_template', {
+    p_month_start: monthStart,
+    p_template: slots,
+    p_range: range,
+    p_duplicate_action: duplicateAction,
+  })
+  if (error) throw error
+  return data as MonthWeekTemplateAdditionResult
 }
 
 export async function updateSessionOccurrence(input: { session_id: string; start?: string; end?: string; cancel?: boolean; room?: string | null }) {

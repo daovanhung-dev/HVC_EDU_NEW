@@ -66,7 +66,12 @@ insert into public.sessions (id, class_id, scheduled_start_at, scheduled_end_at,
   ('f0540000-0000-0000-0000-000000000606', 'f0540000-0000-0000-0000-000000000301', (current_setting('qa.roster_month')::date + 3 + time '12:00') at time zone 'Asia/Ho_Chi_Minh', (current_setting('qa.roster_month')::date + 3 + time '13:00') at time zone 'Asia/Ho_Chi_Minh', 'COMPLETED', true, 'QA-MANUAL-ROOM'),
   ('f0540000-0000-0000-0000-000000000607', 'f0540000-0000-0000-0000-000000000301', (current_setting('qa.roster_month')::date + 3 + time '14:00') at time zone 'Asia/Ho_Chi_Minh', (current_setting('qa.roster_month')::date + 3 + time '15:00') at time zone 'Asia/Ho_Chi_Minh', 'CANCELLED', true, 'QA-MANUAL-ROOM'),
   ('f0540000-0000-0000-0000-000000000608', 'f0540000-0000-0000-0000-000000000301', now() - interval '2 days', now() - interval '1 day', 'SCHEDULED', true, 'QA-MANUAL-ROOM'),
-  ('f0540000-0000-0000-0000-000000000609', 'f0540000-0000-0000-0000-000000000302', (current_setting('qa.roster_month')::date + 3 + time '08:00') at time zone 'Asia/Ho_Chi_Minh', (current_setting('qa.roster_month')::date + 3 + time '09:00') at time zone 'Asia/Ho_Chi_Minh', 'SCHEDULED', true, 'QA-CONFLICT-ROOM');
+  ('f0540000-0000-0000-0000-000000000609', 'f0540000-0000-0000-0000-000000000302', (current_setting('qa.roster_month')::date + 3 + time '08:00') at time zone 'Asia/Ho_Chi_Minh', (current_setting('qa.roster_month')::date + 3 + time '09:00') at time zone 'Asia/Ho_Chi_Minh', 'SCHEDULED', true, 'QA-CONFLICT-ROOM'),
+  ('f0540000-0000-0000-0000-000000000610', 'f0540000-0000-0000-0000-000000000301', (current_setting('qa.roster_month')::date + 8 + time '08:00') at time zone 'Asia/Ho_Chi_Minh', (current_setting('qa.roster_month')::date + 8 + time '09:00') at time zone 'Asia/Ho_Chi_Minh', 'SCHEDULED', false, 'QA-RECURRENT-ROOM');
+update public.sessions
+set recurrence_schedule_id = 'f0540000-0000-0000-0000-000000000501',
+    recurrence_occurrence_date = current_setting('qa.roster_month')::date + 8
+where id = 'f0540000-0000-0000-0000-000000000610';
 
 insert into public.session_students (session_id, student_id, assessment_snapshot) values
   ('f0540000-0000-0000-0000-000000000602', 'f0540000-0000-0000-0000-000000000101', '{"QA- existing": true}'::jsonb),
@@ -74,6 +79,10 @@ insert into public.session_students (session_id, student_id, assessment_snapshot
   ('f0540000-0000-0000-0000-000000000609', 'f0540000-0000-0000-0000-000000000104', '{"QA- conflict": true}'::jsonb);
 insert into public.student_attendances (session_id, student_id, status, comment)
 values ('f0540000-0000-0000-0000-000000000606', 'f0540000-0000-0000-0000-000000000101', 'PRESENT', 'QA- keep history');
+insert into public.session_students (session_id, student_id) values
+  ('f0540000-0000-0000-0000-000000000605', 'f0540000-0000-0000-0000-000000000102'),
+  ('f0540000-0000-0000-0000-000000000606', 'f0540000-0000-0000-0000-000000000102'),
+  ('f0540000-0000-0000-0000-000000000607', 'f0540000-0000-0000-0000-000000000102');
 
 -- Memberships are added only after the future manual sessions already exist.
 insert into public.class_memberships (class_id, student_id, start_date, end_date, status) values
@@ -205,6 +214,183 @@ select is(
   1,
   'repeated synchronization does not duplicate a roster row'
 );
+
+select set_config('qa.membership_audit_before_update', (select count(*)::text from public.audit_logs where action = 'UPDATE_CLASS_MEMBERSHIPS'), true);
+update public.class_memberships
+set end_date = current_setting('qa.roster_month')::date + 10
+where class_id = 'f0540000-0000-0000-0000-000000000301'
+  and student_id = 'f0540000-0000-0000-0000-000000000102';
+update public.session_students
+set assessment_snapshot = '{"QA- future history": true}'::jsonb
+where session_id = 'f0540000-0000-0000-0000-000000000602'
+  and student_id = 'f0540000-0000-0000-0000-000000000102';
+insert into public.student_attendances (session_id, student_id, status, comment)
+values ('f0540000-0000-0000-0000-000000000603', 'f0540000-0000-0000-0000-000000000102', 'PRESENT', 'QA- scheduled attendance history');
+
+select ok(
+  has_function_privilege('authenticated', 'public.admin_update_membership_start_date_and_sync_future_rosters(uuid,date)', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.admin_update_membership_start_date_and_sync_future_rosters(uuid,date)', 'EXECUTE'),
+  'membership start-date synchronization is restricted to authenticated callers'
+);
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'f0540000-0000-0000-0000-000000000001', true);
+select set_config(
+  'qa.membership_start_update',
+  public.admin_update_membership_start_date_and_sync_future_rosters(
+    (select id from public.class_memberships where class_id = 'f0540000-0000-0000-0000-000000000301' and student_id = 'f0540000-0000-0000-0000-000000000102'),
+    current_setting('qa.roster_month')::date + 3
+  )::text,
+  true
+);
+reset role;
+
+select is(
+  (current_setting('qa.membership_start_update')::jsonb ->> 'changed'), 'true',
+  'admin can update a membership start date'
+);
+select is(
+  (current_setting('qa.membership_start_update')::jsonb ->> 'sessions_updated')::integer, 2,
+  'the new start date synchronizes eligible future rosters in manual and recurring sessions'
+);
+select is(
+  (current_setting('qa.membership_start_update')::jsonb ->> 'students_added')::integer, 2,
+  'the newly eligible student is added to both manual and recurring future sessions'
+);
+select is(
+  (current_setting('qa.membership_start_update')::jsonb ->> 'sessions_skipped_with_attendance')::integer, 1,
+  'a future scheduled session with any attendance is left wholly unchanged'
+);
+select is(
+  (current_setting('qa.membership_start_update')::jsonb ->> 'roster_rows_retained_with_history')::integer, 1,
+  'an ineligible roster row with an assessment snapshot is retained'
+);
+select is(
+  (select start_date from public.class_memberships where class_id = 'f0540000-0000-0000-0000-000000000301' and student_id = 'f0540000-0000-0000-0000-000000000102'),
+  current_setting('qa.roster_month')::date + 3,
+  'the membership stores the selected effective date'
+);
+select is(
+  (select count(*)::integer from public.session_students where session_id = 'f0540000-0000-0000-0000-000000000601' and student_id = 'f0540000-0000-0000-0000-000000000102'),
+  0,
+  'the student is not added before the revised effective date'
+);
+select is(
+  (select assessment_snapshot from public.session_students where session_id = 'f0540000-0000-0000-0000-000000000602' and student_id = 'f0540000-0000-0000-0000-000000000102'),
+  '{"QA- future history": true}'::jsonb,
+  'roster history is retained when the revised date makes the student ineligible'
+);
+select is(
+  (select count(*)::integer from public.session_students where session_id = 'f0540000-0000-0000-0000-000000000603' and student_id = 'f0540000-0000-0000-0000-000000000102'),
+  1,
+  'attendance-bearing future session roster remains unchanged'
+);
+select is(
+  (select count(*)::integer from public.session_students where session_id = 'f0540000-0000-0000-0000-000000000604' and student_id = 'f0540000-0000-0000-0000-000000000102'),
+  1,
+  'the student is added to a future session on the revised start date'
+);
+select is(
+  (select count(*)::integer from public.session_students where session_id = 'f0540000-0000-0000-0000-000000000610' and student_id = 'f0540000-0000-0000-0000-000000000102'),
+  1,
+  'the student is added to a future recurring occurrence after the revised start date'
+);
+select is(
+  (select count(*)::integer from public.session_students where session_id in ('f0540000-0000-0000-0000-000000000605', 'f0540000-0000-0000-0000-000000000606', 'f0540000-0000-0000-0000-000000000607') and student_id = 'f0540000-0000-0000-0000-000000000102'),
+  3,
+  'in-progress, completed, and cancelled session rosters remain unchanged'
+);
+select is(
+  (select count(*)::text from public.audit_logs where action = 'UPDATE_CLASS_MEMBERSHIPS'),
+  (current_setting('qa.membership_audit_before_update')::integer + 2)::text,
+  'the membership date update is audited'
+);
+
+select set_config('qa.membership_audit_before_noop', (select count(*)::text from public.audit_logs where action = 'UPDATE_CLASS_MEMBERSHIPS'), true);
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'f0540000-0000-0000-0000-000000000001', true);
+select set_config(
+  'qa.membership_start_noop',
+  public.admin_update_membership_start_date_and_sync_future_rosters(
+    (select id from public.class_memberships where class_id = 'f0540000-0000-0000-0000-000000000301' and student_id = 'f0540000-0000-0000-0000-000000000102'),
+    current_setting('qa.roster_month')::date + 3
+  )::text,
+  true
+);
+reset role;
+select is((current_setting('qa.membership_start_noop')::jsonb ->> 'changed'), 'false', 'saving the same date is a no-op');
+select is(
+  (select count(*)::text from public.audit_logs where action = 'UPDATE_CLASS_MEMBERSHIPS'),
+  current_setting('qa.membership_audit_before_noop'),
+  'a no-op date save does not create an audit event'
+);
+
+delete from public.session_students
+where session_id = 'f0540000-0000-0000-0000-000000000604'
+  and student_id = 'f0540000-0000-0000-0000-000000000102';
+insert into public.session_students (session_id, student_id)
+values ('f0540000-0000-0000-0000-000000000609', 'f0540000-0000-0000-0000-000000000102');
+select set_config('qa.membership_audit_before_conflict', (select count(*)::text from public.audit_logs where action = 'UPDATE_CLASS_MEMBERSHIPS'), true);
+select set_config('qa.roster_audit_before_conflict', (select count(*)::text from public.audit_logs where action = 'SESSION_ROSTER_SYNC'), true);
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'f0540000-0000-0000-0000-000000000001', true);
+select throws_ok(
+  $$ select public.admin_update_membership_start_date_and_sync_future_rosters(
+    (select id from public.class_memberships where class_id = 'f0540000-0000-0000-0000-000000000301' and student_id = 'f0540000-0000-0000-0000-000000000102'),
+    current_setting('qa.roster_month')::date
+  ) $$,
+  'P0001', 'MEMBERSHIP_ROSTER_SYNC_CONFLICT',
+  'a roster conflict aborts the whole membership update'
+);
+reset role;
+
+select is(
+  (select start_date from public.class_memberships where class_id = 'f0540000-0000-0000-0000-000000000301' and student_id = 'f0540000-0000-0000-0000-000000000102'),
+  current_setting('qa.roster_month')::date + 3,
+  'a conflict rolls back the selected membership date'
+);
+select is(
+  (select count(*)::integer from public.session_students where session_id = 'f0540000-0000-0000-0000-000000000601' and student_id = 'f0540000-0000-0000-0000-000000000102'),
+  0,
+  'a conflict rolls back earlier roster changes in the same transaction'
+);
+select is(
+  (select count(*)::integer from public.session_students where session_id = 'f0540000-0000-0000-0000-000000000604' and student_id = 'f0540000-0000-0000-0000-000000000102'),
+  0,
+  'a conflicting future session is not partially updated'
+);
+select is(
+  (select count(*)::text from public.audit_logs where action = 'UPDATE_CLASS_MEMBERSHIPS'),
+  current_setting('qa.membership_audit_before_conflict'),
+  'a rolled-back membership edit leaves no audit entry'
+);
+select is(
+  (select count(*)::text from public.audit_logs where action = 'SESSION_ROSTER_SYNC'),
+  current_setting('qa.roster_audit_before_conflict'),
+  'a rolled-back roster sync leaves no audit entry'
+);
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'f0540000-0000-0000-0000-000000000001', true);
+select throws_ok(
+  $$ select public.admin_update_membership_start_date_and_sync_future_rosters(
+    (select id from public.class_memberships where class_id = 'f0540000-0000-0000-0000-000000000301' and student_id = 'f0540000-0000-0000-0000-000000000102'),
+  current_setting('qa.roster_month')::date + 11
+  ) $$,
+  'P0001', 'MEMBERSHIP_START_AFTER_END',
+  'membership start date cannot be moved after its existing end date'
+);
+select set_config('request.jwt.claim.sub', 'f0540000-0000-0000-0000-000000000003', true);
+select throws_ok(
+  $$ select public.admin_update_membership_start_date_and_sync_future_rosters(
+    (select id from public.class_memberships where class_id = 'f0540000-0000-0000-0000-000000000301' and student_id = 'f0540000-0000-0000-0000-000000000102'),
+    current_setting('qa.roster_month')::date + 4
+  ) $$,
+  'P0001', 'FORBIDDEN',
+  'a student cannot edit a class membership start date'
+);
+reset role;
 
 select * from finish();
 rollback;

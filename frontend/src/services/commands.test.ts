@@ -8,6 +8,7 @@ vi.mock('./edge-functions', () => ({ invokeFunction: mockState.invokeFunction })
 import {
   adminExportStudentLogins,
   adminResetPasswordBulk,
+  addMonthWithWeekTemplate,
   createManualSession,
   deleteSession,
   deleteSessionsForMonth,
@@ -16,10 +17,12 @@ import {
   previewDeleteSessionsForMonth,
   previewDeleteSession,
   previewMonthWeekScheduleImport,
+  previewMonthWeekTemplateAddition,
   previewMonthWeekTemplateReplacement,
   replaceMonthWithWeekTemplate,
   recordAdminSessionAttendance,
   setCompletedSessionTimesheets,
+  updateClassMembershipStartDateAndSyncFutureRosters,
   updateSessionOccurrence,
 } from './commands'
 
@@ -80,6 +83,35 @@ describe('session room scheduling commands', () => {
       p_cancel: false,
       p_room: 'QA-Room-B',
     })
+  })
+
+  it('updates a class membership start date through the atomic roster-sync RPC', async () => {
+    mockState.rpc.mockResolvedValueOnce({
+      data: {
+        membership_id: 'qa-membership',
+        previous_start_date: '2026-10-01',
+        start_date: '2026-10-05',
+        changed: true,
+        sessions_updated: 2,
+        students_added: 1,
+        students_removed: 1,
+        sessions_skipped_with_attendance: 1,
+        roster_rows_retained_with_history: 0,
+      },
+      error: null,
+    })
+
+    const result = await updateClassMembershipStartDateAndSyncFutureRosters({
+      membership_id: 'qa-membership',
+      start_date: '2026-10-05',
+    })
+
+    expect(mockState.rpc).toHaveBeenCalledWith('admin_update_membership_start_date_and_sync_future_rosters', {
+      p_membership_id: 'qa-membership',
+      p_start_date: '2026-10-05',
+    })
+    expect(result.sessions_updated).toBe(2)
+    expect(result.sessions_skipped_with_attendance).toBe(1)
   })
 
   it('uses the Admin preview and permanent-delete RPCs for the selected month', async () => {
@@ -149,6 +181,29 @@ describe('session room scheduling commands', () => {
     expect(mockState.rpc).toHaveBeenNthCalledWith(2, 'admin_replace_month_with_week_template', {
       p_month_start: '2026-10-01',
       p_template: slots,
+    })
+  })
+
+  it('previews and applies additive month templates with range and duplicate policy', async () => {
+    const slots = [{
+      day_of_week: 1,
+      class_id: 'qa-class-1',
+      start_time: '17:30',
+      end_time: '19:30',
+      room: 'QA-A1',
+      staff_ids: ['qa-teacher-1'],
+    }]
+
+    await previewMonthWeekTemplateAddition('2026-10-01', slots, 'REMAINING_DAYS', 'OVERWRITE_SAFE')
+    await addMonthWithWeekTemplate('2026-10-01', slots, 'REMAINING_DAYS', 'OVERWRITE_SAFE')
+
+    expect(mockState.rpc).toHaveBeenNthCalledWith(1, 'admin_preview_month_week_template_addition', {
+      p_month_start: '2026-10-01', p_template: slots,
+      p_range: 'REMAINING_DAYS', p_duplicate_action: 'OVERWRITE_SAFE',
+    })
+    expect(mockState.rpc).toHaveBeenNthCalledWith(2, 'admin_add_month_week_template', {
+      p_month_start: '2026-10-01', p_template: slots,
+      p_range: 'REMAINING_DAYS', p_duplicate_action: 'OVERWRITE_SAFE',
     })
   })
 

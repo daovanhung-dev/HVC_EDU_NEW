@@ -29,6 +29,8 @@ const mockState = vi.hoisted(() => ({
   createManualSession: vi.fn(),
   previewMonthWeekTemplateReplacement: vi.fn(),
   replaceMonthWithWeekTemplate: vi.fn(),
+  previewMonthWeekTemplateAddition: vi.fn(),
+  addMonthWithWeekTemplate: vi.fn(),
   getMonthWeekScheduleTemplate: vi.fn(),
   previewMonthWeekScheduleImport: vi.fn(),
   importMonthWeekSchedule: vi.fn(),
@@ -69,6 +71,8 @@ vi.mock('@/services/commands', () => ({
   createManualSession: mockState.createManualSession,
   previewMonthWeekTemplateReplacement: mockState.previewMonthWeekTemplateReplacement,
   replaceMonthWithWeekTemplate: mockState.replaceMonthWithWeekTemplate,
+  previewMonthWeekTemplateAddition: mockState.previewMonthWeekTemplateAddition,
+  addMonthWithWeekTemplate: mockState.addMonthWithWeekTemplate,
   getMonthWeekScheduleTemplate: mockState.getMonthWeekScheduleTemplate,
   previewMonthWeekScheduleImport: mockState.previewMonthWeekScheduleImport,
   importMonthWeekSchedule: mockState.importMonthWeekSchedule,
@@ -253,6 +257,17 @@ describe('AdminSessionsPage calendar', () => {
       deleted_timesheets: 1,
       deleted_payroll_items: 1,
       created_sessions: 10,
+    })
+    mockState.previewMonthWeekTemplateAddition.mockReset().mockResolvedValue({
+      month_start: `${getBusinessDateKey(new Date()).slice(0, 7)}-01`,
+      range: 'FULL_MONTH', create_count: 4, update_count: 0,
+      overwriteable_duplicate_count: 0, recurring_duplicate_count: 0,
+      skipped_duplicate_count: 0, protected_duplicate_count: 0, blockers: [], matches: [],
+    })
+    mockState.addMonthWithWeekTemplate.mockReset().mockResolvedValue({
+      month_start: `${getBusinessDateKey(new Date()).slice(0, 7)}-01`,
+      range: 'FULL_MONTH', created_sessions: 4, updated_sessions: 0,
+      skipped_duplicates: 0, protected_duplicates: 0,
     })
     mockState.getMonthWeekScheduleTemplate.mockReset().mockResolvedValue(null)
     mockState.previewMonthWeekScheduleImport.mockReset().mockResolvedValue({
@@ -1253,6 +1268,65 @@ describe('AdminSessionsPage calendar', () => {
       { day_of_week: 2, class_id: 'qa-class-2', start_time: '18:00', end_time: '20:00', room: 'QA-B1', staff_ids: ['qa-teacher-2'] },
     ])
     expect(mockState.toastSuccess).toHaveBeenCalledWith('Đã xóa 6 buổi cũ và tạo 10 buổi mới cho tháng 10 năm 2026.')
+  })
+
+  it('previews additive schedules, lets one duplicate decision apply to every match, and preserves the replace flow', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-08T12:00:00+07:00'))
+    mockState.previewMonthWeekTemplateAddition
+      .mockResolvedValueOnce({
+        month_start: '2026-10-01', range: 'REMAINING_DAYS', create_count: 3, update_count: 0,
+        overwriteable_duplicate_count: 1, recurring_duplicate_count: 0, skipped_duplicate_count: 1,
+        protected_duplicate_count: 0, blockers: [],
+        matches: [{ date: '2026-10-12', class_id: 'qa-class-1', action: 'SKIP', reason: null }],
+      })
+      .mockResolvedValueOnce({
+        month_start: '2026-10-01', range: 'REMAINING_DAYS', create_count: 3, update_count: 1,
+        overwriteable_duplicate_count: 1, recurring_duplicate_count: 0, skipped_duplicate_count: 0,
+        protected_duplicate_count: 0, blockers: [],
+        matches: [{ date: '2026-10-12', class_id: 'qa-class-1', action: 'UPDATE', reason: null }],
+      })
+    mockState.addMonthWithWeekTemplate.mockResolvedValue({
+      month_start: '2026-10-01', range: 'REMAINING_DAYS', created_sessions: 3,
+      updated_sessions: 1, skipped_duplicates: 0, protected_duplicates: 0,
+    })
+
+    const wrapper = mountPage()
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Thêm lịch mẫu')
+    await getPageOrBody(wrapper, '#template-add-remaining-days').setValue('REMAINING_DAYS')
+    const monday = findAllPageOrBody(wrapper, '.weekly-template-day')[0]
+    await monday.get('button').trigger('click')
+    const slotId = findPageOrBody(wrapper, '.weekly-template-day .weekly-template-slot select').attributes('id')!.replace('weekly-template-class-', '')
+    await getPageOrBody(wrapper, `#weekly-template-class-${slotId}`).setValue('qa-class-1')
+    await getPageOrBody(wrapper, `#weekly-template-room-${slotId}`).setValue('QA-A1')
+    await getPageOrBody(wrapper, `#weekly-template-start-${slotId}`).setValue('17:30')
+    await getPageOrBody(wrapper, `#weekly-template-end-${slotId}`).setValue('19:30')
+    await chooseTeacher(wrapper, `weekly-template-teachers-${slotId}`, 'qa-teacher-1')
+
+    await clickButtonWithText(wrapper, 'Xem trước lịch')
+    await flushPromises()
+    expect(mockState.previewMonthWeekTemplateAddition).toHaveBeenNthCalledWith(1, '2026-10-01', [
+      { day_of_week: 1, class_id: 'qa-class-1', start_time: '17:30', end_time: '19:30', room: 'QA-A1', staff_ids: ['qa-teacher-1'] },
+    ], 'REMAINING_DAYS', 'SKIP')
+    expect(pageAndBodyText(wrapper)).toContain('cập nhật 0 buổi')
+    expect(pageAndBodyText(wrapper)).toContain('12 thg 10, 2026')
+    expect(pageAndBodyText(wrapper)).toContain('Trùng chính xác · giữ nguyên theo lựa chọn bỏ qua.')
+    await getPageOrBody(wrapper, '#template-add-overwrite').setValue('OVERWRITE_SAFE')
+    await flushPromises()
+    expect(mockState.previewMonthWeekTemplateAddition).toHaveBeenNthCalledWith(2, '2026-10-01', [
+      { day_of_week: 1, class_id: 'qa-class-1', start_time: '17:30', end_time: '19:30', room: 'QA-A1', staff_ids: ['qa-teacher-1'] },
+    ], 'REMAINING_DAYS', 'OVERWRITE_SAFE')
+    expect(pageAndBodyText(wrapper)).toContain('cập nhật 1 buổi')
+    expect(pageAndBodyText(wrapper)).toContain('Trùng chính xác · có thể cập nhật buổi an toàn.')
+
+    await clickButtonWithText(wrapper, 'Thêm lịch')
+    await flushPromises()
+    expect(mockState.addMonthWithWeekTemplate).toHaveBeenCalledWith('2026-10-01', [
+      { day_of_week: 1, class_id: 'qa-class-1', start_time: '17:30', end_time: '19:30', room: 'QA-A1', staff_ids: ['qa-teacher-1'] },
+    ], 'REMAINING_DAYS', 'OVERWRITE_SAFE')
+    expect(mockState.replaceMonthWithWeekTemplate).not.toHaveBeenCalled()
+    expect(mockState.toastSuccess).toHaveBeenCalledWith('Đã thêm 3 buổi mới, cập nhật 1 buổi trùng, bỏ qua 0 buổi trùng và giữ nguyên 0 buổi có dữ liệu.')
   })
 
   it('returns to the editor and preserves the template when replacement fails', async () => {

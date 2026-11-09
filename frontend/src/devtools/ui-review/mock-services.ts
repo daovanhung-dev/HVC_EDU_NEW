@@ -123,6 +123,110 @@ export function getSubjects() { return query(subjects) }
 export function getGrades() { return query(grades) }
 export function getClassDetail(id: string) { return query(classes.find((row) => row.id === id) || null) }
 export function getClassActiveMemberships(id: string) { return query(memberships.filter((row) => row.class_id === id && row.status === 'ACTIVE')) }
+export async function updateClassMembershipStartDateAndSyncFutureRosters(input: { membership_id: string; start_date: string }) {
+  const membership = memberships.find((row) => row.id === input.membership_id)
+  if (!membership) throw new Error('MEMBERSHIP_NOT_FOUND')
+  if (membership.end_date && input.start_date > membership.end_date) throw new Error('MEMBERSHIP_START_AFTER_END')
+  const previousStartDate = membership.start_date
+  if (membership.start_date === input.start_date) {
+    return {
+      membership_id: membership.id,
+      previous_start_date: membership.start_date,
+      start_date: membership.start_date,
+      changed: false,
+      sessions_updated: 0,
+      students_added: 0,
+      students_removed: 0,
+      sessions_skipped_with_attendance: 0,
+      roster_rows_retained_with_history: 0,
+    }
+  }
+
+  const effectiveMemberships = memberships.map((row) => row.id === membership.id ? { ...row, start_date: input.start_date } : row)
+  const futureSessions = sessions.filter((session) => session.class_id === membership.class_id
+    && session.status === 'SCHEDULED'
+    && new Date(session.scheduled_start_at).getTime() > Date.now()
+    && !session.started_at && !session.ended_at)
+  const plans = [] as Array<{ session: any; roster: any[]; added: number; removed: number; retained: number }>
+  let studentsAdded = 0
+  let studentsRemoved = 0
+  let sessionsSkippedWithAttendance = 0
+  let rosterRowsRetainedWithHistory = 0
+
+  for (const session of futureSessions) {
+    if (attendance.some((row) => row.session_id === session.id)) {
+      sessionsSkippedWithAttendance += 1
+      continue
+    }
+    const sessionDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(session.scheduled_start_at))
+    const eligibleIds = new Set(effectiveMemberships.filter((row) => row.class_id === membership.class_id
+      && row.status === 'ACTIVE'
+      && row.start_date <= sessionDate
+      && (!row.end_date || row.end_date >= sessionDate)
+      && students.find((student) => student.id === row.student_id)?.status === 'ACTIVE')
+      .map((row) => row.student_id))
+    const existing = session.session_students || []
+    const additions = [...eligibleIds].filter((studentId) => !existing.some((row: any) => row.student_id === studentId))
+
+    for (const studentId of additions) {
+      const overlapping = sessions.find((other) => other.id !== session.id
+        && ['SCHEDULED', 'IN_PROGRESS'].includes(other.status)
+        && other.scheduled_start_at < session.scheduled_end_at
+        && other.scheduled_end_at > session.scheduled_start_at
+        && (other.class_id === session.class_id
+          || (other.session_students || []).some((row: any) => row.student_id === studentId)))
+      if (overlapping) {
+        const error = new Error('MEMBERSHIP_ROSTER_SYNC_CONFLICT') as Error & { details?: string }
+        error.details = JSON.stringify({ session_id: session.id, session_date: sessionDate, reason: 'SCHEDULE_CONFLICT' })
+        throw error
+      }
+      const sessionRoom = String(session.room || '').trim().toLowerCase()
+      const roomConflict = sessions.find((other) => other.id !== session.id
+        && ['SCHEDULED', 'IN_PROGRESS'].includes(other.status)
+        && other.scheduled_start_at < session.scheduled_end_at
+        && other.scheduled_end_at > session.scheduled_start_at
+        && (!sessionRoom || !String(other.room || '').trim() || sessionRoom === String(other.room || '').trim().toLowerCase()))
+      if (roomConflict) {
+        const error = new Error('MEMBERSHIP_ROSTER_SYNC_CONFLICT') as Error & { details?: string }
+        error.details = JSON.stringify({ session_id: session.id, session_date: sessionDate, reason: !sessionRoom || !String(roomConflict.room || '').trim() ? 'ROOM_REQUIRED_FOR_OVERLAP' : 'ROOM_ALREADY_BOOKED' })
+        throw error
+      }
+    }
+
+    const retainedRows = existing.filter((row: any) => !eligibleIds.has(row.student_id)
+      && (row.assessment_snapshot && Object.keys(row.assessment_snapshot).length > 0
+        || row.monthly_fee_snapshot != null
+        || row.session_unit_value != null))
+    const roster = [
+      ...existing.filter((row: any) => eligibleIds.has(row.student_id)),
+      ...retainedRows,
+      ...additions.map((studentId) => ({ student_id: studentId })),
+    ]
+    const added = additions.length
+    const actualRemoved = existing.filter((row: any) => !eligibleIds.has(row.student_id)
+      && !retainedRows.includes(row)).length
+    studentsAdded += added
+    studentsRemoved += actualRemoved
+    rosterRowsRetainedWithHistory += retainedRows.length
+    plans.push({ session, roster, added, removed: actualRemoved, retained: retainedRows.length })
+  }
+
+  membership.start_date = input.start_date
+  for (const plan of plans) {
+    plan.session.session_students = plan.roster
+  }
+  return {
+    membership_id: membership.id,
+    previous_start_date: previousStartDate,
+    start_date: input.start_date,
+    changed: true,
+    sessions_updated: plans.filter((plan) => plan.added > 0 || plan.removed > 0).length,
+    students_added: studentsAdded,
+    students_removed: studentsRemoved,
+    sessions_skipped_with_attendance: sessionsSkippedWithAttendance,
+    roster_rows_retained_with_history: rosterRowsRetainedWithHistory,
+  }
+}
 export function getClassRosterForExport(classId: string) {
   const todayKey = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date())
   const studentsById = new Map<string, any>()
@@ -610,6 +714,65 @@ export async function replaceMonthWithWeekTemplate(monthStart: string, slots: an
     deleted_timesheets: deletedTimesheetCount,
     deleted_payroll_items: 0,
     created_sessions: createdSessions,
+  }
+}
+export async function previewMonthWeekTemplateAddition(monthStart: string, slots: any[], range: 'FULL_MONTH' | 'REMAINING_DAYS', duplicateAction: 'OVERWRITE_SAFE' | 'SKIP') {
+  await query(true)
+  const month = monthStart.slice(0, 7)
+  const [year, monthNumber] = month.split('-').map(Number)
+  const monthLength = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate()
+  const todayKey = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date())
+  let createCount = 0
+  let updateCount = 0
+  let overwriteableDuplicates = 0
+  let recurringDuplicates = 0
+  let skippedDuplicates = 0
+  let protectedDuplicates = 0
+  for (let day = 1; day <= monthLength; day += 1) {
+    const date = `${month}-${String(day).padStart(2, '0')}`
+    const weekday = new Date(Date.UTC(year, monthNumber - 1, day)).getUTCDay() || 7
+    for (const slot of slots.filter((item) => item.day_of_week === weekday)) {
+      const start = `${date}T${slot.start_time}:00+07:00`
+      const end = `${date}T${slot.end_time}:00+07:00`
+      if (range === 'REMAINING_DAYS' && (date < todayKey || Date.parse(start) <= Date.now())) continue
+      const exact = sessions.filter((item) => item.class_id === slot.class_id
+        && item.scheduled_start_at === start && item.scheduled_end_at === end)
+      if (exact.length) {
+        const safe = exact[0].status === 'SCHEDULED' && Date.parse(start) > Date.now()
+          && !attendance.some((item) => item.session_id === exact[0].id)
+          && !timesheets.some((item) => item.session_id === exact[0].id)
+        if (safe) {
+          overwriteableDuplicates += 1
+          if (duplicateAction === 'OVERWRITE_SAFE') updateCount += 1
+          else skippedDuplicates += 1
+        } else protectedDuplicates += 1
+        continue
+      }
+      const recurring = schedules.some((schedule) => schedule.class_id === slot.class_id
+        && schedule.status === 'ACTIVE' && schedule.day_of_week === weekday
+        && schedule.start_time.slice(0, 5) === slot.start_time
+        && schedule.end_time.slice(0, 5) === slot.end_time)
+      if (recurring && Date.parse(start) > Date.now()) {
+        recurringDuplicates += 1
+        if (duplicateAction === 'OVERWRITE_SAFE') createCount += 1
+        else skippedDuplicates += 1
+      } else createCount += 1
+    }
+  }
+  return query({
+    month_start: monthStart, range, create_count: createCount, update_count: updateCount,
+    overwriteable_duplicate_count: overwriteableDuplicates, recurring_duplicate_count: recurringDuplicates,
+    skipped_duplicate_count: skippedDuplicates, protected_duplicate_count: protectedDuplicates,
+    blockers: [], matches: [],
+  })
+}
+export async function addMonthWithWeekTemplate(monthStart: string, slots: any[], range: 'FULL_MONTH' | 'REMAINING_DAYS', duplicateAction: 'OVERWRITE_SAFE' | 'SKIP') {
+  await query(true)
+  const preview = await previewMonthWeekTemplateAddition(monthStart, slots, range, duplicateAction)
+  return {
+    month_start: monthStart, range, created_sessions: preview.create_count,
+    updated_sessions: preview.update_count, skipped_duplicates: preview.skipped_duplicate_count,
+    protected_duplicates: preview.protected_duplicate_count,
   }
 }
 export async function getMonthWeekScheduleTemplate(monthStart: string) {

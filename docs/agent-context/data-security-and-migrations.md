@@ -30,7 +30,7 @@ Import assessment có thể giữ hàng nguồn kể cả khi chưa có attendan
 
 ## Lịch sử migration trong repo
 
-Migration phải được đọc theo thứ tự và kiểm tra migration sau có `CREATE OR REPLACE`, revoke/grant hoặc thay đổi cùng object. Hiện repo có `0001–0062`:
+Migration phải được đọc theo thứ tự và kiểm tra migration sau có `CREATE OR REPLACE`, revoke/grant hoặc thay đổi cùng object. Hiện repo có `0001–0064`:
 
 - `0001–0006`: extension, enum, Auth/profile, RBAC, hồ sơ student/staff và danh mục học thuật/lớp.
 - `0007–0019`: mô hình ClassMonth/session/attendance/timesheet và các bảng tài chính/notification/audit/function/RLS/index/seed của giai đoạn đầu. Phần tháng và tài chính hiện là lịch sử hoặc bị khóa khỏi app.
@@ -51,6 +51,8 @@ Migration phải được đọc theo thứ tự và kiểm tra migration sau c�
 - `0060`: thêm RPC đọc `timesheet_eligible` theo session cho người có `ACADEMIC_VIEW` hoặc teacher đang hoạt động được phân công; thu hồi quyền public/anon và chỉ cấp `EXECUTE` cho authenticated. Không cấp quyền đọc trực tiếp cột `session_staff.timesheet_eligible`.
 - `0061`: cho Admin hiệu chỉnh schedule, metadata và attendance của session đã `COMPLETED`, giữ nguyên roster, phân công teacher, quyết định công và financial snapshots.
 - `0062`: cho Admin kết thúc `IN_PROGRESS` sớm sau khi đủ attendance/teacher decisions; thêm RPC quyết định timesheet riêng cho completed session; preview và mở rộng xóa một session chưa hủy cùng dữ liệu phụ thuộc, giữ audit, kỳ payroll và tombstone lịch lặp.
+- `0063`: cho Admin có `CLASS_MANAGE` sửa ngày bắt đầu membership và đồng bộ roster các buổi `SCHEDULED` tương lai chưa bắt đầu trong cùng lớp; giữ nguyên buổi có attendance, audit membership/roster và rollback toàn bộ khi có xung đột.
+- `0064`: thêm RPC preview/apply lịch mẫu theo tháng; chỉ cập nhật buổi trùng tương lai đủ điều kiện, bảo toàn lịch cũ và lịch sử, kiểm tra xung đột trong cùng transaction, đồng thời không đặt override toàn tháng cho lịch lặp.
 
 Không sửa, xóa hoặc đổi số migration đã có thể chạy ở môi trường khác. Thay đổi schema bằng migration tiếp theo. Migration production cần nằm trong phạm vi công việc và phải kiểm tra target/backup/migration history trực tiếp; local test không cần áp vào production.
 

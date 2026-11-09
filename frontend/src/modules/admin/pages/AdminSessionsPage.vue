@@ -13,6 +13,8 @@ import {
   deleteSessionsForMonth,
   previewMonthWeekTemplateReplacement,
   replaceMonthWithWeekTemplate,
+  previewMonthWeekTemplateAddition,
+  addMonthWithWeekTemplate,
   getMonthWeekScheduleTemplate,
   previewMonthWeekScheduleImport,
   importMonthWeekSchedule,
@@ -27,7 +29,15 @@ import {
   syncSessionStudentRoster,
   updateSessionTeachers,
 } from '@/services/commands'
-import type { DeleteSessionPreview, MonthWeekScheduleImportPreview, MonthWeekTemplateSlot } from '@/services/commands'
+import type {
+  DeleteSessionPreview,
+  MonthWeekScheduleImportPreview,
+  MonthWeekTemplateAdditionPreview,
+  MonthWeekTemplateAdditionMatch,
+  MonthWeekTemplateAdditionRange,
+  MonthWeekTemplateDuplicateAction,
+  MonthWeekTemplateSlot,
+} from '@/services/commands'
 import {
   getClassActiveRosterSize,
   getClassMembershipsForSessionDate,
@@ -158,7 +168,12 @@ const deletePreviewBusy = ref(false)
 const deleteSessionPreviewBusy = ref(false)
 const templateEditorOpen = ref(false)
 const templatePreviewBusy = ref(false)
+const templateAdditionBusy = ref(false)
 const templateError = ref('')
+const templateOperation = ref<'replace' | 'add'>('replace')
+const templateAdditionRange = ref<MonthWeekTemplateAdditionRange>('FULL_MONTH')
+const templateAdditionDuplicateAction = ref<MonthWeekTemplateDuplicateAction>('SKIP')
+const templateAdditionPreview = ref<MonthWeekTemplateAdditionPreview | null>(null)
 const excelScheduleOpen = ref(false)
 const excelScheduleBusy = ref(false)
 const excelScheduleError = ref('')
@@ -1020,8 +1035,12 @@ function initializeWeeklyTemplate() {
   weeklyTemplateDays.value = weekdayLabels.map((_, index) => ({ day_of_week: index + 1, slots: [] }))
 }
 
-function openWeeklyTemplate() {
+function openWeeklyTemplate(operation: 'replace' | 'add' = 'replace') {
   initializeWeeklyTemplate()
+  templateOperation.value = operation
+  templateAdditionRange.value = 'FULL_MONTH'
+  templateAdditionDuplicateAction.value = 'SKIP'
+  templateAdditionPreview.value = null
   templateError.value = ''
   templateEditorOpen.value = true
 }
@@ -1204,11 +1223,18 @@ function addWeeklyTemplateSlot(day: WeeklyTemplateDayDraft) {
     staff_ids: [],
   })
   templateError.value = ''
+  templateAdditionPreview.value = null
 }
 
 function removeWeeklyTemplateSlot(day: WeeklyTemplateDayDraft, slotId: string) {
   day.slots = day.slots.filter((slot) => slot.client_id !== slotId)
   templateError.value = ''
+  templateAdditionPreview.value = null
+}
+
+function invalidateTemplateAdditionPreview() {
+  templateError.value = ''
+  templateAdditionPreview.value = null
 }
 
 function templatePayload(): MonthWeekTemplateSlot[] {
@@ -1257,6 +1283,110 @@ async function previewAndConfirmMonthTemplate() {
   } finally {
     templatePreviewBusy.value = false
   }
+}
+
+async function requestMonthTemplateAdditionPreview() {
+  if (templatePreviewBusy.value) return
+  templateError.value = weeklyTemplateValidationError.value
+  if (templateError.value) return
+
+  templatePreviewBusy.value = true
+  try {
+    templateAdditionPreview.value = await previewMonthWeekTemplateAddition(
+      displayedMonthStart.value,
+      templatePayload(),
+      templateAdditionRange.value,
+      templateAdditionDuplicateAction.value,
+    )
+    pendingTemplateMonthStart.value = displayedMonthStart.value
+    pendingTemplateSlots.value = templatePayload()
+  } catch (error) {
+    templateError.value = userErrorMessage(error, 'Không thể xem trước phạm vi thêm lịch mẫu.')
+    templateAdditionPreview.value = null
+  } finally {
+    templatePreviewBusy.value = false
+  }
+}
+
+async function refreshMonthTemplateAdditionPreview() {
+  if (!templateAdditionPreview.value) return
+  await requestMonthTemplateAdditionPreview()
+}
+
+async function addMonthTemplateNow() {
+  const preview = templateAdditionPreview.value
+  const monthStart = pendingTemplateMonthStart.value
+  if (!preview || !monthStart || !pendingTemplateSlots.value.length || preview.blockers.length) return
+  if (templateAdditionBusy.value) return
+
+  templateError.value = ''
+  templateAdditionBusy.value = true
+  try {
+    const result = await addMonthWithWeekTemplate(
+      monthStart,
+      pendingTemplateSlots.value,
+      templateAdditionRange.value,
+      templateAdditionDuplicateAction.value,
+    )
+    templateEditorOpen.value = false
+    templateAdditionPreview.value = null
+    pendingTemplateSlots.value = []
+    weeklyTemplateDays.value = []
+    const refreshed = await load()
+    const summary = `Đã thêm ${result.created_sessions} buổi mới, cập nhật ${result.updated_sessions} buổi trùng, bỏ qua ${result.skipped_duplicates} buổi trùng và giữ nguyên ${result.protected_duplicates} buổi có dữ liệu.`
+    if (!refreshed) {
+      errorMessage.value = `${summary} Chưa tải lại được lịch; hãy nhấn “Làm mới”.`
+      toast.info(summary)
+    } else {
+      toast.success(summary)
+    }
+  } catch (error) {
+    const message = error && typeof error === 'object' && 'message' in error ? String(error.message) : ''
+    templateAdditionPreview.value = null
+    if (message.includes('TEMPLATE_ADDITION_BLOCKED')) {
+      await requestMonthTemplateAdditionPreview()
+      if (templateAdditionPreview.value && !templateAdditionPreview.value.blockers.length) {
+        templateError.value = 'Dữ liệu lịch vừa thay đổi. Preview đã được cập nhật; hãy kiểm tra lại trước khi thêm.'
+      }
+    } else {
+      templateError.value = userErrorMessage(error, 'Không thể thêm lịch mẫu. Các buổi hiện có vẫn được giữ nguyên.')
+    }
+    if (templateError.value) toast.error(templateError.value)
+  } finally {
+    templateAdditionBusy.value = false
+  }
+}
+
+async function submitWeeklyTemplate() {
+  if (templateOperation.value === 'replace') {
+    await previewAndConfirmMonthTemplate()
+  } else if (templateAdditionPreview.value) {
+    await addMonthTemplateNow()
+  } else {
+    await requestMonthTemplateAdditionPreview()
+  }
+}
+
+function templateAdditionClassName(classId: string): string {
+  return classes.value.find((row) => row.id === classId)?.name || 'Lớp đã chọn'
+}
+
+function templateAdditionMatchDescription(match: MonthWeekTemplateAdditionMatch): string {
+  if (match.action === 'UPDATE') return 'Trùng chính xác · có thể cập nhật buổi an toàn.'
+  if (match.action === 'SKIP' && match.reason === 'RECURRING_PATTERN_EXISTS') {
+    return 'Đã có lịch lặp · bỏ qua và để lịch lặp tiếp tục sinh buổi.'
+  }
+  if (match.action === 'SKIP') return 'Trùng chính xác · giữ nguyên theo lựa chọn bỏ qua.'
+  if (match.action === 'PRESERVE') return match.reason || 'Buổi trùng có dữ liệu cần bảo toàn.'
+  if (match.action === 'BLOCKED') {
+    return match.reason === 'MULTIPLE_EXACT_MATCHES'
+      ? 'Có nhiều buổi trùng chính xác; cần xử lý dữ liệu trùng trước.'
+      : 'Có nhiều lịch lặp giống nhau; cần xử lý trước khi thêm.'
+  }
+  if (match.action === 'CREATE' && match.reason === 'RECURRING_PATTERN_EXISTS') {
+    return 'Trùng khung lịch lặp · sẽ tạo riêng buổi tháng này, không sửa lịch lặp gốc.'
+  }
+  return 'Buổi trong mẫu sẽ được thêm.'
 }
 
 async function replaceMonthTemplateNow() {
@@ -1990,7 +2120,8 @@ watch(sessionFormIsBackdated, (isBackdated) => {
   <AppPageHeader title="Buổi học" eyebrow="Lịch giảng dạy" description="Xem lịch tháng, tuần hoặc danh sách; quản lý buổi riêng và khung lịch lặp.">
     <template #actions>
       <button class="btn btn-primary" @click="scheduleEditorOpen = !scheduleEditorOpen">Chỉnh sửa lịch</button>
-      <button class="btn btn-outline-primary" :disabled="loading" @click="openWeeklyTemplate">Tạo lịch mẫu</button>
+      <button class="btn btn-outline-primary" :disabled="loading" @click="openWeeklyTemplate('replace')">Tạo lịch mẫu</button>
+      <button class="btn btn-outline-primary" :disabled="loading" @click="openWeeklyTemplate('add')">Thêm lịch mẫu</button>
       <button class="btn btn-outline-primary" :disabled="loading" @click="downloadMonthScheduleWorkbook">Tải mẫu Excel</button>
       <button class="btn btn-outline-primary" :disabled="loading" @click="openExcelScheduleImport">Nhập lịch Excel</button>
       <button class="btn btn-outline-danger" :disabled="loading || deletePreviewBusy" :aria-busy="deletePreviewBusy || undefined" @click="previewAndConfirmDeleteMonthSessions">
@@ -2032,23 +2163,43 @@ watch(sessionFormIsBackdated, (isBackdated) => {
 
   <FormModal
     v-model="templateEditorOpen"
-    :title="`Tạo lịch mẫu cho ${formatBusinessMonth(displayedMonthStart)}`"
-    description="Nhập các buổi theo thứ. Khi lưu, toàn bộ buổi trong tháng của mọi lớp sẽ bị xóa và tạo lại theo mẫu này, kể cả ngày đã qua."
+    :title="`${templateOperation === 'add' ? 'Thêm lịch mẫu' : 'Tạo lịch mẫu'} cho ${formatBusinessMonth(displayedMonthStart)}`"
+    :description="templateOperation === 'add'
+      ? 'Nhập các buổi theo thứ để bổ sung vào tháng đang xem. Buổi hiện có được giữ nguyên, trừ buổi trùng đủ điều kiện mà bạn chọn cập nhật.'
+      : 'Nhập các buổi theo thứ. Khi lưu, toàn bộ buổi trong tháng của mọi lớp sẽ bị xóa và tạo lại theo mẫu này, kể cả ngày đã qua.'"
     size="xl"
-    :busy="templatePreviewBusy"
-    :submit-disabled="Boolean(weeklyTemplateValidationError) || !activeTemplateClasses.length"
-    submit-label="Xem phạm vi thay lịch"
-    submitting-label="Đang kiểm tra…"
-    @submit="previewAndConfirmMonthTemplate"
+    :busy="templatePreviewBusy || templateAdditionBusy"
+    :submit-disabled="Boolean(weeklyTemplateValidationError) || !activeTemplateClasses.length || (templateOperation === 'add' && Boolean(templateAdditionPreview?.blockers.length))"
+    :submit-label="templateOperation === 'add'
+      ? (templateAdditionPreview ? 'Thêm lịch' : 'Xem trước lịch')
+      : 'Xem phạm vi thay lịch'"
+    :submitting-label="templateAdditionBusy ? 'Đang thêm…' : 'Đang kiểm tra…'"
+    @submit="submitWeeklyTemplate"
     @cancel="templateEditorOpen = false"
   >
-    <div class="alert alert-warning" role="note">
+    <div v-if="templateOperation === 'replace'" class="alert alert-warning" role="note">
       Phạm vi áp dụng là toàn trung tâm, không phụ thuộc bộ lọc lớp. Mỗi buổi mới dùng danh sách thành viên có hiệu lực vào ngày học.
     </div>
+    <template v-else>
+      <fieldset class="mb-3">
+        <legend class="form-label">Khoảng ngày áp dụng</legend>
+        <div class="form-check">
+          <input id="template-add-full-month" v-model="templateAdditionRange" class="form-check-input" type="radio" value="FULL_MONTH" @change="invalidateTemplateAdditionPreview" />
+          <label class="form-check-label" for="template-add-full-month">Tạo cho cả tháng, gồm cả ngày đã qua</label>
+        </div>
+        <div class="form-check">
+          <input id="template-add-remaining-days" v-model="templateAdditionRange" class="form-check-input" type="radio" value="REMAINING_DAYS" @change="invalidateTemplateAdditionPreview" />
+          <label class="form-check-label" for="template-add-remaining-days">Chỉ tạo các buổi còn lại trong tháng</label>
+        </div>
+      </fieldset>
+      <div class="alert alert-info" role="note">
+        Mỗi dòng chọn lớp riêng; bộ lọc lớp không giới hạn phạm vi. Lịch cũ và lịch lặp của các tháng khác được giữ nguyên.
+      </div>
+    </template>
     <div v-if="!activeTemplateClasses.length" class="alert alert-danger" role="alert">
       Không có lớp đang hoạt động để đưa vào mẫu lịch.
     </div>
-    <div class="weekly-template-days" @input="templateError = ''" @change="templateError = ''">
+    <div class="weekly-template-days" @input="invalidateTemplateAdditionPreview" @change="invalidateTemplateAdditionPreview">
       <section v-for="day in weeklyTemplateDays" :key="day.day_of_week" class="weekly-template-day" :aria-labelledby="`weekly-template-day-${day.day_of_week}`">
         <div class="weekly-template-day__heading">
           <h3 :id="`weekly-template-day-${day.day_of_week}`" class="h6 mb-0">{{ weekdayLabels[day.day_of_week - 1] }}</h3>
@@ -2098,6 +2249,53 @@ watch(sessionFormIsBackdated, (isBackdated) => {
         </div>
       </section>
     </div>
+    <template v-if="templateOperation === 'add' && templateAdditionPreview">
+      <div class="card mt-3" aria-live="polite" data-testid="month-template-addition-preview">
+        <div class="card-body">
+          <h3 class="h6">Phạm vi thêm lịch</h3>
+          <p class="mb-2">
+            Sẽ tạo {{ templateAdditionPreview.create_count }} buổi mới; cập nhật {{ templateAdditionPreview.update_count }} buổi; bỏ qua {{ templateAdditionPreview.skipped_duplicate_count }} buổi trùng; giữ nguyên {{ templateAdditionPreview.protected_duplicate_count }} buổi cần bảo toàn.
+          </p>
+          <p v-if="templateAdditionPreview.overwriteable_duplicate_count || templateAdditionPreview.protected_duplicate_count" class="small text-secondary mb-2">
+            Có {{ templateAdditionPreview.overwriteable_duplicate_count }} buổi trùng chính xác đủ điều kiện cập nhật và {{ templateAdditionPreview.protected_duplicate_count }} buổi trùng cần giữ nguyên.
+          </p>
+          <p v-if="templateAdditionPreview.recurring_duplicate_count" class="small text-secondary mb-2">
+            Có {{ templateAdditionPreview.recurring_duplicate_count }} ngày trùng lịch lặp đang bật. Ghi đè chỉ tạo/cập nhật buổi của tháng này; khung lịch lặp không thay đổi.
+          </p>
+          <div v-if="templateAdditionPreview.matches.length" class="mb-3">
+            <h4 class="form-label">Các ngày trùng và cách xử lý</h4>
+            <ul class="small mb-0" data-testid="month-template-addition-matches">
+              <li v-for="(match, index) in templateAdditionPreview.matches" :key="`${match.date}-${match.class_id}-${match.action}-${index}`">
+                {{ formatBusinessDate(match.date) }} · {{ templateAdditionClassName(match.class_id) }} · {{ templateAdditionMatchDescription(match) }}
+              </li>
+            </ul>
+          </div>
+          <fieldset v-if="templateAdditionPreview.overwriteable_duplicate_count || templateAdditionPreview.recurring_duplicate_count" class="mb-0">
+            <legend class="form-label">Cách xử lý các buổi trùng</legend>
+            <div class="form-check">
+              <input id="template-add-overwrite" v-model="templateAdditionDuplicateAction" class="form-check-input" type="radio" name="template-add-duplicate-action" value="OVERWRITE_SAFE" @change="refreshMonthTemplateAdditionPreview" />
+              <label class="form-check-label" for="template-add-overwrite">Cập nhật buổi trùng đủ điều kiện</label>
+            </div>
+            <div class="form-check">
+              <input id="template-add-skip" v-model="templateAdditionDuplicateAction" class="form-check-input" type="radio" name="template-add-duplicate-action" value="SKIP" @change="refreshMonthTemplateAdditionPreview" />
+              <label class="form-check-label" for="template-add-skip">Giữ nguyên và bỏ qua tất cả buổi trùng</label>
+            </div>
+          </fieldset>
+          <div v-if="templateAdditionPreview.protected_duplicate_count" class="alert alert-warning mt-3 mb-0" role="status">
+            Buổi đã có attendance, kết quả, chấm công, đã hủy hoặc không còn ở trạng thái SCHEDULED sẽ được giữ nguyên và không ghi đè.
+          </div>
+          <div v-if="templateAdditionPreview.blockers.length" class="alert alert-danger mt-3 mb-0" role="alert">
+            <strong>Chưa thể áp dụng vì có xung đột:</strong>
+            <ul class="mb-0 mt-2">
+              <li v-for="(blocker, index) in templateAdditionPreview.blockers.slice(0, 8)" :key="`${blocker.date}-${blocker.class_id}-${blocker.code}-${index}`">
+                {{ formatBusinessDate(blocker.date) }} · {{ templateAdditionClassName(blocker.class_id) }} · {{ blocker.message }}
+              </li>
+            </ul>
+            <p v-if="templateAdditionPreview.blockers.length > 8" class="mb-0 mt-2">Còn {{ templateAdditionPreview.blockers.length - 8 }} xung đột khác.</p>
+          </div>
+        </div>
+      </div>
+    </template>
     <div v-if="weeklyTemplateValidationError" class="alert alert-info mt-3 mb-0" role="status">{{ weeklyTemplateValidationError }}</div>
     <div v-if="templateError" class="alert alert-danger mt-3 mb-0" role="alert">{{ templateError }}</div>
   </FormModal>

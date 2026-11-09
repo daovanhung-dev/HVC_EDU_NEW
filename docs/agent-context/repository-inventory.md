@@ -103,6 +103,7 @@
 | frontend/src/modules/admin/pages/AdminSessionsPage.vue | Frontend / Admin | Vue SFC | Màn hình Admin lập/sửa buổi kể cả buổi đã qua, quản lý roster, attendance/đánh giá, hủy/xóa buổi tương lai và mẫu lịch theo tháng. |
 | frontend/src/modules/admin/pages/AdminTimesheetsPage.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho Admin Timesheets Page trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/admin/pages/AdminTimesheetsPage.vue | Frontend / Admin | Vue SFC | Màn hình Admin duyệt hoặc từ chối yêu cầu chấm công theo buổi. |
+| frontend/src/modules/admin/pages/ClassDetailPage.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho Class Detail Page trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/admin/pages/ClassDetailPage.vue | Frontend / Admin | Vue SFC | Chi tiết lớp, membership, lịch lặp và giáo viên theo lịch. |
 | frontend/src/modules/admin/pages/ClassesPage.vue | Frontend / Admin | Vue SFC | Danh sách/quản lý lớp và cấu hình chính sách sĩ số. |
 | frontend/src/modules/admin/pages/StaffPage.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho Staff Page trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
@@ -276,6 +277,8 @@
 | supabase/migrations/0060_session_staff_timesheet_eligibility_read.sql | Supabase / migrations | SQL | Migration schema; đọc toàn bộ thay đổi và migration sau này có thể thay thế object. |
 | supabase/migrations/0061_admin_completed_session_correction.sql | Supabase / migrations | SQL | Migration schema; đọc toàn bộ thay đổi và migration sau này có thể thay thế object. |
 | supabase/migrations/0062_admin_session_completion_and_delete.sql | Supabase / migrations | SQL | Migration schema; đọc toàn bộ thay đổi và migration sau này có thể thay thế object. |
+| supabase/migrations/0063_admin_membership_start_date_sync.sql | Supabase / migrations | SQL | Cho Admin sửa ngày bắt đầu membership và đồng bộ roster buổi tương lai nguyên tử, có kiểm tra quyền, bảo toàn lịch sử và rollback khi xung đột. |
+| supabase/migrations/0064_add_month_week_template.sql | Supabase / migrations | SQL | Migration schema; đọc toàn bộ thay đổi và migration sau này có thể thay thế object. |
 | supabase/seed.sql | Supabase / cấu hình và seed | SQL | Seed cho database local; không dùng làm căn cứ dữ liệu production. |
 | supabase/tests/admin_monthly_session_planning.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra admin monthly session planning bằng fixture database cô lập. |
 | supabase/tests/admin_session_attendance_timesheets.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra admin session attendance timesheets bằng fixture database cô lập. |
@@ -285,6 +288,7 @@
 | supabase/tests/continuous_learning_rls.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra continuous learning rls bằng fixture database cô lập. |
 | supabase/tests/historical_session_edits.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra historical session edits bằng fixture database cô lập. |
 | supabase/tests/month_week_schedule_excel_import.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra month week schedule excel import bằng fixture database cô lập. |
+| supabase/tests/month_week_template_addition.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra month week template addition bằng fixture database cô lập. |
 | supabase/tests/month_week_template_replacement.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra month week template replacement bằng fixture database cô lập. |
 | supabase/tests/parallel_session_rooms.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra parallel session rooms bằng fixture database cô lập. |
 | supabase/tests/schedule_reset.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra schedule reset bằng fixture database cô lập. |
@@ -293,4 +297,4 @@
 | supabase/tests/student_future_session_roster_sync.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra student future session roster sync bằng fixture database cô lập. |
 | supabase/tests/timesheet_workflow.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra timesheet workflow bằng fixture database cô lập. |
 
-Tổng: 286 đường dẫn có trong inventory.
+Tổng: 290 đường dẫn có trong inventory.
