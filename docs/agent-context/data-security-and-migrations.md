@@ -1,28 +1,33 @@
 # Mô hình dữ liệu, quyền, migrations và bảo mật
 
+## Quy tắc API hiện hành
+
+- Supabase là backend duy nhất. Đọc/CRUD đơn giản dùng Data API dưới RLS/grants; nghiệp vụ server-side dùng Edge Function. Không tạo hoặc gọi RPC API (`supabase.rpc`/PostgREST RPC), kể cả từ Edge Function.
+- Helper/trigger SQL nội bộ không được gọi như API vẫn được phép. RPC/caller hiện có trong source hoặc migration là legacy; khi phạm vi công việc chạm tới luồng đó, chuyển phần liên quan sang Edge Function.
+
 ## Mô hình dữ liệu hiện hành
 
 - `auth.users` là danh tính đăng nhập; `profiles` nối user với role, trạng thái và cờ đổi mật khẩu. `students`/`staff` là hồ sơ domain tương ứng.
 - `subjects`, `grades`, `classes` là danh mục lớp học. `class_memberships` nối học sinh-lớp theo ngày hiệu lực.
 - `class_schedules` và `class_schedule_staff` mô tả lịch lặp/giáo viên theo slot. `sessions` là buổi cụ thể; `session_students` lưu roster buổi; `session_staff` lưu phân công teacher và ngoại lệ.
-- `month_week_schedule_templates` và `month_week_schedule_occurrences` giữ workbook tuần theo tháng cùng liên kết đến các buổi được khớp/tạo; chỉ RPC `CLASS_MANAGE` truy cập, không thay lịch lặp `class_schedules`.
+- `month_week_schedule_templates` và `month_week_schedule_occurrences` giữ workbook tuần theo tháng cùng liên kết đến các buổi được khớp/tạo; luồng RPC `CLASS_MANAGE` trong lịch sử/source hiện có là legacy, không thay lịch lặp `class_schedules` và không được mở rộng.
 - `student_attendances` lưu trạng thái điểm danh, phút đi muộn, lý do, thang đánh giá riêng, feedback và nhận xét. `session_students.assessment_snapshot` cùng `sessions.import_metadata` giữ nguồn/import lịch sử.
 - `timesheets` hiện là yêu cầu chấm công theo buổi. Audit lưu vết một số thay đổi hồ sơ, membership, lịch, buổi và học tập.
 - ClassMonth, fee, payroll, accounting, notification và permission-group tables có thể còn trong database vì lịch sử/compatibility; migration 0039 khóa quyền app đối với luồng tài chính/tháng cũ. Đừng suy ra app hiện hành từ schema cũ.
 
 ## Nguồn quyền và ranh giới bảo mật
 
-- RLS và grants giới hạn truy vấn Data API; PostgreSQL constraints/triggers/RPC kiểm tra trạng thái và quan hệ; Edge Function xác thực caller/role/input trước thao tác server-side.
+- RLS và grants giới hạn truy vấn Data API; PostgreSQL constraints/triggers và helper SQL nội bộ kiểm tra trạng thái/quan hệ; Edge Function xác thực caller/role/input và xử lý nghiệp vụ server-side.
 - Route guard, client-side role, id gửi từ browser và nút ẩn chỉ là UI. Không dùng chúng để cấp quyền dữ liệu.
-- Teacher chỉ cập nhật session khi là teacher đang hoạt động được phân công; `update_session_learning` chỉ cho session `IN_PROGRESS`. `complete_session` yêu cầu attendance record cho toàn roster. Từ migration 0056, Admin có thể hiệu chỉnh lịch và learning data cho session chưa hủy; migration 0059 chuyển việc ghi attendance sang RPC Admin cùng quyết định công cho toàn bộ teacher. Migration 0062 cho phép RPC đó kết thúc sớm `IN_PROGRESS`, nhưng vẫn chặn `SCHEDULED` trước giờ kết thúc; nó ghi `ended_at`/`ended_by`, attendance, timesheet và audit nguyên tử. RPC `admin_set_completed_session_timesheets` kiểm tra `ACADEMIC_MANAGE` + `TIMESHEET_APPROVE`, chỉ cập nhật quyết định/timesheet cho session `COMPLETED` và không ghi attendance. Roster/phân công vẫn khóa sau khi Admin chốt. `admin_preview_delete_session` và `admin_delete_session` yêu cầu `CLASS_MANAGE`; xóa buổi chưa hủy cùng roster, assignment, attendance, snapshots, replacement, timesheet và payroll item liên kết; giữ audit, payroll period và tombstone lịch lặp. Lệnh xóa bỏ qua trigger khóa roster chỉ cho đúng session đang được RPC xóa, sau khi quyền được kiểm tra.
-- RPC Teacher `start_session`, `complete_session` và `update_session_learning` được gọi qua Edge Function với `EXECUTE` chỉ cấp service role; handler xác thực caller trước khi dùng quyền server. RPC quản trị lịch/buổi được gọi bằng authenticated client nhưng tự kiểm tra `ACADEMIC_MANAGE`/`CLASS_MANAGE` trong PostgreSQL.
-- Chấm công đọc theo RLS; submit/review qua Edge Function/RPC. Không cấp ghi trực tiếp bảng timesheet cho authenticated chỉ để thuận tiện UI.
+- Các luồng RPC session/quản trị dưới đây mô tả implementation legacy hiện có. Teacher chỉ cập nhật session khi là teacher đang hoạt động được phân công; `update_session_learning` chỉ cho session `IN_PROGRESS`; `complete_session` yêu cầu attendance record cho toàn roster. Từ migration 0056, Admin có thể hiệu chỉnh lịch và learning data cho session chưa hủy; migration 0059 chuyển việc ghi attendance sang RPC Admin cùng quyết định công cho toàn bộ teacher. Migration 0062 cho phép RPC đó kết thúc sớm `IN_PROGRESS`, nhưng vẫn chặn `SCHEDULED` trước giờ kết thúc; nó ghi `ended_at`/`ended_by`, attendance, timesheet và audit nguyên tử. RPC `admin_set_completed_session_timesheets` kiểm tra `ACADEMIC_MANAGE` + `TIMESHEET_APPROVE`, chỉ cập nhật quyết định/timesheet cho session `COMPLETED` và không ghi attendance. Roster/phân công vẫn khóa sau khi Admin chốt. `admin_preview_delete_session` và `admin_delete_session` yêu cầu `CLASS_MANAGE`; xóa buổi chưa hủy cùng roster, assignment, attendance, snapshots, replacement, timesheet và payroll item liên kết; giữ audit, payroll period và tombstone lịch lặp. Lệnh xóa bỏ qua trigger khóa roster chỉ cho đúng session đang được RPC xóa, sau khi quyền được kiểm tra. Không dùng các API này làm mẫu cho thay đổi mới.
+- RPC Teacher `start_session`, `complete_session` và `update_session_learning` hiện được gọi qua Edge Function với `EXECUTE` chỉ cấp service role; handler xác thực caller trước khi dùng quyền server. RPC quản trị lịch/buổi hiện được gọi bằng authenticated client và tự kiểm tra quyền trong PostgreSQL. Đây đều là luồng legacy; khi sửa, thay RPC bằng Edge Function.
+- Chấm công đọc theo RLS; submit/review có Edge Function cùng lời gọi RPC legacy hiện có. Không tạo RPC caller mới hoặc cấp ghi trực tiếp bảng timesheet cho authenticated chỉ để thuận tiện UI.
 - Học sinh bị buộc đổi mật khẩu có thể đọc profile để vào form đổi nhưng không đọc learning data cho đến khi hoàn tất. Kiểm tra cả status active và quan hệ sở hữu/roster khi thay RLS.
-- Với thay đổi quyền, lần theo toàn đồ thị: query embed → grants → policy → SECURITY DEFINER helper/search_path → RPC → Edge Function → frontend/test.
+- Với thay đổi quyền, lần theo toàn đồ thị: query embed → grants → policy → SECURITY DEFINER helper/search_path → Edge Function → frontend/test; nếu gặp RPC caller cũ, ghi nhận là legacy và chuyển phần liên quan khi phạm vi công việc chạm tới.
 
 ## Attendance/assessment và dữ liệu học tập
 
-Schema và RPC dùng các mức riêng: BTVN nullable 0–10, understanding nullable 1–5, attitude nullable 1–5; `late_minutes` nullable nhưng không âm; feedback count nullable và không âm. Attendance status phải có khi lưu; trạng thái `LATE` có thể kèm số phút, còn lý do vắng là text tùy chọn cho `ABSENT`/`EXCUSED` ở frontend. Không có điểm tổng trong schema/code hiện hành.
+Schema hiện hành (bao gồm implementation RPC legacy) dùng các mức riêng: BTVN nullable 0–10, understanding nullable 1–5, attitude nullable 1–5; `late_minutes` nullable nhưng không âm; feedback count nullable và không âm. Attendance status phải có khi lưu; trạng thái `LATE` có thể kèm số phút, còn lý do vắng là text tùy chọn cho `ABSENT`/`EXCUSED` ở frontend. Không có điểm tổng trong schema/code hiện hành.
 
 Các nguồn xác minh: `frontend/src/modules/staff/attendance.ts`, `frontend/src/modules/staff/components/StaffAttendanceModal.vue`, `frontend/src/modules/student/pages/StudentPage.vue`, migrations 0009/0034/0039/0047/0059/0060/0061/0062 và test learning liên quan. Form client không thay validation database.
 
@@ -30,7 +35,7 @@ Import assessment có thể giữ hàng nguồn kể cả khi chưa có attendan
 
 ## Lịch sử migration trong repo
 
-Migration phải được đọc theo thứ tự và kiểm tra migration sau có `CREATE OR REPLACE`, revoke/grant hoặc thay đổi cùng object. Hiện repo có `0001–0065`:
+Migration phải được đọc theo thứ tự và kiểm tra migration sau có `CREATE OR REPLACE`, revoke/grant hoặc thay đổi cùng object. Các RPC trong phần này là lịch sử schema/implementation legacy; không tạo hoặc gọi chúng cho thay đổi mới. Hiện repo có `0001–0065`:
 
 - `0001–0006`: extension, enum, Auth/profile, RBAC, hồ sơ student/staff và danh mục học thuật/lớp.
 - `0007–0019`: mô hình ClassMonth/session/attendance/timesheet và các bảng tài chính/notification/audit/function/RLS/index/seed của giai đoạn đầu. Phần tháng và tài chính hiện là lịch sử hoặc bị khóa khỏi app.
@@ -61,7 +66,7 @@ Không sửa, xóa hoặc đổi số migration đã có thể chạy ở môi t
 
 - `supabase/functions/_shared/auth.ts`: xác thực caller/hồ sơ; `cors.ts`: preflight; `response.ts`: success/error/trace id; `password-reset.ts`: helper reset.
 - Account handlers tạo/khóa/reset tài khoản hoặc bootstrap ROOT là đường đặc quyền; chỉ trả thông tin cần thiết và giữ audit.
-- `session-start`, `session-complete`, `session-learning-update` xác thực teacher và gọi RPC service-only. `admin-month-week-template-addition` xác thực Admin có `CLASS_MANAGE`, dựng planner trong `pg_temp` của transaction hiện hành, rồi ghi buổi/roster/audit trực tiếp; không gọi PostgREST RPC.
+- `session-start`, `session-complete`, `session-learning-update` hiện xác thực teacher rồi gọi RPC service-only legacy; không mở rộng cách làm này. `admin-month-week-template-addition` xác thực Admin có `CLASS_MANAGE`, dựng planner trong `pg_temp` của transaction hiện hành, rồi ghi buổi/roster/audit trực tiếp, không gọi PostgREST RPC; dùng mẫu Edge Function này cho luồng mới cần thay RPC.
 - `timesheet-submit` và `timesheet-review` thực thi submit/review theo role và trạng thái.
 - `student-ai-tutor` kiểm tra học sinh/session; chỉ gửi prompt và ngữ cảnh học được cho phép. `teacher-comment-optimize` gửi comment giáo viên tới Gemini; coi đây là dữ liệu truyền cho dịch vụ bên ngoài.
 - Đọc handler/index/config cụ thể trước khi sửa. Không dùng danh sách function trong báo cáo cũ để kết luận endpoint production hiện còn deploy hay không.
@@ -77,7 +82,7 @@ Không sửa, xóa hoặc đổi số migration đã có thể chạy ở môi t
 ## Trước khi thay quyền hoặc dữ liệu
 
 1. Xác định actor/role, trạng thái, hàng dữ liệu và luồng đọc/ghi cần thiết.
-2. Đọc policy/RPC/function đang hiệu lực trong migration history của repo; tìm mọi migration sau đó chạm cùng object.
+2. Đọc policy, Edge Function và helper SQL nội bộ trong migration history; nếu luồng hiện có gọi RPC, đánh dấu là legacy và chuẩn bị chuyển phần liên quan sang Edge Function.
 3. Kiểm tra caller, role, input, lock/transaction, grants, `search_path`, audit và hành vi lỗi.
 4. Bảo toàn lịch sử học tập; ưu tiên archive/soft change nếu nghiệp vụ cho phép.
 5. Dùng Supabase local/fixture QA- để kiểm tra. Production cần yêu cầu rõ, xác minh project đích và backup; không reset/seed/ghi/xóa/deploy để thử.

@@ -53,7 +53,8 @@ Trước lệnh CLI tác động remote, xác minh project đang link đúng ref
 
 ## Vòng đời Edge Function
 
-- Khi tạo Edge Function mới, hoàn tất công việc phải bao gồm deploy function lên Supabase project đích đã xác minh và smoke test endpoint; source, test local hoặc deploy frontend không thay cho deploy function.
+- Ngay sau khi tạo Edge Function mới, deploy đúng function lên Supabase project đích đã xác minh và chạy smoke test endpoint an toàn, có phạm vi trong cùng tác vụ; source, test local hoặc deploy frontend không thay cho deploy/chạy function.
+- Dùng dữ liệu QA tổng hợp cho smoke test, không gọi hàng loạt function hoặc dùng production làm môi trường thử nghiệm. Xác minh hiệu ứng endpoint và cấu hình trước khi gọi.
 - Deploy đúng function mới/thay đổi, xác minh trạng thái `ACTIVE` và cấu hình xác thực JWT. Chỉ tắt JWT cho endpoint công khai được thiết kế rõ như login/bootstrap.
 - Nếu không thể deploy hoặc smoke test vì project, quyền, mạng hay secret cấu hình, báo rõ function và tính năng chưa hoàn tất; không ghi giá trị secret vào log hoặc context.
 

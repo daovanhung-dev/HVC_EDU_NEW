@@ -5,7 +5,8 @@
 ## Database và quyền
 
 - Migration hiện có chạy đến 0065 trong worktree này. Thêm migration mới với số tiếp theo; tuyệt đối không sửa, xóa hoặc đổi số migration lịch sử.
-- Rà quyền đọc/ghi, RLS policy, helper, RPC/SECURITY DEFINER, search_path, grants và vai trò bị ảnh hưởng cho mọi thay đổi schema hoặc API.
+- Rà quyền đọc/ghi, RLS policy, helper SQL nội bộ, SECURITY DEFINER, search_path, grants và vai trò bị ảnh hưởng cho mọi thay đổi schema hoặc API.
+- Không tạo hoặc gọi RPC API (`supabase.rpc`/PostgREST RPC), kể cả bên trong Edge Function. Các RPC/caller đã có chỉ là legacy; khi sửa luồng liên quan, chuyển phần nghiệp vụ đó sang Edge Function. Helper/trigger SQL nội bộ không được gọi như API vẫn được phép.
 - Không dùng client-side role, route, id từ trình duyệt hay hidden button làm căn cứ cấp quyền.
 - Bảo toàn audit và lịch sử học tập; dùng fixture tổng hợp QA- cho kiểm thử.
 
@@ -14,7 +15,7 @@
 - Dùng helper trong supabase/functions/_shared/ cho xác thực caller, CORS và response/error. Xác thực người gọi và quyền trên server trước thao tác đặc quyền.
 - Luồng thêm lịch mẫu chạy qua `admin-month-week-template-addition`; Edge Function dùng transaction PostgreSQL trực tiếp và không gọi các RPC template đã bị migration 0065 gỡ bỏ.
 - Secret chỉ ở môi trường server/secret manager; không in hoặc ghi credential/token vào log, test hay context.
-- Khi tạo Edge Function mới, phải deploy lên Supabase project đích đã xác minh và smoke test endpoint trong cùng tác vụ; không coi source/test local là hoàn tất. Chỉ deploy đúng function cần thiết và giữ cấu hình JWT theo thiết kế.
+- Ngay sau khi tạo Edge Function mới, deploy đúng function đó lên Supabase project đích đã xác minh rồi chạy smoke test an toàn, có phạm vi trong cùng tác vụ; không coi source/test local là hoàn tất. Dùng dữ liệu QA tổng hợp, không dùng production làm môi trường thử nghiệm, và giữ cấu hình JWT theo thiết kế.
 - Nếu bị chặn bởi project, quyền, mạng hoặc cấu hình secret, nêu rõ bước deploy/xác minh còn thiếu và không báo tính năng đã hoàn tất.
 
 ## Phát hành và dữ liệu thật

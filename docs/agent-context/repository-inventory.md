@@ -204,6 +204,14 @@
 | supabase/functions/admin-reset-password/handler.test.ts | Supabase / Edge Functions | TypeScript | Kiểm thử handler của route admin-reset-password với phụ thuộc giả lập. |
 | supabase/functions/admin-reset-password/handler.ts | Supabase / Edge Functions | TypeScript | Logic có thể kiểm thử tách biệt cho route: reset mật khẩu một tài khoản theo quyền Admin. |
 | supabase/functions/admin-reset-password/index.ts | Supabase / Edge Functions | TypeScript | HTTP entrypoint cho route: reset mật khẩu một tài khoản theo quyền Admin. |
+| supabase/functions/admin-session-attendance-finalize/deno.json | Supabase / Edge Functions | JSON/config | Cấu hình deno. |
+| supabase/functions/admin-session-attendance-finalize/deno.lock | Supabase / Edge Functions | Deno lockfile | File Deno lockfile thuộc Supabase / Edge Functions: deno. |
+| supabase/functions/admin-session-attendance-finalize/handler.test.ts | Supabase / Edge Functions | TypeScript | Kiểm thử handler của route admin-session-attendance-finalize với phụ thuộc giả lập. |
+| supabase/functions/admin-session-attendance-finalize/handler.ts | Supabase / Edge Functions | TypeScript | Logic có thể kiểm thử tách biệt cho route: Edge Function admin session attendance finalize. |
+| supabase/functions/admin-session-attendance-finalize/index.ts | Supabase / Edge Functions | TypeScript | HTTP entrypoint cho route: Edge Function admin session attendance finalize. |
+| supabase/functions/admin-session-attendance-finalize/store.test.ts | Supabase / Edge Functions | TypeScript | Test hồi quy cho store. |
+| supabase/functions/admin-session-attendance-finalize/store.ts | Supabase / Edge Functions | TypeScript | File TypeScript thuộc Supabase / Edge Functions: store. |
+| supabase/functions/admin-session-attendance-finalize/types.ts | Supabase / Edge Functions | TypeScript | File TypeScript thuộc Supabase / Edge Functions: types. |
 | supabase/functions/bootstrap-root/config.toml | Supabase / Edge Functions | TOML/config | Cấu hình JWT/deploy riêng cho route bootstrap-root. |
 | supabase/functions/bootstrap-root/index.ts | Supabase / Edge Functions | TypeScript | HTTP entrypoint cho route: bootstrap tài khoản ROOT trong luồng được bảo vệ. |
 | supabase/functions/login-by-identifier/config.toml | Supabase / Edge Functions | TOML/config | Cấu hình JWT/deploy riêng cho route login-by-identifier. |
@@ -307,4 +315,4 @@
 | supabase/tests/student_future_session_roster_sync.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra student future session roster sync bằng fixture database cô lập. |
 | supabase/tests/timesheet_workflow.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra timesheet workflow bằng fixture database cô lập. |
 
-Tổng: 300 đường dẫn có trong inventory.
+Tổng: 308 đường dẫn có trong inventory.

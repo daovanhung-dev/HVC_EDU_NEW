@@ -9,9 +9,9 @@
 
 | Nhiệm vụ | Context nên đọc | Sau đó lần theo |
 |---|---|---|
-| Hiểu tổng thể hoặc tìm entrypoint | [Kiến trúc và bản đồ mã nguồn](architecture-and-code-map.md) | Route/page → service/command → RPC/Edge Function → migration/RLS → test |
+| Hiểu tổng thể hoặc tìm entrypoint | [Kiến trúc và bản đồ mã nguồn](architecture-and-code-map.md) | Route/page → service/command → Data API/Edge Function → migration/RLS → test |
 | Phạm vi, vai trò, lịch, buổi, điểm danh/đánh giá, AI | [Nghiệp vụ và luồng sử dụng](product-and-workflows.md) | Màn hình và rule kiểm tra phía database/server |
-| Login, schema, quyền, RLS, RPC, migration | [Dữ liệu, migrations và bảo mật](data-security-and-migrations.md) | Migration liên quan mới nhất, helper/policy/grant và test SQL |
+| Login, schema, quyền, RLS, Edge Function, migration | [Dữ liệu, migrations và bảo mật](data-security-and-migrations.md) | Migration liên quan mới nhất, helper/policy/grant và test SQL |
 | Cài đặt, kiểm tra, CI hoặc phát hành | [Phát triển và phát hành](development-and-release.md) | Manifest, config và workflow hiện hành |
 | Không biết file thuộc đâu hoặc đổi cấu trúc repo | [Danh mục repository](repository-inventory.md) | Mục đích của từng file, rồi mở file source tương ứng |
 
@@ -33,7 +33,8 @@ ClassMonth, học phí, payroll, kế toán và một số module cũ vẫn có 
 
 ## Dữ liệu và an toàn
 
-- RLS, kiểm tra quyền PostgreSQL/RPC và Edge Function là ranh giới bảo mật. Route guard/ẩn nút chỉ hỗ trợ trải nghiệm.
+- Supabase là backend duy nhất. Dùng Data API trực tiếp cho đọc/CRUD đơn giản dưới RLS; dùng Edge Function cho nghiệp vụ server-side. Không tạo hoặc gọi RPC API; các caller hiện có là legacy. Helper/trigger SQL nội bộ vẫn được phép.
+- RLS, grants, ràng buộc PostgreSQL và kiểm tra quyền Edge Function là ranh giới bảo mật. Route guard/ẩn nút chỉ hỗ trợ trải nghiệm.
 - Không đọc, sao chép, hiển thị hoặc dùng nội dung `docs/accounts/` và `docs/data_seed/`; inventory chỉ được ghi metadata đường dẫn/loại file an toàn.
 - Không đưa secret, mật khẩu, token, credential hoặc dữ liệu nhận diện vào code, log, fixture, context hay phản hồi. Kiểm thử nghiệp vụ dùng dữ liệu tổng hợp tiền tố `QA-`.
 - Bảo toàn lịch sử học tập và giữ thời gian nghiệp vụ theo `Asia/Ho_Chi_Minh`.

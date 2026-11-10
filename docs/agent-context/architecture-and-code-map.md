@@ -2,16 +2,15 @@
 
 ## Kiến trúc tổng thể
 
-Ứng dụng là Vue SPA tĩnh trên GitHub Pages. Supabase cung cấp Auth, PostgreSQL/Data API, RLS, RPC và Edge Functions. Các tác vụ lặp chạy qua Supabase Cron/PostgreSQL. Frontend chỉ chứa cấu hình công khai.
+Ứng dụng là Vue SPA tĩnh trên GitHub Pages; Supabase là backend duy nhất, cung cấp Auth, PostgreSQL/Data API, RLS và Edge Functions. Không thêm backend/service riêng và không tạo/gọi RPC API. Các tác vụ lặp chạy qua Supabase Cron/PostgreSQL. Frontend chỉ chứa cấu hình công khai.
 
 ```mermaid
 flowchart LR
   UI[Vue pages và components] --> S[services: data-queries / commands]
-  S -->|CRUD được RLS bảo vệ| API[Supabase Data API]
-  S -->|RPC hoặc Edge Function| EF[Edge Functions]
-  API --> DB[(PostgreSQL: grants, RLS, constraints, triggers)]
-  EF -->|xác thực caller, kiểm tra quyền| RPC[RPC service-only]
-  RPC --> DB
+  S -->|đọc/CRUD đơn giản theo RLS| API[Supabase Data API]
+  S -->|nghiệp vụ server-side| EF[Supabase Edge Functions]
+  API --> DB[(Supabase PostgreSQL: grants, RLS, constraints, triggers)]
+  EF -->|xác thực caller, kiểm tra quyền; không qua RPC| DB
   CRON[Supabase Cron] --> GEN[PostgreSQL schedule generator]
   GEN --> DB
 ```
@@ -23,8 +22,8 @@ flowchart LR
 | Frontend | Vue 3.5, TypeScript 5.9, Vue Router 4, Pinia 3, Bootstrap 5, Vite 7 | SPA theo vai trò; router dùng hash history để chạy trên Pages. |
 | Supabase client | `@supabase/supabase-js` 2.57 | Auth và Data API; client dùng publishable key. |
 | File export/import | SheetJS `xlsx` 0.20.3 | Tạo workbook xuất roster và biểu mẫu nhập học/lịch tháng; xử lý file ở frontend theo giới hạn và validate của từng luồng. |
-| Backend | Supabase PostgreSQL, Auth, RLS, PL/pgSQL, RPC | Lưu dữ liệu và thực thi quyền/ràng buộc nghiệp vụ. |
-| Serverless | Supabase Edge Functions trên Deno | Xác thực caller, thao tác đặc quyền, tích hợp Gemini ở các route AI và gọi RPC service-only. |
+| Backend | Supabase PostgreSQL, Auth, Data API, RLS và PL/pgSQL nội bộ | Lưu dữ liệu và thực thi quyền/ràng buộc nghiệp vụ; không có backend riêng. |
+| Serverless | Supabase Edge Functions trên Deno | Xác thực caller, xử lý nghiệp vụ server-side và thao tác đặc quyền; không gọi RPC API. |
 | Lịch nền | PostgreSQL `pg_cron`/Supabase Cron | Sinh buổi lặp và đồng bộ roster trong backend. |
 | Test frontend | Vitest 3, Vue Test Utils, jsdom | Unit/component tests đặt cạnh source. |
 | CI/deploy | GitHub Actions, GitHub Pages, Supabase CLI | Quality check, deploy frontend và workflow backend thủ công. |
@@ -44,17 +43,18 @@ Manifest là nguồn phiên bản dependency chính xác. Môi trường dự á
 | `frontend/src/modules/staff/` | Buổi được giao, điểm danh/đánh giá, nội dung bài học, hồ sơ và yêu cầu chấm công. |
 | `frontend/src/modules/student/` | Lịch, kết quả học tập, xem lại video và chat AI. |
 | `frontend/src/services/data-queries.ts` | Truy vấn/đọc dữ liệu và chuẩn hóa quan hệ Supabase. |
-| `frontend/src/services/commands.ts` | Lệnh ghi: CRUD đơn giản có RLS, RPC và Edge Function. |
+| `frontend/src/services/commands.ts` | Lệnh ghi: CRUD đơn giản có RLS và gọi Edge Function cho nghiệp vụ server-side. |
 | `frontend/src/services/edge-functions.ts` | Gọi Edge Function và chuẩn hóa lỗi/trace id. |
 | `frontend/src/shared/` | Domain types, role, format, error mapping và helper nghiệp vụ. |
 | `frontend/src/devtools/ui-review/` + `frontend/review/` | Review các page thật với mock auth/services và fixture `QA-`; không kết nối Supabase thật. |
 
 ### Luồng frontend và server
 
-- CRUD đơn giản có thể dùng Supabase Data API trực tiếp từ adapter hiện hành; grants và RLS phải giới hạn từng hàng/cột.
-- Dùng RPC/Edge Function khi cần transaction, kiểm tra trạng thái hoặc thao tác quyền cao. Không gọi server đặc quyền rải rác trong component.
-- Edge Function xác thực người gọi, role/trạng thái và input trước khi gọi RPC/service role. Secret chỉ nằm trong môi trường server.
-- UI và route guard giúp điều hướng; PostgreSQL/RPC/Edge Function quyết định quyền cuối cùng.
+- Đọc và CRUD đơn giản có thể dùng Supabase Data API trực tiếp; grants và RLS phải giới hạn đúng quyền.
+- Dùng Edge Function cho nghiệp vụ server-side, transaction hoặc thao tác quyền cao; không tạo/gọi RPC API ở frontend hay Edge Function.
+- Edge Function xác thực người gọi, role/trạng thái và input trước thao tác đặc quyền. Helper/trigger SQL nội bộ được phép nhưng không dùng như API. Secret chỉ nằm trong môi trường server.
+- RPC caller còn trong source/migration là legacy; không mở rộng và thay bằng Edge Function khi phạm vi công việc chạm tới luồng đó.
+- UI và route guard giúp điều hướng; PostgreSQL/RLS và Edge Function quyết định quyền cuối cùng.
 
 ### Route theo vai trò
 
@@ -66,7 +66,7 @@ Manifest là nguồn phiên bản dependency chính xác. Môi trường dự á
 
 ## Supabase: database và Edge Functions
 
-- `supabase/migrations/` là schema, enum, constraints, functions/RPC, grants, RLS, index và thay đổi theo thứ tự; migration mới nhất trong repo hiện là `0064`.
+- `supabase/migrations/` là schema, enum, constraints, helper/trigger SQL nội bộ, grants, RLS, index và thay đổi theo thứ tự; migration mới nhất trong repo là `0065`. RPC còn trong lịch sử/source là legacy, không phải cách triển khai cho thay đổi mới.
 - `supabase/functions/<name>/index.ts` là HTTP entrypoint; một số route tách `handler.ts` để kiểm thử logic. `_shared/` chứa auth, CORS, password-reset và response/error.
 - Các route hiện có bao phủ account status/create/reset, bootstrap/login, cập nhật trạng thái buổi và learning, AI học sinh, tối ưu nhận xét giáo viên, và submit/review chấm công. Danh sách từng file nằm trong inventory.
 - `supabase/tests/` chứa kiểm thử SQL cho lập buổi, conflict phòng, giới hạn teacher, learning/RLS, roster và timesheet. Đọc test liên quan cùng migration tạo/sửa object.
@@ -75,7 +75,7 @@ Manifest là nguồn phiên bản dependency chính xác. Môi trường dự á
 ## Cách lần theo một thay đổi
 
 1. Từ route/page xác định hành động và dữ liệu mà UI hiển thị.
-2. Lần tới `data-queries.ts` hoặc `commands.ts`, sau đó xác định Data API, RPC hay Edge Function.
+2. Lần tới `data-queries.ts` hoặc `commands.ts`, sau đó xác định Data API cho đọc/CRUD đơn giản hoặc Edge Function cho nghiệp vụ server-side. Nếu gặp RPC caller hiện có, xem đó là legacy và không mở rộng.
 3. Đọc migration hiện hành tạo object và các migration tiếp theo đã thay đổi object đó; kiểm tra grants/RLS/helper liên quan.
 4. Đọc test frontend hoặc SQL bao phủ hành vi; với thay đổi UI, dùng Chrome và UI review harness theo chỉ dẫn repo.
 

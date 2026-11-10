@@ -18,9 +18,17 @@
 - Tài liệu thiết kế v1, roadmap và báo cáo QA là tư liệu lịch sử/ảnh chụp; không chứng minh trạng thái production hiện tại và không tự mở lại module cũ.
 - Giữ sản phẩm trong phạm vi lớp, thành viên lớp, lịch lặp, buổi học, hồ sơ học tập liên tục và chấm công theo buổi. Không khôi phục ClassMonth vận hành, học phí, payroll, accounting hay module legacy nếu người dùng chưa yêu cầu đổi phạm vi.
 
+## Backend và API
+
+- Supabase là nền tảng backend duy nhất; không thêm backend/service tự quản bên ngoài Supabase.
+- Frontend có thể đọc và CRUD đơn giản qua Supabase Data API khi RLS/grants giới hạn đúng quyền. Nghiệp vụ server-side, thao tác đặc quyền hoặc cần transaction phải đi qua Supabase Edge Function.
+- Không tạo hoặc gọi RPC API (`supabase.rpc`/PostgREST RPC), kể cả từ Edge Function. Helper SQL và trigger nội bộ không được gọi như API vẫn được phép.
+- Các caller/RPC hiện có là legacy: không mở rộng hoặc tạo caller mới; nếu phạm vi công việc chạm tới luồng đó, chuyển luồng liên quan sang Edge Function.
+- Sau khi tạo Edge Function, deploy lên Supabase project đã xác minh và chạy smoke test an toàn, có phạm vi ngay trong cùng tác vụ; chỉ dùng dữ liệu QA tổng hợp và không dùng production làm môi trường thử nghiệm.
+
 ## Bảo mật và dữ liệu
 
-- RLS, kiểm tra quyền trong PostgreSQL/RPC và Edge Function là ranh giới bảo mật. Route guard và ẩn nút chỉ phục vụ trải nghiệm.
+- RLS, grants, ràng buộc PostgreSQL và kiểm tra quyền trong Edge Function là ranh giới bảo mật. Route guard và ẩn nút chỉ phục vụ trải nghiệm.
 - Frontend chỉ nhận Supabase URL, publishable key và base path công khai. Không đưa secret, mật khẩu, token hay credential vào source, log, tài liệu, fixture hoặc output.
 - Không đọc, sao chép, hiển thị hay dùng nội dung docs/accounts/ và docs/data_seed/. Không stage hoặc commit dữ liệu local-only. Fixture nghiệp vụ dùng dữ liệu tổng hợp có tiền tố QA-.
 - Bảo toàn lịch sử học tập; giữ ngày giờ nghiệp vụ theo Asia/Ho_Chi_Minh.

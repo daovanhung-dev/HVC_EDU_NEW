@@ -2,6 +2,8 @@
 
 Đây là quy tắc ứng dụng hiện hành theo frontend và migration trong repo. Tài liệu thiết kế/QA cũ chỉ là lịch sử; nếu phát hiện bất nhất, kiểm tra code, migration mới nhất và test trước khi kết luận.
 
+**Quy tắc API:** RPC được nhắc dưới đây chỉ mô tả implementation legacy còn trong source/migration. Không tạo hoặc gọi RPC API; khi thay đổi chạm tới luồng đó, triển khai nghiệp vụ server-side qua Edge Function. Đọc/CRUD đơn giản vẫn có thể dùng Data API dưới RLS.
+
 ## Vai trò và dữ liệu được xem
 
 | Role đang dùng | Luồng chính |
@@ -19,7 +21,7 @@
 - Admin có thể sửa ngày bắt đầu của membership đang hiệu lực tại chi tiết lớp. Thao tác đồng bộ roster của mọi buổi `SCHEDULED` chưa bắt đầu trong lớp đó trong cùng giao dịch; buổi có attendance được giữ nguyên, dòng roster có snapshot/lịch sử không bị xóa, và xung đột lịch/phòng làm hoàn tác toàn bộ.
 - `capacity_policy` có `WARNING`, `BLOCK`, `UNLIMITED`; lớp cũng có `max_students`. Đây là cấu hình lớp trong UI/schema. Không coi nhãn chính sách là ranh giới quyền hoặc mặc định suy ra enforcement server-side; kiểm tra luồng thêm membership thực tế khi thay đổi sĩ số.
 - Một lớp có tối đa năm teacher **duy nhất** trong lịch chưa archive và buổi chưa `COMPLETED`/`CANCELLED`. Một người gắn nhiều lịch/buổi chỉ tính một lần. Enforcement nằm ở database, không chỉ ở picker UI.
-- Giáo viên và học sinh được gắn vào từng lịch/buổi qua bảng quan hệ; quyền xem chi tiết phải được giới hạn bằng RLS/RPC.
+- Giáo viên và học sinh được gắn vào từng lịch/buổi qua bảng quan hệ; quyền xem chi tiết phải được giới hạn bằng RLS và kiểm tra phía server qua Edge Function khi cần.
 
 ## Lịch lặp và buổi cụ thể
 
@@ -27,7 +29,7 @@
 - Lịch chuyển từ dữ liệu ClassMonth cũ sang trạng thái `INACTIVE`; Admin rà membership/giáo viên rồi mới bật. Lịch `ACTIVE` tạo buổi cụ thể trong 30 ngày tới theo `Asia/Ho_Chi_Minh`; generator có khóa chống chạy đồng thời và unique key chống trùng. Buổi đã bắt đầu/hoàn tất và override không bị lịch lặp ghi đè.
 - Admin có thể tạo buổi theo ngày; sửa giờ/phòng, giáo viên và roster trên buổi chưa hủy, gồm buổi điểm danh bù, buổi `SCHEDULED` đã quá hạn, `IN_PROGRESS` và `COMPLETED`. Sau khi Admin chốt điểm danh, roster và phân công teacher bị khóa; các hiệu chỉnh lịch và learning data vẫn theo quyền hiện hành. Với `IN_PROGRESS`/`COMPLETED`, lịch sửa phải vẫn ở quá khứ; buổi `SCHEDULED` quá hạn có thể dời tới tương lai mà vẫn giữ trạng thái. Ngày/giờ lưu theo `Asia/Ho_Chi_Minh`; đổi lịch giữ nguyên roster đến khi Admin chạy đồng bộ riêng theo membership hiệu lực ngày mới. Dòng attendance, assessment snapshot hoặc financial snapshot được bảo toàn khi sửa. Admin có thể xóa buổi chưa hủy sau khi xem preview và xác nhận; thao tác xóa dữ liệu theo buổi, gồm snapshot học tập/tài chính và payroll item, đồng thời giữ kỳ payroll, audit và tombstone lịch lặp. Buổi `CANCELLED` nằm ngoài luồng xóa mới. Có thể dùng mẫu bảy ngày để thay lịch một tháng; kết quả là các buổi ngày cụ thể, không phải một kỳ ClassMonth vận hành. Generator bỏ qua tháng đã thay mẫu.
 - Admin có thể **Thêm lịch mẫu** vào tháng đang xem qua Edge Function mà không xóa/hủy buổi cũ hoặc khóa sinh lịch lặp cho toàn tháng. Mẫu dùng cùng trình nhập 7 ngày; Admin chọn cả tháng (gồm ngày đã qua) hoặc các buổi còn lại có giờ bắt đầu trong tương lai. Buổi trùng chính xác theo lớp/ngày/giờ có lựa chọn cập nhật an toàn hoặc bỏ qua; chỉ buổi tương lai `SCHEDULED` không có lịch sử mới được cập nhật, các buổi khác được giữ nguyên. Xung đột lịch/phòng làm transaction bị từ chối toàn bộ.
-- Admin cũng có thể tải/nhập workbook lịch tuần cho tháng đang mở. Preview áp dụng cho toàn trung tâm; nhập thành công cập nhật riêng các buổi trong tháng, tạo buổi điểm danh bù cho các ngày đã qua và lưu mẫu theo tháng mà không sửa `class_schedules`. Nhập được kiểm tra xung đột trọn gói; buổi tương lai `SCHEDULED` bị bỏ khỏi mẫu chỉ bị hủy khi chưa có dữ liệu học tập/chấm công, còn lịch sử được giữ. RPC yêu cầu `CLASS_MANAGE`, ghi audit và đánh dấu tháng để generator không sinh lại buổi.
+- Admin cũng có thể tải/nhập workbook lịch tuần cho tháng đang mở. Preview áp dụng cho toàn trung tâm; nhập thành công cập nhật riêng các buổi trong tháng, tạo buổi điểm danh bù cho các ngày đã qua và lưu mẫu theo tháng mà không sửa `class_schedules`. Nhập được kiểm tra xung đột trọn gói; buổi tương lai `SCHEDULED` bị bỏ khỏi mẫu chỉ bị hủy khi chưa có dữ liệu học tập/chấm công, còn lịch sử được giữ. Implementation RPC yêu cầu `CLASS_MANAGE`, ghi audit và đánh dấu tháng để generator không sinh lại buổi; đây là luồng legacy và thay đổi mới phải dùng Edge Function.
 - Từ migration 0054, membership còn hiệu lực được đồng bộ vào roster của buổi thủ công `SCHEDULED` trong tương lai; thao tác vẫn kiểm tra conflict.
 - Từ migration 0055, Admin có thể khớp roster thủ công với membership `ACTIVE` và hồ sơ học sinh `ACTIVE` có hiệu lực đúng ngày buổi học; có thể chọn danh sách thành viên cùng lớp. Dòng roster có attendance, assessment snapshot hoặc financial snapshot được giữ lại. Mọi bổ sung học sinh mới vẫn kiểm tra xung đột lịch.
 - Buổi của lớp khác có thể giao giờ nếu phòng khác và không có học sinh trùng. Cùng lớp, học sinh trùng, phòng trùng hoặc thiếu phòng khi giao giờ thì bị chặn. Tên phòng so sánh không phân biệt hoa thường và bỏ khoảng trắng đầu/cuối. Teacher có thể được phân công hai buổi giao giờ nếu các rule khác cho phép.
@@ -35,7 +37,7 @@
 
 ## Trạng thái buổi và kết quả học tập
 
-Trạng thái: `SCHEDULED` → `IN_PROGRESS` → `COMPLETED`; buổi tương lai có thể thành `CANCELLED`. Teacher được phân công bắt đầu buổi, cập nhật nội dung/attendance trong lúc `IN_PROGRESS`, rồi hoàn tất. Sau hoàn tất, learning record và video chỉ đọc với Teacher. Admin có thể hiệu chỉnh dữ liệu buổi đã bắt đầu. Admin có thể kết thúc `IN_PROGRESS` bất kỳ lúc nào, kể cả sớm; `SCHEDULED` chưa bắt đầu phải chờ hết giờ theo lịch. RPC kiểm tra đủ roster, trạng thái attendance từng học sinh và quyết định Tính công/Không tính công cho từng teacher, rồi lưu attendance, hoàn tất buổi, `ended_at`/`ended_by`, timesheet và audit nguyên tử. `ACADEMIC_MANAGE` cùng `TIMESHEET_APPROVE` được kiểm tra ở database. Với buổi `COMPLETED`, Admin đổi quyết định công bằng RPC riêng không ghi lại attendance. Khi đã chốt, roster và phân công teacher bị khóa để bảo toàn dữ liệu học tập đã xác nhận; Admin vẫn sửa được lựa chọn công và các lần đổi có audit.
+Trạng thái: `SCHEDULED` → `IN_PROGRESS` → `COMPLETED`; buổi tương lai có thể thành `CANCELLED`. Teacher được phân công bắt đầu buổi, cập nhật nội dung/attendance trong lúc `IN_PROGRESS`, rồi hoàn tất. Sau hoàn tất, learning record và video chỉ đọc với Teacher. Admin có thể hiệu chỉnh dữ liệu buổi đã bắt đầu. Admin có thể kết thúc `IN_PROGRESS` bất kỳ lúc nào, kể cả sớm; `SCHEDULED` chưa bắt đầu phải chờ hết giờ theo lịch. Implementation RPC legacy kiểm tra đủ roster, trạng thái attendance từng học sinh và quyết định Tính công/Không tính công cho từng teacher, rồi lưu attendance, hoàn tất buổi, `ended_at`/`ended_by`, timesheet và audit nguyên tử. `ACADEMIC_MANAGE` cùng `TIMESHEET_APPROVE` được kiểm tra ở database. Với buổi `COMPLETED`, Admin hiện đổi quyết định công bằng RPC riêng không ghi lại attendance. Khi đã chốt, roster và phân công teacher bị khóa để bảo toàn dữ liệu học tập đã xác nhận; Admin vẫn sửa được lựa chọn công và các lần đổi có audit. Không mở rộng các RPC này; thay đổi mới dùng Edge Function.
 
 Hoàn tất yêu cầu mỗi học sinh trong roster có một bản ghi attendance với trạng thái. Không đòi mọi điểm hoặc nhận xét phải có giá trị.
 
@@ -54,7 +56,7 @@ Hoàn tất yêu cầu mỗi học sinh trong roster có một bản ghi attenda
 | `positive_feedback_count` | nullable, số nguyên không âm ở DB | Số feedback tích cực; học sinh có thể thấy trường này. Không phải thang điểm chung. |
 | `positive_feedback_raw` | nullable text | Giữ nguyên giá trị nguồn không chuẩn hóa. |
 
-Các điểm riêng được phép để trống; không tìm thấy công thức tính điểm tổng hay trọng số trong code/RPC hiện hành. `positive_feedback_count/raw` cùng `assessment_snapshot` lưu giá trị nhập/import. Từ migration 0056, Admin hiệu chỉnh attendance qua `admin_correct_session_learning`; RPC ghi dữ liệu trước/sau vào audit và chỉ nhận học sinh thuộc roster của buổi.
+Các điểm riêng được phép để trống; không tìm thấy công thức tính điểm tổng hay trọng số trong code hiện hành. `positive_feedback_count/raw` cùng `assessment_snapshot` lưu giá trị nhập/import. Từ migration 0056, Admin hiệu chỉnh attendance qua `admin_correct_session_learning`; implementation RPC legacy ghi dữ liệu trước/sau vào audit và chỉ nhận học sinh thuộc roster của buổi.
 
 ### Nhập điểm danh và kết quả bằng Excel
 
@@ -77,7 +79,7 @@ Học sinh chỉ xem learning result của mình theo chính sách dữ liệu; 
 - Teacher được phân công gửi yêu cầu sau khi session `COMPLETED`; mỗi teacher/session có tối đa một yêu cầu chưa bị từ chối.
 - `session_staff.timesheet_eligible = NULL` giữ luồng gửi/duyệt hiện tại; `false` chặn gửi yêu cầu.
 - Admin duyệt hoặc từ chối; từ chối phải có lý do. Teacher chỉ xem yêu cầu của mình và có thể gửi lại sau khi bị từ chối.
-- Admin kết thúc buổi đang `IN_PROGRESS` hoặc chốt buổi `SCHEDULED` đủ điều kiện cùng attendance và quyết định công theo từng teacher: `true` tạo/đưa timesheet sang `APPROVED`; `false` không tạo công và nếu đã `APPROVED` thì chuyển sang `REVOKED` kèm lý do/người/thời điểm. Với buổi `COMPLETED`, `admin_set_completed_session_timesheets` chỉ cập nhật lựa chọn công và timesheet, không ghi lại attendance. Admin có thể đổi lại quyết định; event audit giữ lịch sử dù metadata thu hồi hiện tại được xóa khi công được khôi phục.
+- Admin kết thúc buổi đang `IN_PROGRESS` hoặc chốt buổi `SCHEDULED` đủ điều kiện cùng attendance và quyết định công theo từng teacher: `true` tạo/đưa timesheet sang `APPROVED`; `false` không tạo công và nếu đã `APPROVED` thì chuyển sang `REVOKED` kèm lý do/người/thời điểm. Với buổi `COMPLETED`, RPC legacy `admin_set_completed_session_timesheets` chỉ cập nhật lựa chọn công và timesheet, không ghi lại attendance. Admin có thể đổi lại quyết định; event audit giữ lịch sử dù metadata thu hồi hiện tại được xóa khi công được khôi phục. Không thêm caller mới; thay bằng Edge Function khi luồng này được sửa.
 - Đây là workflow xác nhận công dạy theo buổi, không ghi giờ vào/ra, không tính payroll và không tạo giao dịch tài chính.
 
 ## Ngoài phạm vi
