@@ -122,7 +122,7 @@ describe('session room scheduling commands', () => {
     expect(mockState.rpc).toHaveBeenNthCalledWith(2, 'admin_delete_sessions_for_month', { p_month_start: '2026-10-01' })
   })
 
-  it('sends early completion through the atomic attendance and teacher-decision RPC', async () => {
+  it('sends early completion through the atomic attendance Edge Function', async () => {
     const input = {
       session_id: 'qa-session',
       session_note: 'QA note',
@@ -136,13 +136,14 @@ describe('session room scheduling commands', () => {
     }
     await recordAdminSessionAttendance(input)
 
-    expect(mockState.rpc).toHaveBeenCalledWith('admin_record_session_attendance', {
-      p_session_id: 'qa-session',
-      p_session_note: 'QA note',
-      p_lesson_youtube_url: null,
-      p_students: input.students,
-      p_teacher_decisions: input.teacher_decisions,
+    expect(mockState.invokeFunction).toHaveBeenCalledWith('admin-session-attendance-finalize', {
+      session_id: 'qa-session',
+      session_note: 'QA note',
+      lesson_youtube_url: null,
+      students: input.students,
+      teacher_decisions: input.teacher_decisions,
     })
+    expect(mockState.rpc).not.toHaveBeenCalled()
   })
 
   it('uses the narrow completed-timesheet RPC and selected-session delete preview and confirmation RPCs', async () => {

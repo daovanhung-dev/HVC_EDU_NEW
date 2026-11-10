@@ -666,15 +666,7 @@ export async function recordAdminSessionAttendance(input: {
   students: AdminSessionAttendanceInput[]
   teacher_decisions: AdminSessionTeacherTimesheetDecision[]
 }) {
-  const { data, error } = await supabase.rpc('admin_record_session_attendance', {
-    p_session_id: input.session_id,
-    p_session_note: input.session_note,
-    p_lesson_youtube_url: input.lesson_youtube_url,
-    p_students: input.students,
-    p_teacher_decisions: input.teacher_decisions,
-  })
-  if (error) throw error
-  return data as {
+  return invokeFunction<typeof input, {
     session_id: string
     status: 'COMPLETED'
     students_updated: number
@@ -682,7 +674,7 @@ export async function recordAdminSessionAttendance(input: {
     teachers_not_eligible: number
     ended_at: string
     ended_by: string | null
-  }
+  }>('admin-session-attendance-finalize', input)
 }
 
 export async function setCompletedSessionTimesheets(input: {

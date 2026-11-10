@@ -1011,10 +1011,10 @@ describe('AdminSessionsPage calendar', () => {
     })
     expect(mockState.correctSessionLearning).not.toHaveBeenCalled()
     expect(mockState.toastSuccess).toHaveBeenCalledWith('Đã lưu và xác minh điểm danh, đánh giá trong CSDL.')
-    expect(pageAndBodyText(wrapper)).toContain('Đã xác minh CSDL: RPC xử lý 1/1 học sinh; đọc lại đủ bản ghi và kết quả khớp dữ liệu đã gửi.')
+    expect(pageAndBodyText(wrapper)).toContain('Đã xác minh CSDL: máy chủ xử lý 1/1 học sinh; đọc lại đủ bản ghi và kết quả khớp dữ liệu đã gửi.')
   })
 
-  it('shows a visible warning when the RPC count or database readback does not match', async () => {
+  it('shows a visible warning when the server count or database readback does not match', async () => {
     const pastDate = addCalendarDays(getBusinessDateKey(new Date()), -1)
     const session = { ...makeSession('qa-session-attendance-readback-mismatch', 'Lớp Đọc lại QA', '10:00', '12:00', pastDate, ['qa-teacher-1']), status: 'COMPLETED' as const }
     const sourceRow = {
@@ -1046,7 +1046,7 @@ describe('AdminSessionsPage calendar', () => {
     await flushPromises()
 
     expect(getPageOrBody(wrapper, '[aria-label="Kết quả xác minh lưu điểm danh"]').text())
-      .toContain('RPC báo 0/1; đọc lại thấy 0/1 bản ghi điểm danh, 1 dòng chưa khớp')
+      .toContain('máy chủ báo 0/1; đọc lại thấy 0/1 bản ghi điểm danh, 1 dòng chưa khớp')
     expect(mockState.toastError).toHaveBeenCalled()
   })
 

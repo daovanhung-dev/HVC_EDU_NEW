@@ -361,7 +361,7 @@ function attendanceRecordMatchesInput(expected: AttendanceSaveInput, actual: Rec
   })
 }
 
-function verifySavedAttendance(expectedRows: AttendanceSaveInput[], rpcCount: number, refreshedRows: SessionStudentQueryRow[]) {
+function verifySavedAttendance(expectedRows: AttendanceSaveInput[], processedCount: number, refreshedRows: SessionStudentQueryRow[]) {
   const recordByStudentId = new Map(refreshedRows.map((row) => [row.student_id, attendanceRecordForStudent(row)]))
   const persistedCount = [...recordByStudentId.values()].filter(Boolean).length
   const mismatchedCount = expectedRows.filter((expected) => {
@@ -370,16 +370,16 @@ function verifySavedAttendance(expectedRows: AttendanceSaveInput[], rpcCount: nu
   }).length
   const expectedCount = expectedRows.length
 
-  if (rpcCount === expectedCount && persistedCount === expectedCount && mismatchedCount === 0) {
+  if (processedCount === expectedCount && persistedCount === expectedCount && mismatchedCount === 0) {
     return {
       kind: 'success' as const,
-      message: `Đã xác minh CSDL: RPC xử lý ${rpcCount}/${expectedCount} học sinh; đọc lại đủ bản ghi và kết quả khớp dữ liệu đã gửi.`,
+      message: `Đã xác minh CSDL: máy chủ xử lý ${processedCount}/${expectedCount} học sinh; đọc lại đủ bản ghi và kết quả khớp dữ liệu đã gửi.`,
     }
   }
 
   return {
     kind: 'warning' as const,
-    message: `Cần kiểm tra dữ liệu: RPC báo ${rpcCount}/${expectedCount}; đọc lại thấy ${persistedCount}/${expectedCount} bản ghi điểm danh, ${mismatchedCount} dòng chưa khớp dữ liệu đã gửi. Hãy tải lại buổi trước khi nhập lại.`,
+    message: `Cần kiểm tra dữ liệu: máy chủ báo ${processedCount}/${expectedCount}; đọc lại thấy ${persistedCount}/${expectedCount} bản ghi điểm danh, ${mismatchedCount} dòng chưa khớp dữ liệu đã gửi. Hãy tải lại buổi trước khi nhập lại.`,
   }
 }
 
@@ -1902,12 +1902,12 @@ async function saveSelectedLearning() {
   const lessonYoutubeUrl = lessonYoutubeInput.value.trim() || null
   const finalizingAttendance = adminAttendanceDirty.value
   let submittedAttendance: AttendanceSaveInput[] = []
-  let attendanceRpcResult: Awaited<ReturnType<typeof recordAdminSessionAttendance>> | null = null
+  let attendanceFinalizeResult: Awaited<ReturnType<typeof recordAdminSessionAttendance>> | null = null
   learningBusy.value = true
   try {
     if (finalizingAttendance) {
       submittedAttendance = learningRows.value.map(toAttendanceSaveInput)
-      attendanceRpcResult = await recordAdminSessionAttendance({
+      attendanceFinalizeResult = await recordAdminSessionAttendance({
         session_id: session.id,
         session_note: sessionNote,
         lesson_youtube_url: lessonYoutubeUrl,
@@ -1928,8 +1928,8 @@ async function saveSelectedLearning() {
     const updatedSession = {
       ...session,
       status: finalizingAttendance ? 'COMPLETED' as const : session.status,
-      ended_at: finalizingAttendance ? attendanceRpcResult?.ended_at || session.ended_at : session.ended_at,
-      ended_by: finalizingAttendance ? attendanceRpcResult?.ended_by ?? session.ended_by : session.ended_by,
+      ended_at: finalizingAttendance ? attendanceFinalizeResult?.ended_at || session.ended_at : session.ended_at,
+      ended_by: finalizingAttendance ? attendanceFinalizeResult?.ended_by ?? session.ended_by : session.ended_by,
       session_note: sessionNote,
       lesson_youtube_url: lessonYoutubeUrl,
       session_staff: (session.session_staff || []).map((item) => ({
@@ -1946,10 +1946,10 @@ async function saveSelectedLearning() {
       const refreshedRows = await getSessionStudents(session.id)
       students.value = refreshedRows
       learningRows.value = students.value.map(attendanceRowFromSource)
-      if (finalizingAttendance && attendanceRpcResult) {
+      if (finalizingAttendance && attendanceFinalizeResult) {
         attendanceSaveVerification.value = verifySavedAttendance(
           submittedAttendance,
-          attendanceRpcResult.students_updated,
+          attendanceFinalizeResult.students_updated,
           refreshedRows,
         )
         if (attendanceSaveVerification.value.kind === 'success') {
@@ -1973,7 +1973,7 @@ async function saveSelectedLearning() {
         const readMessage = userErrorMessage(readError, 'Không đọc lại được dữ liệu điểm danh từ CSDL.')
         attendanceSaveVerification.value = {
           kind: 'warning',
-          message: `RPC đã báo xử lý ${attendanceRpcResult?.students_updated ?? 'không rõ số lượng'}/${submittedAttendance.length} học sinh, nhưng chưa xác minh được dữ liệu đọc lại. ${readMessage}`,
+          message: `Máy chủ đã báo xử lý ${attendanceFinalizeResult?.students_updated ?? 'không rõ số lượng'}/${submittedAttendance.length} học sinh, nhưng chưa xác minh được dữ liệu đọc lại. ${readMessage}`,
         }
         errorMessage.value = attendanceSaveVerification.value.message
         toast.error(attendanceSaveVerification.value.message)
@@ -1986,7 +1986,7 @@ async function saveSelectedLearning() {
     if (finalizingAttendance) {
       attendanceSaveVerification.value = {
         kind: 'error',
-        message: `Chưa nhận được xác nhận lưu từ RPC điểm danh. Hãy tải lại buổi để kiểm tra trước khi nhập lại. ${errorMessage.value}`,
+        message: `Chưa nhận được xác nhận lưu điểm danh. Hãy tải lại buổi để kiểm tra trước khi nhập lại. ${errorMessage.value}`,
       }
     }
   } finally {
