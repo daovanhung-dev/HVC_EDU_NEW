@@ -50,6 +50,10 @@ export const sessions: any[] = [
   { id: 'qa-session-6', class_id: 'qa-class-2', recurrence_schedule_id: null, manual_schedule: true, scheduled_start_at: at(-2, '15:00'), scheduled_end_at: at(-2, '16:30'), status: 'CANCELLED', room: 'QA-B2', session_note: null, classes: classes[1], class_schedules: null, session_staff: [], session_students: [] },
 ]
 
+export const roomRentals: any[] = [
+  { id: 'qa-rental-1', staff_id: 'qa-teacher-2', room: 'QA-B2', starts_at: at(2, '17:30'), ends_at: at(2, '19:00'), status: 'BOOKED', cancelled_at: null, staff: teachers[1] },
+]
+
 export const attendance: any[] = [
   { id: 'qa-attendance-1', session_id: 'qa-session-4', student_id: 'qa-student-1', status: 'PRESENT', late_minutes: null, absence_reason: null, homework_score: 8.5, homework_note: 'Bài làm đầy đủ', understanding_score: 4, attitude_score: 5, positive_feedback_count: 1, positive_feedback_raw: 'Chủ động giải thích cách làm', comment: 'Tập trung tốt.', sessions: { ...sessions[3], classes: classes[0], session_staff: sessions[3].session_staff } },
   { id: 'qa-attendance-2', session_id: 'qa-session-4', student_id: 'qa-student-2', status: 'LATE', late_minutes: 5, absence_reason: null, homework_score: 9, homework_note: null, understanding_score: 5, attitude_score: 4, positive_feedback_count: 0, positive_feedback_raw: null, comment: 'Tiến bộ rõ.', sessions: { ...sessions[3], classes: classes[0], session_staff: sessions[3].session_staff } },
@@ -258,6 +262,68 @@ export function getClassSchedulesForClasses(classIds: string[]) {
   return query(schedules.filter((row) => classIds.includes(row.class_id) && row.status === 'ACTIVE'))
 }
 export function getMySessions() { return query(sessions) }
+export function getRoomRentals() { return query(roomRentals) }
+export async function createRoomRental(input: any) {
+  await query(true)
+  const staff = teachers.find((teacher) => teacher.id === input.staff_id)
+  const row = {
+    id: `qa-rental-${Date.now()}`,
+    staff_id: input.staff_id,
+    room: input.room.trim(),
+    starts_at: `${input.date}T${input.start_time}:00+07:00`,
+    ends_at: `${input.date}T${input.end_time}:00+07:00`,
+    status: 'BOOKED',
+    cancelled_at: null,
+    staff: staff ? { id: staff.id, staff_code: staff.staff_code, full_name: staff.full_name } : null,
+  }
+  roomRentals.push(row)
+  return { rental_id: row.id, status: 'BOOKED' }
+}
+export async function createRoomRentalMonth(input: any) {
+  await query(true)
+  const [year, month] = input.month_start.split('-').map(Number)
+  const endDay = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  const staff = teachers.find((teacher) => teacher.id === input.staff_id)
+  const created = [] as any[]
+  for (const slot of input.slots || []) {
+    for (let day = 1; day <= endDay; day += 1) {
+      const date = `${input.month_start.slice(0, 8)}${String(day).padStart(2, '0')}`
+      const jsDay = new Date(`${date}T00:00:00Z`).getUTCDay()
+      if ((jsDay || 7) !== slot.day_of_week) continue
+      const start = new Date(`${date}T${slot.start_time}:00+07:00`)
+      if (start <= new Date()) continue
+      const row = {
+        id: `qa-rental-${Date.now()}-${created.length}`,
+        staff_id: input.staff_id,
+        room: slot.room.trim(),
+        starts_at: start.toISOString(),
+        ends_at: new Date(`${date}T${slot.end_time}:00+07:00`).toISOString(),
+        status: 'BOOKED',
+        cancelled_at: null,
+        staff: staff ? { id: staff.id, staff_code: staff.staff_code, full_name: staff.full_name } : null,
+      }
+      created.push(row)
+    }
+  }
+  roomRentals.push(...created)
+  return { created_count: created.length, status: 'BOOKED' }
+}
+export async function rescheduleRoomRental(input: any) {
+  await query(true)
+  const row = roomRentals.find((rental) => rental.id === input.id)
+  if (row) {
+    row.room = input.room.trim()
+    row.starts_at = `${input.date}T${input.start_time}:00+07:00`
+    row.ends_at = `${input.date}T${input.end_time}:00+07:00`
+  }
+  return { rental_id: input.id, status: 'BOOKED' }
+}
+export async function cancelRoomRental(id: string) {
+  await query(true)
+  const row = roomRentals.find((rental) => rental.id === id)
+  if (row) { row.status = 'CANCELLED'; row.cancelled_at = new Date().toISOString() }
+  return { rental_id: id, status: 'CANCELLED' }
+}
 export function getSessionAttendanceSummaries(sessionIds: string[]) {
   const summaries = Object.fromEntries(sessionIds.map((id) => [id, { roster_count: 0, attendance_count: 0 }]))
   for (const session of sessions.filter((item) => sessionIds.includes(item.id))) {

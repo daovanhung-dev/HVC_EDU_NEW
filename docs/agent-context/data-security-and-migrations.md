@@ -10,6 +10,7 @@
 - `auth.users` là danh tính đăng nhập; `profiles` nối user với role, trạng thái và cờ đổi mật khẩu. `students`/`staff` là hồ sơ domain tương ứng.
 - `subjects`, `grades`, `classes` là danh mục lớp học. `class_memberships` nối học sinh-lớp theo ngày hiệu lực.
 - `class_schedules` và `class_schedule_staff` mô tả lịch lặp/giáo viên theo slot. `sessions` là buổi cụ thể; `session_students` lưu roster buổi; `session_staff` lưu phân công teacher và ngoại lệ.
+- `room_rentals` lưu lượt thuê cụ thể gồm giáo viên, tên phòng, thời gian và trạng thái `BOOKED`/`CANCELLED`; không có roster/attendance. Admin/ROOT_ADMIN đọc qua RLS; ghi/đổi/hủy chỉ qua Edge Function `admin-room-rentals` với transaction PostgreSQL và audit.
 - `month_week_schedule_templates` và `month_week_schedule_occurrences` giữ workbook tuần theo tháng cùng liên kết đến các buổi được khớp/tạo; luồng RPC `CLASS_MANAGE` trong lịch sử/source hiện có là legacy, không thay lịch lặp `class_schedules` và không được mở rộng.
 - `student_attendances` lưu trạng thái điểm danh, phút đi muộn, lý do, thang đánh giá riêng, feedback và nhận xét. `session_students.assessment_snapshot` cùng `sessions.import_metadata` giữ nguồn/import lịch sử.
 - `timesheets` hiện là yêu cầu chấm công theo buổi. Audit lưu vết một số thay đổi hồ sơ, membership, lịch, buổi và học tập.
@@ -35,7 +36,7 @@ Import assessment có thể giữ hàng nguồn kể cả khi chưa có attendan
 
 ## Lịch sử migration trong repo
 
-Migration phải được đọc theo thứ tự và kiểm tra migration sau có `CREATE OR REPLACE`, revoke/grant hoặc thay đổi cùng object. Các RPC trong phần này là lịch sử schema/implementation legacy; không tạo hoặc gọi chúng cho thay đổi mới. Hiện repo có `0001–0065`:
+Migration phải được đọc theo thứ tự và kiểm tra migration sau có `CREATE OR REPLACE`, revoke/grant hoặc thay đổi cùng object. Các RPC trong phần này là lịch sử schema/implementation legacy; không tạo hoặc gọi chúng cho thay đổi mới. Hiện repo có `0001–0066`:
 
 - `0001–0006`: extension, enum, Auth/profile, RBAC, hồ sơ student/staff và danh mục học thuật/lớp.
 - `0007–0019`: mô hình ClassMonth/session/attendance/timesheet và các bảng tài chính/notification/audit/function/RLS/index/seed của giai đoạn đầu. Phần tháng và tài chính hiện là lịch sử hoặc bị khóa khỏi app.
@@ -59,6 +60,7 @@ Migration phải được đọc theo thứ tự và kiểm tra migration sau c�
 - `0063`: cho Admin có `CLASS_MANAGE` sửa ngày bắt đầu membership và đồng bộ roster các buổi `SCHEDULED` tương lai chưa bắt đầu trong cùng lớp; giữ nguyên buổi có attendance, audit membership/roster và rollback toàn bộ khi có xung đột.
 - `0064`: lịch sử thêm RPC preview/apply lịch mẫu theo tháng; chỉ cập nhật buổi trùng tương lai đủ điều kiện, bảo toàn lịch cũ và lịch sử, kiểm tra xung đột trong cùng transaction, đồng thời không đặt override toàn tháng cho lịch lặp.
 - `0065`: gỡ hai RPC template và planner bền vững; luồng thêm lịch mẫu hiện dùng Edge Function `admin-month-week-template-addition` với transaction PostgreSQL trực tiếp.
+- `0066`: thêm `room_rentals`, RLS đọc Admin, trigger chặn xung đột với buổi/lịch lặp/lượt thuê, và kiểm tra ngược khi ghi lịch lớp; Edge Function `admin-room-rentals` xử lý tạo đơn/mẫu tháng, đổi lịch, hủy mềm và audit trong transaction.
 
 Không sửa, xóa hoặc đổi số migration đã có thể chạy ở môi trường khác. Thay đổi schema bằng migration tiếp theo. Migration production cần nằm trong phạm vi công việc và phải kiểm tra target/backup/migration history trực tiếp; local test không cần áp vào production.
 
@@ -67,6 +69,7 @@ Không sửa, xóa hoặc đổi số migration đã có thể chạy ở môi t
 - `supabase/functions/_shared/auth.ts`: xác thực caller/hồ sơ; `cors.ts`: preflight; `response.ts`: success/error/trace id; `password-reset.ts`: helper reset.
 - Account handlers tạo/khóa/reset tài khoản hoặc bootstrap ROOT là đường đặc quyền; chỉ trả thông tin cần thiết và giữ audit.
 - `session-start`, `session-complete`, `session-learning-update` hiện xác thực teacher rồi gọi RPC service-only legacy; không mở rộng cách làm này. `admin-month-week-template-addition` xác thực Admin có `CLASS_MANAGE`, dựng planner trong `pg_temp` của transaction hiện hành, rồi ghi buổi/roster/audit trực tiếp, không gọi PostgREST RPC; dùng mẫu Edge Function này cho luồng mới cần thay RPC.
+- `admin-room-rentals` xác thực role Admin/ROOT_ADMIN, kiểm tra giáo viên đang hoạt động, khóa cạnh tranh lịch, ghi các lượt tháng toàn bộ hoặc từ chối toàn bộ, và giữ hủy/audit trong cùng transaction; không gọi RPC API.
 - `timesheet-submit` và `timesheet-review` thực thi submit/review theo role và trạng thái.
 - `student-ai-tutor` kiểm tra học sinh/session; chỉ gửi prompt và ngữ cảnh học được cho phép. `teacher-comment-optimize` gửi comment giáo viên tới Gemini; coi đây là dữ liệu truyền cho dịch vụ bên ngoài.
 - Đọc handler/index/config cụ thể trước khi sửa. Không dùng danh sách function trong báo cáo cũ để kết luận endpoint production hiện còn deploy hay không.

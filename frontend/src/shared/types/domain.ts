@@ -106,6 +106,17 @@ export interface SessionRow {
   attendance_summary?: { roster_count: number; attendance_count: number }
 }
 
+export interface RoomRental {
+  id: string
+  staff_id: string
+  room: string
+  starts_at: string
+  ends_at: string
+  status: 'BOOKED' | 'CANCELLED'
+  cancelled_at: string | null
+  staff?: { id: string; staff_code: string | null; full_name: string } | null
+}
+
 export interface AttendanceHistoryRow {
   id: string
   student_id: string

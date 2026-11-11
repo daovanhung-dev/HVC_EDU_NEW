@@ -39,7 +39,7 @@ Manifest là nguồn phiên bản dependency chính xác. Môi trường dự á
 | `frontend/src/app/layouts/`, `components/` | Layout, modal, field, calendar, trạng thái, toast và component dùng chung. |
 | `frontend/src/stores/` | Auth/session, lỗi ứng dụng và toast; không có store nghiệp vụ tổng quát. |
 | `frontend/src/modules/auth/` | Đăng nhập và đổi mật khẩu bắt buộc. |
-| `frontend/src/modules/admin/` | Học sinh, hồ sơ, nhân sự, lớp (membership và ngày bắt đầu), lịch/buổi (sửa, kết thúc, xóa buổi chưa hủy sau preview) và duyệt/chỉnh quyết định chấm công. |
+| `frontend/src/modules/admin/` | Học sinh, hồ sơ, nhân sự, lớp (membership và ngày bắt đầu), lịch/buổi, thuê phòng (lượt đơn/mẫu tháng, đổi/hủy riêng) và duyệt/chỉnh quyết định chấm công. |
 | `frontend/src/modules/staff/` | Buổi được giao, điểm danh/đánh giá, nội dung bài học, hồ sơ và yêu cầu chấm công. |
 | `frontend/src/modules/student/` | Lịch, kết quả học tập, xem lại video và chat AI. |
 | `frontend/src/services/data-queries.ts` | Truy vấn/đọc dữ liệu và chuẩn hóa quan hệ Supabase. |
@@ -66,9 +66,9 @@ Manifest là nguồn phiên bản dependency chính xác. Môi trường dự á
 
 ## Supabase: database và Edge Functions
 
-- `supabase/migrations/` là schema, enum, constraints, helper/trigger SQL nội bộ, grants, RLS, index và thay đổi theo thứ tự; migration mới nhất trong repo là `0065`. RPC còn trong lịch sử/source là legacy, không phải cách triển khai cho thay đổi mới.
+- `supabase/migrations/` là schema, enum, constraints, helper/trigger SQL nội bộ, grants, RLS, index và thay đổi theo thứ tự; migration mới nhất trong repo là `0066`. RPC còn trong lịch sử/source là legacy, không phải cách triển khai cho thay đổi mới.
 - `supabase/functions/<name>/index.ts` là HTTP entrypoint; một số route tách `handler.ts` để kiểm thử logic. `_shared/` chứa auth, CORS, password-reset và response/error.
-- Các route hiện có bao phủ account status/create/reset, bootstrap/login, cập nhật trạng thái buổi và learning, AI học sinh, tối ưu nhận xét giáo viên, và submit/review chấm công. Danh sách từng file nằm trong inventory.
+- Các route hiện có bao phủ account status/create/reset, bootstrap/login, cập nhật trạng thái buổi và learning, AI học sinh, tối ưu nhận xét giáo viên, submit/review chấm công, và thuê phòng Admin. Danh sách từng file nằm trong inventory.
 - `supabase/tests/` chứa kiểm thử SQL cho lập buổi, conflict phòng, giới hạn teacher, learning/RLS, roster và timesheet. Đọc test liên quan cùng migration tạo/sửa object.
 - Cron và schedule generator được định nghĩa ở migration/config backend. Tài liệu source nói sinh trong 30 ngày theo `Asia/Ho_Chi_Minh`; xác minh cấu hình/backend trực tiếp trước khi khẳng định lịch Cron production đang hoạt động.
 

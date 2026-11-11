@@ -20,7 +20,11 @@ import {
   importMonthWeekSchedule,
   correctSessionSchedule,
   correctSessionLearning,
+  cancelRoomRental,
+  createRoomRental,
+  createRoomRentalMonth,
   recordAdminSessionAttendance,
+  rescheduleRoomRental,
   setCompletedSessionTimesheets,
   setClassScheduleStatus,
   updateClassSchedule,
@@ -45,12 +49,13 @@ import {
   getClassSchedulesForClasses,
   getClasses,
   getMySessions,
+  getRoomRentals,
   getSessionAttendanceSummaries,
   getSessionStudents,
   getStaff,
 } from '@/services/data-queries'
 import type { SessionStudentQueryRow } from '@/services/data-queries'
-import type { ClassDetailRow, ClassScheduleRow, SessionRow } from '@/shared/types/domain'
+import type { ClassDetailRow, ClassScheduleRow, RoomRental, SessionRow } from '@/shared/types/domain'
 import {
   attendanceIsDirty,
   attendanceStatuses,
@@ -74,6 +79,7 @@ import DetailModal from '@/app/components/DetailModal.vue'
 import YouTubePlayer from '@/app/components/YouTubePlayer.vue'
 import TeacherPicker from '../components/TeacherPicker.vue'
 import CompletedSessionAttendanceEditor from '../components/CompletedSessionAttendanceEditor.vue'
+import RoomRentalModal from '../components/RoomRentalModal.vue'
 import SessionAttendanceExcelModal from '@/modules/staff/components/SessionAttendanceExcelModal.vue'
 import {
   addCalendarDays,
@@ -83,7 +89,6 @@ import {
   getBusinessDateKey,
   getMonthGridDateKeys,
   getWeekDateKeys,
-  groupSessionsByBusinessDate,
   shiftCalendarMonth,
 } from '@/shared/utils/session-calendar'
 import {
@@ -97,6 +102,10 @@ import {
 import type { AttendanceExcelPatchRow } from '@/modules/staff/session-attendance-excel'
 
 type ViewMode = 'month' | 'week' | 'list'
+type EventFilter = 'all' | 'sessions' | 'rentals'
+type CalendarEvent =
+  | { kind: 'session'; id: string; startsAt: string; endsAt: string; session: SessionRow }
+  | { kind: 'rental'; id: string; startsAt: string; endsAt: string; rental: RoomRental }
 type WeeklyTemplateSlotDraft = MonthWeekTemplateSlot & { client_id: string }
 type WeeklyTemplateDayDraft = { day_of_week: number; slots: WeeklyTemplateSlotDraft[] }
 
@@ -104,6 +113,7 @@ const weekdayLabels = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Th�
 const route = useRoute()
 const toast = useToastStore()
 const sessions = ref<SessionRow[]>([])
+const roomRentals = ref<RoomRental[]>([])
 const classes = ref<ClassDetailRow[]>([])
 const teachersList = ref<any[]>([])
 const schedules = ref<ClassScheduleRow[]>([])
@@ -136,6 +146,7 @@ const selectedClassId = ref(typeof route.query.class_id === 'string' ? route.que
 const loading = ref(false)
 const scheduleLoading = ref(false)
 const sessionsLoaded = ref(false)
+const roomRentalsLoaded = ref(false)
 const scheduleLoadErrors = ref<Record<string, boolean>>({})
 const errorMessage = ref('')
 const attendanceSummaryError = ref('')
@@ -151,8 +162,17 @@ const startInput = ref('')
 const endInput = ref('')
 const sessionRoomInput = ref('')
 const viewMode = ref<ViewMode>('month')
+const eventFilter = ref<EventFilter>('all')
 const calendarAnchorDate = ref(getBusinessDateKey(new Date()))
 const todayDateKey = ref(getBusinessDateKey(new Date()))
+const roomRentalModalOpen = ref(false)
+const roomRentalBusy = ref(false)
+const roomRentalError = ref('')
+const roomRentalLoadError = ref('')
+const roomRentalConflicts = ref<Array<{ date: string; room: string; reason: string }>>([])
+const roomRentalEditing = ref<RoomRental | null>(null)
+const roomRentalDefaultDate = ref(getBusinessDateKey(new Date()))
+const roomRentalRequestVersion = ref(0)
 const scheduleEditorOpen = ref(false)
 const sessionFormOpen = ref(false)
 const sessionFormBusy = ref(false)
@@ -414,35 +434,96 @@ const isFullyAttendedSession = (session: SessionRow) => session.status === 'COMP
   && session.attendance_summary?.attendance_count === session.attendance_summary?.roster_count
 const attendedSessions = computed(() => classSessions.value.filter(isFullyAttendedSession))
 const hiddenHistorySessions = computed(() => classSessions.value.filter(isHiddenByHistoryFilter))
+const hiddenHistoryRentals = computed(() => roomRentals.value.filter((rental) => rental.status === 'CANCELLED' || getBusinessDateKey(rental.starts_at) < todayDateKey.value))
 const visibleSessions = computed(() => showAttendedSessions.value
   ? attendedSessions.value
   : showHistory.value
     ? classSessions.value
     : classSessions.value.filter((session) => !isHiddenByHistoryFilter(session)))
-const visibleSessionsByDate = computed(() => groupSessionsByBusinessDate(visibleSessions.value))
+const visibleRentals = computed(() => {
+  if (eventFilter.value === 'sessions' || showAttendedSessions.value) return []
+  return roomRentals.value.filter((rental) => showHistory.value || (
+    rental.status !== 'CANCELLED' && getBusinessDateKey(rental.starts_at) >= todayDateKey.value
+  ))
+})
+const visibleEvents = computed<CalendarEvent[]>(() => {
+  const events: CalendarEvent[] = []
+  if (eventFilter.value !== 'rentals') {
+    events.push(...visibleSessions.value.map((session) => ({
+      kind: 'session' as const,
+      id: session.id,
+      startsAt: session.scheduled_start_at,
+      endsAt: session.scheduled_end_at,
+      session,
+    })))
+  }
+  if (!showAttendedSessions.value) {
+    events.push(...visibleRentals.value.map((rental) => ({
+      kind: 'rental' as const,
+      id: rental.id,
+      startsAt: rental.starts_at,
+      endsAt: rental.ends_at,
+      rental,
+    })))
+  }
+  return events.sort((left, right) => left.startsAt.localeCompare(right.startsAt) || left.id.localeCompare(right.id))
+})
 const monthDateKeys = computed(() => getMonthGridDateKeys(calendarAnchorDate.value))
 const weekDateKeys = computed(() => getWeekDateKeys(calendarAnchorDate.value))
 const visibleDateKeys = computed(() => viewMode.value === 'week' ? weekDateKeys.value : monthDateKeys.value)
+const roomRentalQueryRange = computed(() => {
+  if (viewMode.value === 'list') return { from: undefined, to: undefined }
+  const first = visibleDateKeys.value[0]
+  const last = visibleDateKeys.value[visibleDateKeys.value.length - 1]
+  return {
+    from: localDateTime(first, '00:00'),
+    to: localDateTime(addCalendarDays(last, 1), '00:00'),
+  }
+})
 const sessionDateKeysInView = computed(() => new Set(visibleDateKeys.value))
 const sessionsInView = computed(() => classSessions.value.filter((session) => sessionDateKeysInView.value.has(getBusinessDateKey(session.scheduled_start_at))))
 const visibleSessionsInView = computed(() => visibleSessions.value.filter((session) => sessionDateKeysInView.value.has(getBusinessDateKey(session.scheduled_start_at))))
 const hiddenHistorySessionsInView = computed(() => sessionsInView.value.filter(isHiddenByHistoryFilter))
 const sessionsHiddenByClassFilterInView = computed(() => sessionsHiddenByClassFilter.value.filter((session) => sessionDateKeysInView.value.has(getBusinessDateKey(session.scheduled_start_at))))
+const visibleEventsByDate = computed<Record<string, CalendarEvent[]>>(() => {
+  const grouped: Record<string, CalendarEvent[]> = {}
+  for (const event of visibleEvents.value) {
+    const key = getBusinessDateKey(event.startsAt)
+    if (!sessionDateKeysInView.value.has(key)) continue
+    grouped[key] = [...(grouped[key] || []), event]
+  }
+  return grouped
+})
+const agendaEvents = computed(() => visibleEvents.value.filter((event) => sessionDateKeysInView.value.has(getBusinessDateKey(event.startsAt))))
 const listEmptyMessage = computed(() => {
+  if (eventFilter.value === 'rentals') {
+    return hiddenHistoryRentals.value.length && !showHistory.value
+      ? `Chưa có lượt thuê sắp tới. ${hiddenHistoryRentals.value.length} lượt cũ hoặc đã hủy đang ẩn.`
+      : 'Chưa có lượt thuê phòng trong danh sách.'
+  }
   if (showAttendedSessions.value) {
     return attendanceSummaryError.value || 'Không có buổi đã hoàn tất với đủ điểm danh trong lịch.'
   }
   if (classSessions.value.length) {
-    return hiddenHistorySessions.value.length
-      ? `Không có buổi sắp tới. ${hiddenHistorySessions.value.length} buổi cũ hoặc đã hủy đang ẩn.`
-      : 'Chưa có buổi học trong danh sách.'
+    const hiddenCount = hiddenHistorySessions.value.length + (eventFilter.value === 'all' ? hiddenHistoryRentals.value.length : 0)
+    return hiddenCount
+      ? eventFilter.value === 'all' && hiddenHistoryRentals.value.length
+        ? `Không có lịch sắp tới. ${hiddenCount} buổi hoặc lượt thuê cũ/đã hủy đang ẩn.`
+        : `Không có buổi sắp tới. ${hiddenHistorySessions.value.length} buổi cũ hoặc đã hủy đang ẩn.`
+      : eventFilter.value === 'all' && roomRentals.value.length === 0 ? 'Chưa có buổi học trong danh sách.' : eventFilter.value === 'all' ? 'Chưa có buổi học hoặc lượt thuê phòng.' : 'Chưa có buổi học trong danh sách.'
   }
   if (selectedClassId.value && sessionsHiddenByClassFilter.value.length) {
     return `Lớp đang chọn chưa có buổi học. ${sessionsHiddenByClassFilter.value.length} buổi ở lớp khác đang bị bộ lọc lớp ẩn.`
   }
-  return selectedClassId.value ? 'Lớp đang chọn chưa có buổi học.' : 'Chưa có buổi học nào.'
+  if (eventFilter.value === 'all' && roomRentals.value.length) return 'Không có buổi học hiển thị theo bộ lọc hiện tại.'
+  return selectedClassId.value ? 'Lớp đang chọn chưa có buổi học.' : eventFilter.value === 'all' && !roomRentals.value.length ? 'Chưa có buổi học nào.' : eventFilter.value === 'all' ? 'Chưa có buổi học hoặc lượt thuê phòng.' : 'Chưa có buổi học nào.'
 })
 const calendarEmptyMessage = computed(() => {
+  if (eventFilter.value === 'rentals') {
+    return hiddenHistoryRentals.value.length && !showHistory.value
+      ? `Không có lượt thuê sắp tới trong kỳ này. ${hiddenHistoryRentals.value.length} lượt cũ hoặc đã hủy đang ẩn.`
+      : 'Không có lượt thuê phòng trong khoảng thời gian này.'
+  }
   if (showAttendedSessions.value) {
     return attendanceSummaryError.value || 'Không có buổi đã hoàn tất với đủ điểm danh trong kỳ này.'
   }
@@ -450,28 +531,28 @@ const calendarEmptyMessage = computed(() => {
     hiddenHistorySessionsInView.value.length
       ? `${hiddenHistorySessionsInView.value.length} buổi cũ hoặc đã hủy đang ẩn`
       : '',
+    eventFilter.value === 'all' && hiddenHistoryRentals.value.length
+      ? `${hiddenHistoryRentals.value.length} lượt thuê cũ hoặc đã hủy đang ẩn`
+      : '',
     sessionsHiddenByClassFilterInView.value.length
       ? `${sessionsHiddenByClassFilterInView.value.length} buổi ở lớp khác đang bị bộ lọc lớp ẩn`
       : '',
   ].filter(Boolean)
   if (hiddenReasons.length) {
-    return `Không có buổi học nào hiển thị trong kỳ này. ${hiddenReasons.join('; ')}.`
+    return eventFilter.value === 'all' && !hiddenHistoryRentals.value.length
+      ? `Không có buổi học nào hiển thị trong kỳ này. ${hiddenReasons.join('; ')}.`
+      : `Không có lịch nào hiển thị trong kỳ này. ${hiddenReasons.join('; ')}.`
   }
-  if (visibleSessions.value.length) return 'Không có buổi học trong khoảng thời gian này.'
+  if (visibleEvents.value.length) return eventFilter.value === 'all' && !roomRentals.value.length ? 'Không có buổi học trong khoảng thời gian này.' : 'Không có lịch trong khoảng thời gian này.'
   if (hiddenHistorySessions.value.length) {
     return `Không có buổi sắp tới trong kỳ này. ${hiddenHistorySessions.value.length} buổi cũ hoặc đã hủy đang ẩn.`
   }
   return listEmptyMessage.value
 })
-const agendaSessions = computed(() => {
-  const dates = new Set(visibleDateKeys.value)
-  return visibleSessions.value.filter((session) => dates.has(getBusinessDateKey(session.scheduled_start_at)))
-    .sort((left, right) => left.scheduled_start_at.localeCompare(right.scheduled_start_at))
-})
 const periodTitle = computed(() => viewMode.value === 'month'
   ? formatBusinessMonth(calendarAnchorDate.value)
   : `${formatBusinessDate(weekDateKeys.value[0])} – ${formatBusinessDate(weekDateKeys.value[6])}`)
-const visibleCalendarSessionCount = computed(() => visibleDateKeys.value.reduce((total, dateKey) => total + (visibleSessionsByDate.value[dateKey]?.length || 0), 0))
+const visibleCalendarEventCount = computed(() => visibleDateKeys.value.reduce((total, dateKey) => total + (visibleEventsByDate.value[dateKey]?.length || 0), 0))
 const displayedMonthStart = computed(() => `${calendarAnchorDate.value.slice(0, 7)}-01`)
 const excelScheduleCanApply = computed(() => !!excelSchedulePreview.value
   && !excelScheduleIssues.value.length
@@ -494,6 +575,163 @@ function localDateTime(date: string, time: string) {
 
 function className(session: SessionRow) {
   return session.classes?.name?.trim() || 'Chưa có tên lớp'
+}
+
+function rentalTeacherName(rental: RoomRental) {
+  return rental.staff?.full_name || teachersList.value.find((teacher) => teacher.id === rental.staff_id)?.full_name || 'Chưa có tên giáo viên'
+}
+
+function eventTypeLabel(event: CalendarEvent) {
+  return event.kind === 'rental' ? 'Thuê phòng' : 'Buổi học'
+}
+
+function eventPrimaryLabel(event: CalendarEvent) {
+  return event.kind === 'rental' ? rentalTeacherName(event.rental) : className(event.session)
+}
+
+function eventRoom(event: CalendarEvent) {
+  return event.kind === 'rental'
+    ? event.rental.room
+    : event.session.room || event.session.class_schedules?.room || 'Chưa xếp phòng'
+}
+
+function eventStatusLabel(event: CalendarEvent) {
+  return event.kind === 'rental' ? (event.rental.status === 'CANCELLED' ? 'Đã hủy' : 'Đã đặt') : event.session.status
+}
+
+function eventStatusClass(event: CalendarEvent) {
+  return event.kind === 'rental'
+    ? event.rental.status === 'CANCELLED' ? 'text-bg-danger' : 'text-bg-info'
+    : sessionStatusClass(event.session.status)
+}
+
+function eventAriaLabel(event: CalendarEvent) {
+  const detail = event.kind === 'rental' ? `Thuê phòng ${event.rental.room}, ${rentalTeacherName(event.rental)}` : className(event.session)
+  return `${formatBusinessTime(event.startsAt)} ${detail}, ${eventStatusLabel(event)}`
+}
+
+function eventCanOpen(event: CalendarEvent) {
+  return event.kind === 'session' || (event.rental.status === 'BOOKED' && new Date(event.startsAt) > new Date())
+}
+
+function openCreateRoomRental() {
+  roomRentalEditing.value = null
+  roomRentalDefaultDate.value = refreshTodayDateKey()
+  roomRentalError.value = ''
+  roomRentalConflicts.value = []
+  roomRentalModalOpen.value = true
+}
+
+function openRoomRental(event: CalendarEvent) {
+  if (event.kind !== 'rental' || !eventCanOpen(event)) return
+  roomRentalEditing.value = event.rental
+  roomRentalDefaultDate.value = refreshTodayDateKey()
+  roomRentalError.value = ''
+  roomRentalConflicts.value = []
+  roomRentalModalOpen.value = true
+}
+
+function selectCalendarEvent(event: CalendarEvent) {
+  if (event.kind === 'session') void selectSession(event.session)
+  else openRoomRental(event)
+}
+
+function setEventFilter(value: EventFilter) {
+  eventFilter.value = value
+  if (value === 'rentals') showAttendedSessions.value = false
+}
+
+function errorDetails(error: unknown): Array<{ date: string; room: string; reason: string }> {
+  if (!error || typeof error !== 'object') return []
+  const details = (error as { details?: unknown }).details
+  if (!Array.isArray(details)) return []
+  return details.filter((row): row is { date: string; room: string; reason: string } =>
+    !!row && typeof row === 'object' && typeof row.date === 'string' && typeof row.room === 'string'
+      && typeof row.reason === 'string')
+}
+
+async function saveRoomRental(input: Parameters<typeof createRoomRental>[0]) {
+  roomRentalBusy.value = true
+  roomRentalError.value = ''
+  roomRentalConflicts.value = []
+  try {
+    await createRoomRental(input)
+    roomRentalModalOpen.value = false
+    calendarAnchorDate.value = input.date
+    toast.success('Đã tạo lượt thuê phòng.')
+    await load()
+  } catch (error) {
+    roomRentalError.value = userErrorMessage(error, 'Không thể tạo lượt thuê phòng.')
+    roomRentalConflicts.value = errorDetails(error)
+  } finally {
+    roomRentalBusy.value = false
+  }
+}
+
+async function saveRoomRentalMonth(input: Parameters<typeof createRoomRentalMonth>[0]) {
+  roomRentalBusy.value = true
+  roomRentalError.value = ''
+  roomRentalConflicts.value = []
+  try {
+    const result = await createRoomRentalMonth(input)
+    roomRentalModalOpen.value = false
+    calendarAnchorDate.value = input.month_start
+    toast.success(`Đã tạo ${result.created_count} lượt thuê phòng trong tháng.`)
+    await load()
+  } catch (error) {
+    roomRentalError.value = userErrorMessage(error, 'Không thể tạo lịch thuê phòng trong tháng.')
+    roomRentalConflicts.value = errorDetails(error)
+  } finally {
+    roomRentalBusy.value = false
+  }
+}
+
+async function changeRoomRentalSchedule(input: Parameters<typeof rescheduleRoomRental>[0]) {
+  roomRentalBusy.value = true
+  roomRentalError.value = ''
+  roomRentalConflicts.value = []
+  try {
+    await rescheduleRoomRental(input)
+    roomRentalModalOpen.value = false
+    calendarAnchorDate.value = input.date
+    toast.success('Đã đổi lịch thuê phòng.')
+    await load()
+  } catch (error) {
+    roomRentalError.value = userErrorMessage(error, 'Không thể đổi lịch thuê phòng.')
+    roomRentalConflicts.value = errorDetails(error)
+  } finally {
+    roomRentalBusy.value = false
+  }
+}
+
+async function cancelRoomRentalOccurrence(id: string) {
+  roomRentalBusy.value = true
+  roomRentalError.value = ''
+  try {
+    await cancelRoomRental(id)
+    roomRentalModalOpen.value = false
+    toast.success('Đã hủy lượt thuê phòng. Lịch sử được giữ lại.')
+    await load()
+  } catch (error) {
+    roomRentalError.value = userErrorMessage(error, 'Không thể hủy lượt thuê phòng.')
+  } finally {
+    roomRentalBusy.value = false
+  }
+}
+
+async function reloadRoomRentalsForCurrentRange() {
+  const requestVersion = ++roomRentalRequestVersion.value
+  const range = roomRentalQueryRange.value
+  try {
+    const rentals = await getRoomRentals(range.from, range.to)
+    if (requestVersion !== roomRentalRequestVersion.value) return
+    roomRentals.value = rentals
+    roomRentalsLoaded.value = true
+    roomRentalLoadError.value = ''
+  } catch (error) {
+    if (requestVersion !== roomRentalRequestVersion.value) return
+    roomRentalLoadError.value = userErrorMessage(error, 'Không thể tải lịch thuê phòng cho khoảng thời gian này.')
+  }
 }
 
 function sessionStatusClass(status: SessionRow['status']) {
@@ -529,6 +767,7 @@ function toggleAttendedSessions() {
   if (attendanceSummaryError.value) return
   showAttendedSessions.value = !showAttendedSessions.value
   if (showAttendedSessions.value) {
+    eventFilter.value = 'sessions'
     showHistory.value = false
     if (selected.value && isFullyAttendedSession(selected.value)) completedSessionDetailMode.value = true
   }
@@ -540,11 +779,15 @@ async function load(): Promise<boolean> {
   refreshTodayDateKey()
   errorMessage.value = ''
   attendanceSummaryError.value = ''
+  roomRentalLoadError.value = ''
+  const rentalRequestVersion = ++roomRentalRequestVersion.value
+  const rentalRange = roomRentalQueryRange.value
   try {
-    const [sessionResult, classResult, staffResult] = await Promise.allSettled([
+    const [sessionResult, classResult, staffResult, rentalResult] = await Promise.allSettled([
       getMySessions(),
       getClasses(),
       getStaff(),
+      getRoomRentals(rentalRange.from, rentalRange.to),
     ])
     const loadErrors: string[] = []
 
@@ -583,6 +826,17 @@ async function load(): Promise<boolean> {
       teachersList.value = staffResult.value as any[]
     } else {
       loadErrors.push(staffResult.reason instanceof Error ? staffResult.reason.message : 'Không thể tải danh sách giáo viên.')
+    }
+
+    if (rentalResult.status === 'fulfilled') {
+      if (rentalRequestVersion === roomRentalRequestVersion.value) {
+        roomRentals.value = rentalResult.value
+        roomRentalsLoaded.value = true
+      }
+    } else {
+      const message = rentalResult.reason instanceof Error ? rentalResult.reason.message : 'Không thể tải lịch thuê phòng.'
+      roomRentalLoadError.value = message
+      loadErrors.push(message)
     }
 
     if (selectedClassId.value && !classFilterOptions.value.some((row) => row.id === selectedClassId.value)) selectedClassId.value = ''
@@ -2101,6 +2355,9 @@ async function runConfirmation() {
 }
 
 onMounted(load)
+watch(() => [viewMode.value, calendarAnchorDate.value] as const, () => {
+  if (sessionsLoaded.value) void reloadRoomRentalsForCurrentRange()
+})
 watch(() => route.query.class_id, (value) => {
   selectedClassId.value = typeof value === 'string' ? value : ''
   changeClassFilter()
@@ -2118,7 +2375,7 @@ watch(sessionFormIsBackdated, (isBackdated) => {
 </script>
 
 <template>
-  <AppPageHeader title="Buổi học" eyebrow="Lịch giảng dạy" description="Xem lịch tháng, tuần hoặc danh sách; quản lý buổi riêng và khung lịch lặp.">
+  <AppPageHeader title="Buổi học" eyebrow="Lịch giảng dạy" description="Xem lịch tháng, tuần hoặc danh sách; quản lý buổi, khung lịch lặp và lượt thuê phòng.">
     <template #actions>
       <button class="btn btn-primary" @click="scheduleEditorOpen = !scheduleEditorOpen">Chỉnh sửa lịch</button>
       <button class="btn btn-outline-primary" :disabled="loading" @click="openWeeklyTemplate('replace')">Tạo lịch mẫu</button>
@@ -2129,10 +2386,29 @@ watch(sessionFormIsBackdated, (isBackdated) => {
         <span v-if="deletePreviewBusy" class="app-button__spinner" aria-hidden="true"></span>{{ deletePreviewBusy ? 'Đang kiểm tra…' : 'Xóa toàn bộ buổi trong tháng' }}
       </button>
       <button class="btn btn-outline-primary" @click="openSessionForm()">Thêm buổi</button>
+      <button class="btn btn-outline-primary" :disabled="loading || !activeTeachers.length" @click="openCreateRoomRental">Thuê phòng</button>
       <button class="btn btn-outline-primary" :disabled="loading" @click="load">Làm mới</button>
     </template>
   </AppPageHeader>
   <div v-if="errorMessage && sessionsLoaded" class="alert alert-danger" role="alert">{{ errorMessage }} <button class="btn btn-sm btn-outline-danger ms-2" type="button" :disabled="loading" @click="load">Thử lại</button></div>
+  <div v-if="roomRentalLoadError && !errorMessage" class="alert alert-warning" role="alert">{{ roomRentalLoadError }} <button class="btn btn-sm btn-outline-warning ms-2" type="button" @click="reloadRoomRentalsForCurrentRange">Thử tải lại lịch thuê</button></div>
+
+  <RoomRentalModal
+    v-if="roomRentalModalOpen"
+    v-model="roomRentalModalOpen"
+    :mode="roomRentalEditing ? 'edit' : 'create'"
+    :rental="roomRentalEditing"
+    :teachers="activeTeachers"
+    :default-date="roomRentalDefaultDate"
+    :default-month="displayedMonthStart"
+    :busy="roomRentalBusy"
+    :error="roomRentalError"
+    :conflicts="roomRentalConflicts"
+    @create-single="saveRoomRental"
+    @create-month="saveRoomRentalMonth"
+    @reschedule="changeRoomRentalSchedule"
+    @cancel="cancelRoomRentalOccurrence"
+  />
 
   <div class="card border-0 shadow-sm mb-4">
     <div class="card-body d-flex flex-wrap align-items-end justify-content-between gap-3">
@@ -2431,6 +2707,12 @@ watch(sessionFormIsBackdated, (isBackdated) => {
             <button class="btn" :class="viewMode === 'week' ? 'btn-primary' : 'btn-outline-primary'" :aria-pressed="viewMode === 'week'" @click="viewMode = 'week'">Tuần</button>
             <button class="btn" :class="viewMode === 'list' ? 'btn-primary' : 'btn-outline-primary'" :aria-pressed="viewMode === 'list'" @click="viewMode = 'list'">Danh sách</button>
           </div>
+          <label class="visually-hidden" for="session-event-filter">Lọc loại lịch</label>
+          <select id="session-event-filter" class="form-select form-select-sm event-filter" :value="eventFilter" @change="setEventFilter(($event.target as HTMLSelectElement).value as EventFilter)">
+            <option value="all">Tất cả lịch</option>
+            <option value="sessions">Buổi học</option>
+            <option value="rentals">Thuê phòng</option>
+          </select>
           <button class="btn btn-sm" :class="showHistory ? 'btn-primary' : 'btn-outline-secondary'" :aria-pressed="showHistory" @click="toggleHistory">
             {{ showHistory ? 'Ẩn lịch sử' : 'Hiện lịch sử' }}
           </button>
@@ -2464,21 +2746,21 @@ watch(sessionFormIsBackdated, (isBackdated) => {
           <Transition name="view-swap" mode="out-in">
           <div v-if="viewMode === 'list'" key="list" class="session-list">
             <div v-if="loading" class="text-center text-secondary py-4" role="status">Đang tải buổi học…</div>
-            <div v-else-if="!loading && !errorMessage && !visibleSessions.length" class="text-center text-secondary py-5">
+            <div v-else-if="!loading && !errorMessage && !visibleEvents.length" class="text-center text-secondary py-5">
               <p class="mb-2">{{ listEmptyMessage }}</p>
-              <button v-if="!showHistory && hiddenHistorySessions.length" type="button" class="btn btn-sm btn-outline-primary" @click="revealHiddenHistory">Xem lịch sử trong danh sách</button>
+              <button v-if="!showHistory && (hiddenHistorySessions.length || (eventFilter !== 'sessions' && hiddenHistoryRentals.length))" type="button" class="btn btn-sm btn-outline-primary" @click="revealHiddenHistory">Xem lịch sử trong danh sách</button>
             </div>
             <div class="table-responsive">
               <table class="table align-middle mb-0">
-                <thead><tr><th>Ngày</th><th>Lớp</th><th>Thời gian</th><th>Phòng</th><th>Giáo viên</th><th>Trạng thái</th></tr></thead>
+                <thead><tr><th>Ngày</th><th>Loại</th><th>Lớp / người thuê</th><th>Thời gian</th><th>Phòng</th><th>Trạng thái</th></tr></thead>
                 <tbody>
-                  <tr v-for="session in visibleSessions" :key="session.id" :class="selected?.id === session.id ? 'table-primary' : ''" role="button" tabindex="0" @click="selectSession(session)" @keydown.enter="selectSession(session)">
-                    <td>{{ formatBusinessDate(getBusinessDateKey(session.scheduled_start_at)) }}</td>
-                    <td class="fw-semibold">{{ className(session) }}</td>
-                    <td>{{ formatBusinessTime(session.scheduled_start_at) }}–{{ formatBusinessTime(session.scheduled_end_at) }}</td>
-                    <td>{{ session.room || session.class_schedules?.room || 'Chưa xếp phòng' }}</td>
-                    <td>{{ (session.session_staff || []).map((item) => item.staff?.full_name).filter(Boolean).join(', ') || 'Chưa phân công' }}</td>
-                    <td><span class="badge" :class="sessionStatusClass(session.status)">{{ session.status }}</span></td>
+                  <tr v-for="event in visibleEvents" :key="`${event.kind}-${event.id}`" :class="event.kind === 'session' && selected?.id === event.session.id ? 'table-primary' : event.kind === 'rental' ? 'room-rental-row' : ''" :aria-label="eventAriaLabel(event)" role="button" tabindex="0" @click="selectCalendarEvent(event)" @keydown.enter="selectCalendarEvent(event)">
+                    <td>{{ formatBusinessDate(getBusinessDateKey(event.startsAt)) }}</td>
+                    <td><span class="badge" :class="event.kind === 'rental' ? 'text-bg-info' : 'text-bg-secondary'">{{ eventTypeLabel(event) }}</span></td>
+                    <td class="fw-semibold">{{ eventPrimaryLabel(event) }}</td>
+                    <td>{{ formatBusinessTime(event.startsAt) }}–{{ formatBusinessTime(event.endsAt) }}</td>
+                    <td>{{ eventRoom(event) }}</td>
+                    <td><span class="badge" :class="eventStatusClass(event)">{{ eventStatusLabel(event) }}</span></td>
                   </tr>
                 </tbody>
               </table>
@@ -2509,37 +2791,39 @@ watch(sessionFormIsBackdated, (isBackdated) => {
                   </div>
                   <div class="calendar-day-events">
                   <button
-                  v-for="session in visibleSessionsByDate[dateKey] || []"
-                      :key="session.id"
+                      v-for="event in visibleEventsByDate[dateKey] || []"
+                      :key="`${event.kind}-${event.id}`"
                       class="calendar-event"
-                      :class="{ 'calendar-event-selected': selected?.id === session.id }"
-                      :aria-pressed="selected?.id === session.id"
-                      :aria-label="`${formatBusinessTime(session.scheduled_start_at)} ${className(session)}, ${session.status}`"
-                      @click="selectSession(session)"
+                      :class="[{ 'calendar-event-selected': event.kind === 'session' && selected?.id === event.session.id }, { 'calendar-event-rental': event.kind === 'rental' }]"
+                      :aria-pressed="event.kind === 'session' ? selected?.id === event.session.id : undefined"
+                      :aria-label="eventAriaLabel(event)"
+                      :disabled="!eventCanOpen(event)"
+                      @click="selectCalendarEvent(event)"
                     >
-                      <span class="calendar-event-time">{{ formatBusinessTime(session.scheduled_start_at) }}–{{ formatBusinessTime(session.scheduled_end_at) }}</span>
-                      <span class="calendar-event-name">{{ className(session) }}</span>
-                      <span class="calendar-event-room">{{ session.room || session.class_schedules?.room || 'Chưa xếp phòng' }}</span>
-                      <span class="badge align-self-start" :class="sessionStatusClass(session.status)">{{ session.status }}</span>
+                      <span class="calendar-event-kind">{{ eventTypeLabel(event) }}</span>
+                      <span class="calendar-event-time">{{ formatBusinessTime(event.startsAt) }}–{{ formatBusinessTime(event.endsAt) }}</span>
+                      <span class="calendar-event-name">{{ eventPrimaryLabel(event) }}</span>
+                      <span class="calendar-event-room">{{ event.kind === 'rental' ? `Phòng ${eventRoom(event)}` : eventRoom(event) }}</span>
+                      <span class="badge align-self-start" :class="eventStatusClass(event)">{{ eventStatusLabel(event) }}</span>
                     </button>
                   </div>
                 </section>
               </div>
             </div>
             <div class="session-agenda" aria-label="Buổi học trong kỳ này">
-              <div v-for="session in agendaSessions" :key="session.id" class="session-agenda__item">
-                <button type="button" class="session-agenda__select" :aria-pressed="selected?.id === session.id" @click="selectSession(session)">
-                  <span class="session-agenda__time">{{ formatBusinessDate(getBusinessDateKey(session.scheduled_start_at)) }} · {{ formatBusinessTime(session.scheduled_start_at) }}–{{ formatBusinessTime(session.scheduled_end_at) }}</span>
-                  <strong>{{ className(session) }}</strong>
-                  <span>{{ session.room || session.class_schedules?.room || 'Chưa xếp phòng' }}</span>
+              <div v-for="event in agendaEvents" :key="`${event.kind}-${event.id}`" class="session-agenda__item" :class="{ 'session-agenda__item-rental': event.kind === 'rental' }">
+                <button type="button" class="session-agenda__select" :aria-pressed="event.kind === 'session' ? selected?.id === event.session.id : undefined" :disabled="!eventCanOpen(event)" @click="selectCalendarEvent(event)">
+                  <span class="session-agenda__time">{{ formatBusinessDate(getBusinessDateKey(event.startsAt)) }} · {{ formatBusinessTime(event.startsAt) }}–{{ formatBusinessTime(event.endsAt) }}</span>
+                  <strong><span class="badge me-1" :class="event.kind === 'rental' ? 'text-bg-info' : 'text-bg-secondary'">{{ eventTypeLabel(event) }}</span>{{ eventPrimaryLabel(event) }}</strong>
+                  <span>Phòng {{ eventRoom(event) }}</span>
                 </button>
-                <span class="badge" :class="sessionStatusClass(session.status)">{{ session.status }}</span>
+                <span class="badge" :class="eventStatusClass(event)">{{ eventStatusLabel(event) }}</span>
               </div>
             </div>
             <div v-if="loading" class="text-center text-secondary py-3" role="status">Đang tải buổi học…</div>
-            <div v-else-if="!loading && !errorMessage && !visibleCalendarSessionCount" class="session-calendar-empty text-center text-secondary py-3">
+            <div v-else-if="!loading && !errorMessage && !visibleCalendarEventCount" class="session-calendar-empty text-center text-secondary py-3">
               <p class="mb-2">{{ calendarEmptyMessage }}</p>
-              <button v-if="!showHistory && hiddenHistorySessions.length" type="button" class="btn btn-sm btn-outline-primary" @click="revealHiddenHistory">
+              <button v-if="!showHistory && (hiddenHistorySessions.length || (eventFilter !== 'sessions' && hiddenHistoryRentals.length))" type="button" class="btn btn-sm btn-outline-primary" @click="revealHiddenHistory">
                 {{ hiddenHistorySessionsInView.length ? 'Hiện lịch sử' : 'Xem lịch sử trong danh sách' }}
               </button>
             </div>
@@ -2757,6 +3041,11 @@ watch(sessionFormIsBackdated, (isBackdated) => {
   max-width: 30rem;
 }
 
+.event-filter {
+  width: auto;
+  min-width: 9rem;
+}
+
 .weekly-template-days {
   display: grid;
   gap: 0.85rem;
@@ -2906,6 +3195,30 @@ watch(sessionFormIsBackdated, (isBackdated) => {
   color: var(--bs-body-color);
   font-size: 0.78rem;
   text-align: left;
+}
+
+.calendar-event-rental {
+  border-style: dashed;
+  border-left-color: var(--bs-info);
+  background: var(--bs-info-bg-subtle);
+}
+
+.calendar-event-kind {
+  color: var(--bs-info-text-emphasis);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+}
+
+.calendar-event-rental:disabled,
+.session-agenda__select:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+
+.session-agenda__item-rental {
+  border-left: 3px dashed var(--bs-info);
 }
 
 .calendar-event:hover,

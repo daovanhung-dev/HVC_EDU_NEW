@@ -10,6 +10,7 @@ import AdminSessionsPage from './AdminSessionsPage.vue'
 const mockState = vi.hoisted(() => ({
   route: { query: { class_id: '' } },
   getMySessions: vi.fn(),
+  getRoomRentals: vi.fn(),
   getSessionAttendanceSummaries: vi.fn(),
   getSessionStudents: vi.fn(),
   getClasses: vi.fn(),
@@ -42,6 +43,10 @@ const mockState = vi.hoisted(() => ({
   updateClassSchedule: vi.fn(),
   previewDeleteSessionsForMonth: vi.fn(),
   deleteSessionsForMonth: vi.fn(),
+  createRoomRental: vi.fn(),
+  createRoomRentalMonth: vi.fn(),
+  rescheduleRoomRental: vi.fn(),
+  cancelRoomRental: vi.fn(),
   toastSuccess: vi.fn(),
   toastInfo: vi.fn(),
   toastError: vi.fn(),
@@ -49,6 +54,7 @@ const mockState = vi.hoisted(() => ({
 
 vi.mock('@/services/data-queries', () => ({
   getMySessions: mockState.getMySessions,
+  getRoomRentals: mockState.getRoomRentals,
   getSessionAttendanceSummaries: mockState.getSessionAttendanceSummaries,
   getSessionStudents: mockState.getSessionStudents,
   getClasses: mockState.getClasses,
@@ -84,6 +90,10 @@ vi.mock('@/services/commands', () => ({
   updateClassSchedule: mockState.updateClassSchedule,
   previewDeleteSessionsForMonth: mockState.previewDeleteSessionsForMonth,
   deleteSessionsForMonth: mockState.deleteSessionsForMonth,
+  createRoomRental: mockState.createRoomRental,
+  createRoomRentalMonth: mockState.createRoomRentalMonth,
+  rescheduleRoomRental: mockState.rescheduleRoomRental,
+  cancelRoomRental: mockState.cancelRoomRental,
 }))
 
 vi.mock('bootstrap', () => ({
@@ -120,6 +130,19 @@ function makeSession(
     classes: { id: 'qa-class-1', name: className },
     session_staff: staffIds.map((staff_id) => ({ staff_id, assignment_role: 'TEACHER', staff: { id: staff_id, full_name: 'Giáo viên QA' } })),
     session_students: [],
+  }
+}
+
+function makeRental(id: string, date: string, status: 'BOOKED' | 'CANCELLED' = 'BOOKED') {
+  return {
+    id,
+    staff_id: 'qa-teacher-1',
+    room: 'QA-Room-Rental',
+    starts_at: `${date}T17:30:00+07:00`,
+    ends_at: `${date}T19:00:00+07:00`,
+    status,
+    cancelled_at: status === 'CANCELLED' ? `${date}T09:00:00+07:00` : null,
+    staff: { id: 'qa-teacher-1', staff_code: 'QA-T-001', full_name: 'Giáo viên QA 1' },
   }
 }
 
@@ -192,6 +215,7 @@ describe('AdminSessionsPage calendar', () => {
   beforeEach(() => {
     mockState.route.query.class_id = ''
     mockState.getMySessions.mockReset().mockResolvedValue([])
+    mockState.getRoomRentals.mockReset().mockResolvedValue([])
     mockState.getSessionAttendanceSummaries.mockReset().mockImplementation(async (sessionIds: string[]) => Object.fromEntries(sessionIds.map((id) => [id, { roster_count: 0, attendance_count: 0 }])))
     mockState.getSessionStudents.mockReset().mockResolvedValue([])
     mockState.getClasses.mockReset().mockResolvedValue([
@@ -320,6 +344,10 @@ describe('AdminSessionsPage calendar', () => {
       deleted_timesheets: 1,
       deleted_payroll_items: 1,
     })
+    mockState.createRoomRental.mockReset().mockResolvedValue({ rental_id: 'qa-rental-created', status: 'BOOKED' })
+    mockState.createRoomRentalMonth.mockReset().mockResolvedValue({ created_count: 4, status: 'BOOKED' })
+    mockState.rescheduleRoomRental.mockReset().mockResolvedValue({ rental_id: 'qa-rental-1', status: 'BOOKED' })
+    mockState.cancelRoomRental.mockReset().mockResolvedValue({ rental_id: 'qa-rental-1', status: 'CANCELLED' })
     mockState.toastSuccess.mockReset()
     mockState.toastInfo.mockReset()
     mockState.toastError.mockReset()
@@ -1721,5 +1749,76 @@ describe('AdminSessionsPage calendar', () => {
     expect(detailModal.get('#session-detail-teachers-option-qa-teacher-6').attributes('disabled')).toBeUndefined()
     await detailModal.get('#session-detail-teachers-option-qa-teacher-6').setValue(true)
     expect(pageAndBodyText(wrapper)).toContain('5/5')
+  })
+
+  it('shows room rentals with classes and filters each event type', async () => {
+    const date = addCalendarDays(getBusinessDateKey(new Date()), 1)
+    const completed = { ...makeSession('qa-mixed-session', 'Lớp Toán QA', '09:00', '10:00', date), status: 'COMPLETED' as const }
+    mockState.getMySessions.mockResolvedValue([completed])
+    mockState.getSessionAttendanceSummaries.mockResolvedValue({ [completed.id]: { roster_count: 1, attendance_count: 1 } })
+    mockState.getRoomRentals.mockResolvedValue([makeRental('qa-mixed-rental', date)])
+
+    const wrapper = mountPage()
+    await flushPromises()
+    expect(wrapper.findAll('.calendar-event')).toHaveLength(2)
+    expect(wrapper.find('.calendar-event-rental').text()).toContain('Thuê phòng')
+    expect(wrapper.find('.calendar-event-rental').text()).toContain('Giáo viên QA 1')
+    expect(wrapper.find('.calendar-event-rental').text()).toContain('QA-Room-Rental')
+
+    await getPageOrBody(wrapper, '#session-event-filter').setValue('rentals')
+    expect(wrapper.findAll('.calendar-event')).toHaveLength(1)
+    expect(wrapper.find('.calendar-event').classes()).toContain('calendar-event-rental')
+
+    await getPageOrBody(wrapper, '#session-event-filter').setValue('all')
+    await clickButtonWithText(wrapper, 'Các buổi học đã điểm danh')
+    expect(wrapper.findAll('.calendar-event')).toHaveLength(1)
+    expect(wrapper.find('.calendar-event').text()).toContain('Lớp Toán QA')
+    expect(wrapper.find('.calendar-event-rental').exists()).toBe(false)
+  })
+
+  it('creates one room rental from the admin form', async () => {
+    const date = addCalendarDays(getBusinessDateKey(new Date()), 1)
+    const wrapper = mountPage()
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Thuê phòng')
+    await flushPromises()
+
+    await getPageOrBody(wrapper, '#rental-staff').setValue('qa-teacher-1')
+    await getPageOrBody(wrapper, '#rental-date').setValue(date)
+    await getPageOrBody(wrapper, '#rental-start-time').setValue('17:30')
+    await getPageOrBody(wrapper, '#rental-end-time').setValue('19:00')
+    await getPageOrBody(wrapper, '#rental-room').setValue('QA-Room-Rental')
+    await clickButtonWithText(wrapper, 'Tạo lượt thuê')
+    await flushPromises()
+
+    expect(mockState.createRoomRental).toHaveBeenCalledWith({
+      staff_id: 'qa-teacher-1', date, start_time: '17:30', end_time: '19:00', room: 'QA-Room-Rental',
+    })
+    expect(mockState.toastSuccess).toHaveBeenCalledWith('Đã tạo lượt thuê phòng.')
+  })
+
+  it('reschedules and cancels only a selected future rental occurrence', async () => {
+    const date = addCalendarDays(getBusinessDateKey(new Date()), 2)
+    mockState.getRoomRentals.mockResolvedValue([makeRental('qa-edit-rental', date)])
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('.calendar-event-rental').trigger('click')
+    await flushPromises()
+    const rescheduledDate = addCalendarDays(date, 2)
+    await getPageOrBody(wrapper, '#rental-date').setValue(rescheduledDate)
+    await getPageOrBody(wrapper, '#rental-room').setValue('QA-Room-Changed')
+    await clickButtonWithText(wrapper, 'Lưu đổi lịch')
+    await flushPromises()
+    expect(mockState.rescheduleRoomRental).toHaveBeenCalledWith({
+      id: 'qa-edit-rental', date: rescheduledDate, start_time: '17:30', end_time: '19:00', room: 'QA-Room-Changed',
+    })
+
+    await wrapper.get('.calendar-event-rental').trigger('click')
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Hủy lượt thuê')
+    await clickButtonWithText(wrapper, 'Xác nhận hủy')
+    await flushPromises()
+    expect(mockState.cancelRoomRental).toHaveBeenCalledWith('qa-edit-rental')
   })
 })

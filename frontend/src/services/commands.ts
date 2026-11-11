@@ -2,6 +2,49 @@ import { invokeFunction } from './edge-functions'
 import { supabase } from './supabase'
 import type { AttendanceStatus } from '@/shared/types/domain'
 
+export interface RoomRentalOccurrenceInput {
+  date: string
+  start_time: string
+  end_time: string
+  room: string
+}
+
+export interface RoomRentalMonthSlotInput {
+  day_of_week: number
+  start_time: string
+  end_time: string
+  room: string
+}
+
+export function createRoomRental(input: RoomRentalOccurrenceInput & { staff_id: string }) {
+  return invokeFunction<typeof input, { rental_id: string; status: 'BOOKED' }>('admin-room-rentals', {
+    operation: 'create_single',
+    ...input,
+  })
+}
+
+export function createRoomRentalMonth(input: {
+  staff_id: string
+  month_start: string
+  slots: RoomRentalMonthSlotInput[]
+}) {
+  return invokeFunction<typeof input & { operation: 'create_month' }, { created_count: number; status: 'BOOKED' }>(
+    'admin-room-rentals', { operation: 'create_month', ...input },
+  )
+}
+
+export function rescheduleRoomRental(input: RoomRentalOccurrenceInput & { id: string }) {
+  return invokeFunction<typeof input & { operation: 'reschedule' }, { rental_id: string; status: 'BOOKED' }>(
+    'admin-room-rentals', { operation: 'reschedule', ...input },
+  )
+}
+
+export function cancelRoomRental(id: string) {
+  return invokeFunction<{ operation: 'cancel'; id: string }, { rental_id: string; status: 'CANCELLED' }>(
+    'admin-room-rentals', { operation: 'cancel', id },
+  )
+}
+
 export interface CreateUserInput {
   role: 'ADMIN' | 'TEACHER' | 'STUDENT'
   username?: string

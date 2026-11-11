@@ -16,7 +16,7 @@
 - Code hiện hành và thứ tự migration trong supabase/migrations là căn cứ về hành vi, schema, quyền và trạng thái được quản lý trong repo.
 - README.md và docs/IMPLEMENTATION.md mô tả cách chạy và phạm vi sản phẩm hiện hành.
 - Tài liệu thiết kế v1, roadmap và báo cáo QA là tư liệu lịch sử/ảnh chụp; không chứng minh trạng thái production hiện tại và không tự mở lại module cũ.
-- Giữ sản phẩm trong phạm vi lớp, thành viên lớp, lịch lặp, buổi học, hồ sơ học tập liên tục và chấm công theo buổi. Không khôi phục ClassMonth vận hành, học phí, payroll, accounting hay module legacy nếu người dùng chưa yêu cầu đổi phạm vi.
+- Giữ sản phẩm trong phạm vi lớp, thành viên lớp, lịch lặp, buổi học, lịch thuê phòng do Admin quản lý, hồ sơ học tập liên tục và chấm công theo buổi. Không khôi phục ClassMonth vận hành, học phí, payroll, accounting hay module legacy nếu người dùng chưa yêu cầu đổi phạm vi.
 
 ## Backend và API
 

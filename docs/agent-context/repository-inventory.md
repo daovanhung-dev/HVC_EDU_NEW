@@ -96,6 +96,7 @@
 | frontend/src/modules/admin/components/bulk-password-reset.types.ts | Frontend / Admin | TypeScript | Kiểu input/kết quả cho luồng reset mật khẩu hàng loạt. |
 | frontend/src/modules/admin/components/BulkPasswordResetModal.vue | Frontend / Admin | Vue SFC | Giao diện xác nhận và thu thập lựa chọn reset mật khẩu hàng loạt. |
 | frontend/src/modules/admin/components/CompletedSessionAttendanceEditor.vue | Frontend / Admin | Vue SFC | Component luồng Admin: Completed Session Attendance Editor. |
+| frontend/src/modules/admin/components/RoomRentalModal.vue | Frontend / Admin | Vue SFC | Component luồng Admin: Room Rental Modal. |
 | frontend/src/modules/admin/components/StudentQuickEnrollmentModal.vue | Frontend / Admin | Vue SFC | Component luồng Admin: Student Quick Enrollment Modal. |
 | frontend/src/modules/admin/components/TeacherPicker.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho Teacher Picker trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/admin/components/TeacherPicker.vue | Frontend / Admin | Vue SFC | Chọn hoặc chỉnh danh sách teacher được giao cho lịch/buổi. |
@@ -204,6 +205,14 @@
 | supabase/functions/admin-reset-password/handler.test.ts | Supabase / Edge Functions | TypeScript | Kiểm thử handler của route admin-reset-password với phụ thuộc giả lập. |
 | supabase/functions/admin-reset-password/handler.ts | Supabase / Edge Functions | TypeScript | Logic có thể kiểm thử tách biệt cho route: reset mật khẩu một tài khoản theo quyền Admin. |
 | supabase/functions/admin-reset-password/index.ts | Supabase / Edge Functions | TypeScript | HTTP entrypoint cho route: reset mật khẩu một tài khoản theo quyền Admin. |
+| supabase/functions/admin-room-rentals/deno.json | Supabase / Edge Functions | JSON/config | Cấu hình deno. |
+| supabase/functions/admin-room-rentals/deno.lock | Supabase / Edge Functions | Deno lockfile | File Deno lockfile thuộc Supabase / Edge Functions: deno. |
+| supabase/functions/admin-room-rentals/handler.test.ts | Supabase / Edge Functions | TypeScript | Kiểm thử handler của route admin-room-rentals với phụ thuộc giả lập. |
+| supabase/functions/admin-room-rentals/handler.ts | Supabase / Edge Functions | TypeScript | Logic có thể kiểm thử tách biệt cho route: Edge Function admin room rentals. |
+| supabase/functions/admin-room-rentals/index.ts | Supabase / Edge Functions | TypeScript | HTTP entrypoint cho route: Edge Function admin room rentals. |
+| supabase/functions/admin-room-rentals/planner.ts | Supabase / Edge Functions | TypeScript | File TypeScript thuộc Supabase / Edge Functions: planner. |
+| supabase/functions/admin-room-rentals/store.ts | Supabase / Edge Functions | TypeScript | File TypeScript thuộc Supabase / Edge Functions: store. |
+| supabase/functions/admin-room-rentals/types.ts | Supabase / Edge Functions | TypeScript | File TypeScript thuộc Supabase / Edge Functions: types. |
 | supabase/functions/admin-session-attendance-finalize/deno.json | Supabase / Edge Functions | JSON/config | Cấu hình deno. |
 | supabase/functions/admin-session-attendance-finalize/deno.lock | Supabase / Edge Functions | Deno lockfile | File Deno lockfile thuộc Supabase / Edge Functions: deno. |
 | supabase/functions/admin-session-attendance-finalize/handler.test.ts | Supabase / Edge Functions | TypeScript | Kiểm thử handler của route admin-session-attendance-finalize với phụ thuộc giả lập. |
@@ -297,6 +306,7 @@
 | supabase/migrations/0063_admin_membership_start_date_sync.sql | Supabase / migrations | SQL | Cho Admin sửa ngày bắt đầu membership và đồng bộ roster buổi tương lai nguyên tử, có kiểm tra quyền, bảo toàn lịch sử và rollback khi xung đột. |
 | supabase/migrations/0064_add_month_week_template.sql | Supabase / migrations | SQL | Migration schema; đọc toàn bộ thay đổi và migration sau này có thể thay thế object. |
 | supabase/migrations/0065_remove_month_template_addition_rpcs.sql | Supabase / migrations | SQL | Migration schema; đọc toàn bộ thay đổi và migration sau này có thể thay thế object. |
+| supabase/migrations/0066_room_rentals.sql | Supabase / migrations | SQL | Migration schema; đọc toàn bộ thay đổi và migration sau này có thể thay thế object. |
 | supabase/seed.sql | Supabase / cấu hình và seed | SQL | Seed cho database local; không dùng làm căn cứ dữ liệu production. |
 | supabase/tests/admin_monthly_session_planning.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra admin monthly session planning bằng fixture database cô lập. |
 | supabase/tests/admin_session_attendance_timesheets.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra admin session attendance timesheets bằng fixture database cô lập. |
@@ -309,10 +319,11 @@
 | supabase/tests/month_week_template_addition.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra month week template addition bằng fixture database cô lập. |
 | supabase/tests/month_week_template_replacement.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra month week template replacement bằng fixture database cô lập. |
 | supabase/tests/parallel_session_rooms.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra parallel session rooms bằng fixture database cô lập. |
+| supabase/tests/room_rentals.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra room rentals bằng fixture database cô lập. |
 | supabase/tests/schedule_reset.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra schedule reset bằng fixture database cô lập. |
 | supabase/tests/session_learning_commands.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra session learning commands bằng fixture database cô lập. |
 | supabase/tests/session_staff_timesheet_eligibility.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra session staff timesheet eligibility bằng fixture database cô lập. |
 | supabase/tests/student_future_session_roster_sync.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra student future session roster sync bằng fixture database cô lập. |
 | supabase/tests/timesheet_workflow.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra timesheet workflow bằng fixture database cô lập. |
 
-Tổng: 308 đường dẫn có trong inventory.
+Tổng: 319 đường dẫn có trong inventory.

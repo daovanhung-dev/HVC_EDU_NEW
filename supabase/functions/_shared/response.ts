@@ -26,9 +26,14 @@ export function fail(
   message: string,
   status = 400,
   id = traceId(),
+  details?: unknown,
 ): Response {
   return new Response(
-    JSON.stringify({ success: false, error: { code, message }, trace_id: id }),
+    JSON.stringify({
+      success: false,
+      error: { code, message, ...(details === undefined ? {} : { details }) },
+      trace_id: id,
+    }),
     {
       status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -57,6 +62,15 @@ const knownCodes = [
   "SESSION_NOT_IN_PROGRESS",
   "SESSION_STAFF_REQUIRED",
   "SESSION_TEACHER_REQUIRED",
+  "ROOM_RENTAL_CONFLICT",
+  "ROOM_RENTAL_NOT_FOUND",
+  "ROOM_RENTAL_NOT_BOOKED",
+  "ROOM_RENTAL_CANNOT_CHANGE_STARTED",
+  "ROOM_RENTAL_MONTH_TOO_LARGE",
+  "NO_FUTURE_OCCURRENCES",
+  "TEACHER_NOT_ACTIVE",
+  "ROOM_REQUIRED_FOR_OVERLAP",
+  "ROOM_ALREADY_BOOKED",
   "CLASS_MONTH_NOT_FOUND",
   "CLASS_MONTH_NOT_DRAFT",
   "CLASS_MONTH_NO_SCHEDULE",
@@ -111,7 +125,7 @@ const knownCodes = [
 
 const publicMessages: Record<string, string> = {
   UNAUTHENTICATED: "Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.",
-  INVALID_INPUT: "Dữ liệu tạo tài khoản không hợp lệ.",
+  INVALID_INPUT: "Dữ liệu không hợp lệ. Hãy kiểm tra lại các trường đã nhập.",
   INVALID_EMAIL: "Email không hợp lệ.",
   USERNAME_ALREADY_EXISTS: "Username đã tồn tại.",
   EMAIL_ALREADY_EXISTS: "Email đã được sử dụng.",
@@ -130,6 +144,15 @@ const publicMessages: Record<string, string> = {
   PARENT_LOGIN_DISABLED: "Đăng nhập phụ huynh đã ngừng hỗ trợ. Vui lòng dùng tài khoản học sinh của con.",
   SESSION_NOT_COMPLETED: "Chỉ có thể gửi chấm công sau khi buổi học hoàn thành.",
   SESSION_STAFF_REQUIRED: "Bạn không được phân công cho buổi học này.",
+  ROOM_RENTAL_CONFLICT: "Khung giờ/phòng bị trùng với lịch hiện có.",
+  ROOM_RENTAL_NOT_FOUND: "Không tìm thấy lượt thuê phòng.",
+  ROOM_RENTAL_NOT_BOOKED: "Lượt thuê này đã được hủy hoặc đã thay đổi. Hãy tải lại lịch.",
+  ROOM_RENTAL_CANNOT_CHANGE_STARTED: "Chỉ có thể đổi hoặc hủy lượt thuê chưa bắt đầu.",
+  ROOM_RENTAL_MONTH_TOO_LARGE: "Mẫu thuê tháng vượt quá 100 lượt.",
+  NO_FUTURE_OCCURRENCES: "Tháng đã chọn không còn ngày thuê trong tương lai.",
+  TEACHER_NOT_ACTIVE: "Chỉ giáo viên đang hoạt động mới có thể đứng tên thuê phòng.",
+  ROOM_REQUIRED_FOR_OVERLAP: "Các lịch trùng giờ cần có tên phòng để kiểm tra.",
+  ROOM_ALREADY_BOOKED: "Phòng này đã có lịch khác trong khung giờ được chọn.",
   TIMESHEET_NOT_FOUND: "Không tìm thấy bản ghi chấm công.",
   TIMESHEET_ALREADY_SUBMITTED: "Buổi học này đã được gửi chấm công.",
   TIMESHEET_NOT_PENDING: "Yêu cầu chấm công này đã được xử lý.",
@@ -270,13 +293,23 @@ export function fromError(
   const status = classified.code === "UNAUTHENTICATED"
     ? 401
     : classified.code === "FORBIDDEN" ||
+      classified.code === "ACCOUNT_INACTIVE" ||
       classified.code === "PARENT_LOGIN_DISABLED" ||
       classified.code === "PASSWORD_CHANGE_REQUIRED"
     ? 403
+    : classified.code === "ROOM_RENTAL_CONFLICT" ||
+        classified.code === "ROOM_REQUIRED_FOR_OVERLAP" ||
+        classified.code === "ROOM_ALREADY_BOOKED" ||
+        classified.code === "ROOM_RENTAL_NOT_BOOKED" ||
+        classified.code === "ROOM_RENTAL_CANNOT_CHANGE_STARTED"
+    ? 409
+    : classified.code === "ROOM_RENTAL_NOT_FOUND"
+    ? 404
     : classified.code === "INTERNAL_ERROR" ||
         classified.code === "ACCOUNT_ROLLBACK_FAILED"
     ? 500
     : 400;
+  const details = asErrorLike(error).details;
   return fail(
     classified.code,
     publicMessages[classified.code] ||
@@ -285,5 +318,6 @@ export function fromError(
         : "Không thể hoàn thành yêu cầu"),
     status,
     id,
+    details,
   );
 }

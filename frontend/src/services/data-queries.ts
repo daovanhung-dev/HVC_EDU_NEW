@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { AttendanceHistoryRow, ClassDetailRow, ClassMembershipDetailRow, ClassScheduleRow, SessionRow, StudentCurrentClass, StudentCurrentClassSummary, StudentHistoryRow, TimesheetRow } from '@/shared/types/domain'
+import type { AttendanceHistoryRow, ClassDetailRow, ClassMembershipDetailRow, ClassScheduleRow, RoomRental, SessionRow, StudentCurrentClass, StudentCurrentClassSummary, StudentHistoryRow, TimesheetRow } from '@/shared/types/domain'
 
 async function unwrap<T>(request: PromiseLike<{ data: T | null; error: Error | null }>): Promise<T> {
   const { data, error } = await request
@@ -309,6 +309,16 @@ export async function getMySessions(): Promise<SessionRow[]> {
         : assignment
     }),
   }))
+}
+
+export async function getRoomRentals(from?: string, to?: string): Promise<RoomRental[]> {
+  let query = supabase.from('room_rentals')
+    .select('id,staff_id,room,starts_at,ends_at,status,cancelled_at,staff(id,staff_code,full_name)')
+    .order('starts_at', { ascending: true })
+  if (from) query = query.gte('starts_at', from)
+  if (to) query = query.lt('starts_at', to)
+  const rows = await unwrap<any[]>(query)
+  return rows.map((row) => ({ ...row, staff: oneRelation(row.staff) }) as RoomRental)
 }
 
 async function loadTimesheets(): Promise<TimesheetRow[]> {

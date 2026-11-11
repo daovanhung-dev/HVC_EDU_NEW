@@ -3,12 +3,14 @@ import { supabase } from './supabase'
 export interface FunctionError {
   code: string
   message: string
+  details?: unknown
 }
 
 interface DomainError extends Error {
   code?: string
   traceId?: string
   status?: number
+  details?: unknown
 }
 
 export interface FunctionResponse<T> {
@@ -30,12 +32,14 @@ export async function invokeFunction<TInput extends object, TOutput>(
     domainError.code = context?.error?.code
     domainError.traceId = context?.trace_id
     domainError.status = error.context?.status
+    domainError.details = context?.error?.details
     throw domainError
   }
   if (!data?.success) {
     const domainError = new Error(data?.error?.message || 'Yêu cầu không thành công') as DomainError
     domainError.code = data?.error?.code
     domainError.traceId = data?.trace_id
+    domainError.details = data?.error?.details
     throw domainError
   }
   return data.data as TOutput

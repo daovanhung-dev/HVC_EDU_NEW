@@ -21,6 +21,9 @@ verify_jwt = true
 [functions.admin-session-attendance-finalize]
 verify_jwt = true
 
+[functions.admin-room-rentals]
+verify_jwt = true
+
 [auth]
 enabled = true
 site_url = "http://localhost:5173"
