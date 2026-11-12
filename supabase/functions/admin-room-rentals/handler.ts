@@ -5,13 +5,20 @@ import type {
   RoomRentalCaller,
   RoomRentalConflict,
   RoomRentalInput,
+  RoomRentalMonthRange,
   RoomRentalOccurrence,
   RoomRentalResult,
 } from "./types.ts";
 
 export interface RoomRentalsStore {
   create(input: RoomRentalOccurrence, staffId: string, actorUserId: string): Promise<RoomRentalResult>;
-  createMonth(occurrences: RoomRentalOccurrence[], staffId: string, actorUserId: string): Promise<RoomRentalResult>;
+  createMonth(
+    occurrences: RoomRentalOccurrence[],
+    staffId: string,
+    actorUserId: string,
+    range: RoomRentalMonthRange,
+    confirmedConflictKeys?: string[],
+  ): Promise<RoomRentalResult>;
   reschedule(input: RoomRentalOccurrence, rentalId: string, actorUserId: string): Promise<RoomRentalResult>;
   cancel(rentalId: string, actorUserId: string): Promise<RoomRentalResult>;
 }
@@ -108,13 +115,27 @@ export function createRoomRentalsHandler(dependencies: RoomRentalsDependencies) 
         }
         case "create_month": {
           const staffId = requireUuid(input.staff_id);
-          if (typeof input.month_start !== "string" || !Array.isArray(input.slots)) {
+          if (typeof input.month_start !== "string" || !Array.isArray(input.slots)
+            || (input.range !== undefined && !["FULL_MONTH", "REMAINING_MONTH"].includes(input.range))) {
             throw codedError("INVALID_INPUT");
           }
-          const occurrences = buildMonthRoomRentals(input.month_start, input.slots, now);
+          if (input.confirmed_conflict_keys !== undefined
+            && (!Array.isArray(input.confirmed_conflict_keys)
+              || input.confirmed_conflict_keys.length > 2000
+              || input.confirmed_conflict_keys.some((key) => typeof key !== "string" || key.length > 160))) {
+            throw codedError("INVALID_INPUT");
+          }
+          const range: RoomRentalMonthRange = input.range ?? "REMAINING_MONTH";
+          const occurrences = buildMonthRoomRentals(input.month_start, input.slots, now, range);
           const internalConflicts = findInternalRoomRentalConflicts(occurrences);
           if (internalConflicts.length) return conflictResponse(internalConflicts);
-          result = await store.createMonth(occurrences, staffId, caller.user.id);
+          result = await store.createMonth(
+            occurrences,
+            staffId,
+            caller.user.id,
+            range,
+            input.confirmed_conflict_keys,
+          );
           break;
         }
         case "reschedule": {

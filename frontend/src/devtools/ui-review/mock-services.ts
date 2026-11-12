@@ -291,7 +291,7 @@ export async function createRoomRentalMonth(input: any) {
       const jsDay = new Date(`${date}T00:00:00Z`).getUTCDay()
       if ((jsDay || 7) !== slot.day_of_week) continue
       const start = new Date(`${date}T${slot.start_time}:00+07:00`)
-      if (start <= new Date()) continue
+      if (input.range !== 'FULL_MONTH' && start <= new Date()) continue
       const row = {
         id: `qa-rental-${Date.now()}-${created.length}`,
         staff_id: input.staff_id,
@@ -306,7 +306,7 @@ export async function createRoomRentalMonth(input: any) {
     }
   }
   roomRentals.push(...created)
-  return { created_count: created.length, status: 'BOOKED' }
+  return { created_count: created.length, overwritten_count: 0, status: 'BOOKED' }
 }
 export async function rescheduleRoomRental(input: any) {
   await query(true)

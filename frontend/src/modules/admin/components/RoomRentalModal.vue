@@ -4,18 +4,17 @@ import FormModal from '@/app/components/FormModal.vue'
 import AppField from '@/app/components/AppField.vue'
 import type { RoomRental } from '@/shared/types/domain'
 import { formatBusinessDate, formatBusinessTime, getBusinessDateKey } from '@/shared/utils/session-calendar'
-import type { RoomRentalMonthSlotInput, RoomRentalOccurrenceInput } from '@/services/commands'
+import type {
+  RoomRentalConflictDetail,
+  RoomRentalMonthRange,
+  RoomRentalMonthSlotInput,
+  RoomRentalOccurrenceInput,
+} from '@/services/commands'
 
 interface TeacherOption {
   id: string
   full_name: string
   staff_code?: string | null
-}
-
-interface ConflictDetail {
-  date: string
-  room: string
-  reason: string
 }
 
 const props = withDefaults(defineProps<{
@@ -27,13 +26,20 @@ const props = withDefaults(defineProps<{
   defaultMonth: string
   busy?: boolean
   error?: string
-  conflicts?: ConflictDetail[]
+  conflicts?: RoomRentalConflictDetail[]
 }>(), { rental: null, busy: false, error: '', conflicts: () => [] })
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
   'create-single': [input: RoomRentalOccurrenceInput & { staff_id: string }]
-  'create-month': [input: { staff_id: string; month_start: string; slots: RoomRentalMonthSlotInput[] }]
+  'create-month': [input: {
+    staff_id: string
+    month_start: string
+    range: RoomRentalMonthRange
+    slots: RoomRentalMonthSlotInput[]
+    confirmed_conflict_keys?: string[]
+  }]
+  'clear-conflicts': []
   reschedule: [input: RoomRentalOccurrenceInput & { id: string }]
   cancel: [id: string]
 }>()
@@ -42,6 +48,7 @@ const formMode = ref<'single' | 'month'>('single')
 const staffId = ref('')
 const date = ref(props.defaultDate)
 const monthStart = ref(props.defaultMonth.slice(0, 7))
+const monthRange = ref<RoomRentalMonthRange>('REMAINING_MONTH')
 const startTime = ref('17:30')
 const endTime = ref('19:30')
 const room = ref('')
@@ -84,6 +91,7 @@ function resetFromProps() {
   staffId.value = props.rental?.staff_id || ''
   date.value = props.rental ? getBusinessDateKey(props.rental.starts_at) : firstFutureDate()
   monthStart.value = props.defaultMonth.slice(0, 7)
+  monthRange.value = 'REMAINING_MONTH'
   startTime.value = props.rental ? rentalDateTime(props.rental.starts_at) : '17:30'
   endTime.value = props.rental ? rentalDateTime(props.rental.ends_at) : '19:30'
   room.value = props.rental?.room || ''
@@ -96,15 +104,20 @@ watch(() => [props.modelValue, props.mode, props.rental?.id] as const, ([open]) 
 
 function addSlot() {
   slots.value.push({ clientId: ++slotSequence, day_of_week: 1, start_time: '17:30', end_time: '19:30', room: '' })
-  dirty.value = true
+  markDirty()
 }
 
 function removeSlot(clientId: number) {
   slots.value = slots.value.filter((slot) => slot.clientId !== clientId)
-  dirty.value = true
+  markDirty()
 }
 
-function submit() {
+function markDirty() {
+  dirty.value = true
+  if (props.conflicts.length || props.error) emit('clear-conflicts')
+}
+
+function submit(confirmedConflictKeys?: string[]) {
   if (!canSubmit.value) return
   dirty.value = false
   if (editing.value && props.rental) {
@@ -113,12 +126,42 @@ function submit() {
     emit('create-month', {
       staff_id: staffId.value,
       month_start: `${monthStart.value}-01`,
+      range: monthRange.value,
       slots: slots.value.map(({ day_of_week, start_time, end_time, room: slotRoom }) => ({ day_of_week, start_time, end_time, room: slotRoom })),
+      ...(confirmedConflictKeys ? { confirmed_conflict_keys: confirmedConflictKeys } : {}),
     })
   } else {
     emit('create-single', { staff_id: staffId.value, date: date.value, start_time: startTime.value, end_time: endTime.value, room: room.value })
   }
 }
+
+function confirmMonthConflicts() {
+  if (!props.conflicts.length || props.conflicts.some((conflict) => !conflict.can_override)) return
+  submit(props.conflicts.map((conflict) => conflict.key))
+}
+
+function conflictHeading(conflict: RoomRentalConflictDetail): string {
+  if (conflict.type === 'RENTAL') return `Lượt thuê của ${conflict.renter_name || 'giáo viên khác'}`
+  if (conflict.type === 'SESSION') return `Buổi học${conflict.class_name ? ` lớp ${conflict.class_name}` : ''}`
+  if (conflict.type === 'RECURRING_SCHEDULE') return `Lịch lặp${conflict.class_name ? ` lớp ${conflict.class_name}` : ''}`
+  if (conflict.type === 'REQUEST') return 'Hai khung giờ trong mẫu bị trùng'
+  return 'Lịch hiện có'
+}
+
+function conflictingTime(conflict: RoomRentalConflictDetail): string {
+  if (!conflict.conflict_starts_at || !conflict.conflict_ends_at) return ''
+  return `${formatBusinessTime(conflict.conflict_starts_at)}–${formatBusinessTime(conflict.conflict_ends_at)}`
+}
+
+const canConfirmConflicts = computed(() => props.conflicts.length > 0
+  && props.conflicts.every((conflict) => conflict.can_override))
+const hasRentalReplacement = computed(() => props.conflicts.some((conflict) => conflict.action === 'REPLACE_RENTAL'))
+const hasClassOverlap = computed(() => props.conflicts.some((conflict) => conflict.action === 'ALLOW_CLASS_OVERLAP'))
+const confirmLabel = computed(() => hasRentalReplacement.value && hasClassOverlap.value
+  ? 'Xác nhận và tạo lịch'
+  : hasRentalReplacement.value
+    ? 'Xác nhận ghi đè lịch thuê'
+    : 'Cho phép trùng lịch học và tạo')
 </script>
 
 <template>
@@ -129,18 +172,18 @@ function submit() {
     size="lg"
     :busy="busy"
     :dirty="dirty"
-    :submit-disabled="!canSubmit"
+    :submit-disabled="!canSubmit || (formMode === 'month' && conflicts.length > 0)"
     :submit-label="editing ? 'Lưu đổi lịch' : formMode === 'month' ? 'Tạo lịch tháng' : 'Tạo lượt thuê'"
     :submitting-label="'Đang lưu…'"
     @update:model-value="emit('update:modelValue', $event)"
-    @submit="submit"
+    @submit="submit()"
     @cancel="emit('update:modelValue', false)"
   >
-    <form class="row g-3" @submit.prevent="submit" @input="dirty = true" @change="dirty = true">
+    <form class="row g-3" @submit.prevent="submit()" @input="markDirty" @change="markDirty">
       <div v-if="!editing" class="col-12">
         <div class="btn-group" role="group" aria-label="Loại lịch thuê phòng">
-          <button type="button" class="btn" :class="formMode === 'single' ? 'btn-primary' : 'btn-outline-primary'" :aria-pressed="formMode === 'single'" @click="formMode = 'single'">Một lượt</button>
-          <button type="button" class="btn" :class="formMode === 'month' ? 'btn-primary' : 'btn-outline-primary'" :aria-pressed="formMode === 'month'" @click="formMode = 'month'">Theo tháng</button>
+          <button type="button" class="btn" :class="formMode === 'single' ? 'btn-primary' : 'btn-outline-primary'" :aria-pressed="formMode === 'single'" @click="formMode = 'single'; markDirty()">Một lượt</button>
+          <button type="button" class="btn" :class="formMode === 'month' ? 'btn-primary' : 'btn-outline-primary'" :aria-pressed="formMode === 'month'" @click="formMode = 'month'; markDirty()">Theo tháng</button>
         </div>
       </div>
 
@@ -182,10 +225,17 @@ function submit() {
         <AppField id="rental-month" class="col-md-6" label="Tháng áp dụng" required>
           <template #default="field"><input :id="field.id" v-model="monthStart" type="month" class="form-control" required :min="defaultDate.slice(0, 7)" /></template>
         </AppField>
+        <div class="col-12">
+          <span class="form-label d-block">Phạm vi áp dụng</span>
+          <div class="btn-group" role="group" aria-label="Phạm vi lịch thuê tháng">
+            <button type="button" class="btn" :class="monthRange === 'FULL_MONTH' ? 'btn-primary' : 'btn-outline-primary'" :aria-pressed="monthRange === 'FULL_MONTH'" @click="monthRange = 'FULL_MONTH'; markDirty()">Cả tháng</button>
+            <button type="button" class="btn" :class="monthRange === 'REMAINING_MONTH' ? 'btn-primary' : 'btn-outline-primary'" :aria-pressed="monthRange === 'REMAINING_MONTH'" @click="monthRange = 'REMAINING_MONTH'; markDirty()">Những ngày còn lại</button>
+          </div>
+        </div>
         <div class="col-12 d-flex justify-content-between align-items-center">
           <div>
             <h3 class="h6 mb-1">Khung giờ lặp trong tháng</h3>
-            <p class="small text-secondary mb-0">Mỗi dòng tạo lượt thuê vào các ngày trong tuần đã chọn.</p>
+            <p class="small text-secondary mb-0">{{ monthRange === 'FULL_MONTH' ? 'Tạo lượt vào mọi ngày khớp trong tháng, kể cả ngày đã qua.' : 'Tạo lượt chưa bắt đầu từ hôm nay đến hết tháng.' }}</p>
           </div>
           <button type="button" class="btn btn-sm btn-outline-primary" @click="addSlot">Thêm khung giờ</button>
         </div>
@@ -212,10 +262,23 @@ function submit() {
 
     <div v-if="error" class="alert alert-danger mt-3 mb-0" role="alert">{{ error }}</div>
     <div v-if="conflicts.length" class="alert alert-warning mt-3 mb-0" role="alert">
-      <strong>Các lượt dưới đây bị trùng nên chưa có lịch nào được tạo:</strong>
-      <ul class="mb-0 mt-2">
-        <li v-for="(conflict, index) in conflicts" :key="`${conflict.date}-${conflict.room}-${index}`">{{ formatBusinessDate(conflict.date) }} · Phòng {{ conflict.room }}</li>
+      <strong>Phát hiện {{ conflicts.length }} lịch trùng. Chưa có lượt nào được lưu:</strong>
+      <ul class="mb-2 mt-2">
+        <li v-for="conflict in conflicts" :key="conflict.key">
+          {{ formatBusinessDate(conflict.date) }} · {{ conflict.start_time }}–{{ conflict.end_time }} · Phòng {{ conflict.room }}
+          — {{ conflictHeading(conflict) }}<template v-if="conflictingTime(conflict)"> ({{ conflictingTime(conflict) }}<template v-if="conflict.conflict_room">, phòng {{ conflict.conflict_room }}</template>)</template>
+          <template v-if="['SESSION', 'RECURRING_SCHEDULE'].includes(conflict.type) && !conflict.conflict_room"> · Phòng của lịch học chưa khai báo</template>
+          <template v-if="conflict.teacher_names?.length"> · GV: {{ conflict.teacher_names.join(', ') }}</template>
+          <template v-if="conflict.action === 'REPLACE_RENTAL'"> · Có thể ghi đè lượt thuê</template>
+          <template v-else-if="conflict.action === 'ALLOW_CLASS_OVERLAP'"> · Đúng giáo viên của lớp, có thể cho phép trùng</template>
+          <template v-else> · Không thể ghi đè</template>
+        </li>
       </ul>
+      <div v-if="canConfirmConflicts" class="d-flex flex-wrap align-items-center gap-2">
+        <span class="small">Xác nhận sẽ cập nhật lượt thuê đang trùng và/hoặc giữ nguyên buổi học cùng giáo viên, lớp.</span>
+        <button type="button" class="btn btn-sm btn-warning" :disabled="busy" @click="confirmMonthConflicts">{{ confirmLabel }}</button>
+      </div>
+      <p v-else class="small mb-0">Có xung đột không đủ điều kiện ghi đè. Hãy chỉnh khung giờ hoặc phòng rồi kiểm tra lại.</p>
     </div>
 
     <template v-if="editing" #footer>

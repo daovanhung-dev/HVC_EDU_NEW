@@ -21,13 +21,34 @@ function request(body: unknown, method = "POST") {
 function dependencies(options: {
   role?: string;
   status?: string;
+  now?: Date;
   store?: Partial<RoomRentalsStore>;
 } = {}) {
-  const calls = { auth: 0, stores: 0, create: 0, createMonth: 0, reschedule: 0, cancel: 0 };
+  const calls: {
+    auth: number;
+    stores: number;
+    create: number;
+    createMonth: number;
+    createMonthRange: string | null;
+    confirmedConflictKeys: string[] | undefined;
+    reschedule: number;
+    cancel: number;
+  } = {
+    auth: 0,
+    stores: 0,
+    create: 0,
+    createMonth: 0,
+    createMonthRange: null,
+    confirmedConflictKeys: undefined,
+    reschedule: 0,
+    cancel: 0,
+  };
   const store: RoomRentalsStore = {
     create: async () => { calls.create += 1; return { rental_id: QA_RENTAL, status: "BOOKED" }; },
-    createMonth: async (occurrences) => {
+    createMonth: async (occurrences, _staffId, _actorUserId, range, confirmedConflictKeys) => {
       calls.createMonth += 1;
+      calls.createMonthRange = range;
+      calls.confirmedConflictKeys = confirmedConflictKeys;
       return { created_count: occurrences.length, status: "BOOKED" };
     },
     reschedule: async () => { calls.reschedule += 1; return { rental_id: QA_RENTAL, status: "BOOKED" }; },
@@ -43,7 +64,7 @@ function dependencies(options: {
       };
     },
     getStore: () => { calls.stores += 1; return store; },
-    now: () => new Date(FIXED_NOW),
+    now: () => new Date(options.now ?? FIXED_NOW),
   };
   return { calls, handler: createRoomRentalsHandler(deps) };
 }
@@ -74,6 +95,64 @@ Deno.test("monthly template expands future weekdays and saves as one batch", asy
   const body = await response.json();
   assert(response.status === 200 && body.data.created_count === 4, "December Mondays should expand to four future bookings");
   assert(calls.createMonth === 1 && calls.create === 0, "monthly request should use the batch operation");
+});
+
+Deno.test("full-month range includes elapsed occurrences in the selected month", async () => {
+  const { calls, handler } = dependencies();
+  const response = await handler(request({
+    operation: "create_month",
+    staff_id: QA_TEACHER,
+    month_start: "2026-11-01",
+    range: "FULL_MONTH",
+    slots: [{ day_of_week: 1, start_time: "09:00", end_time: "10:00", room: "QA-A1" }],
+  }));
+  const body = await response.json();
+  assert(response.status === 200 && body.data.created_count === 5, "all five November Mondays should be included");
+  assert(calls.createMonthRange === "FULL_MONTH", "the full-month range should reach the store");
+});
+
+Deno.test("remaining-month skips a started slot today but keeps a later slot today", async () => {
+  const now = new Date("2026-11-12T12:30:00+07:00");
+  const slots = [
+    { day_of_week: 4, start_time: "11:00", end_time: "12:00", room: "QA-A1" },
+    { day_of_week: 4, start_time: "13:00", end_time: "14:00", room: "QA-A2" },
+  ];
+  const remaining = dependencies({ now });
+  const remainingResponse = await remaining.handler(request({
+    operation: "create_month",
+    staff_id: QA_TEACHER,
+    month_start: "2026-11-01",
+    range: "REMAINING_MONTH",
+    slots,
+  }));
+  const remainingBody = await remainingResponse.json();
+  assert(remainingBody.data.created_count === 5, "only later starts today and the remaining Thursday slots should be included");
+
+  const full = dependencies({ now });
+  const fullResponse = await full.handler(request({
+    operation: "create_month",
+    staff_id: QA_TEACHER,
+    month_start: "2026-11-01",
+    range: "FULL_MONTH",
+    slots,
+  }));
+  const fullBody = await fullResponse.json();
+  assert(fullBody.data.created_count === 8, "full month should also include the already-started slot today and earlier Thursdays");
+});
+
+Deno.test("the confirmed conflict keys are forwarded for transaction revalidation", async () => {
+  const confirmed = ["RENTAL:qa-rental-id:occurrence"];
+  const { calls, handler } = dependencies();
+  const response = await handler(request({
+    operation: "create_month",
+    staff_id: QA_TEACHER,
+    month_start: "2026-12-01",
+    range: "REMAINING_MONTH",
+    confirmed_conflict_keys: confirmed,
+    slots: [{ day_of_week: 1, start_time: "09:00", end_time: "10:00", room: "QA-A1" }],
+  }));
+  assert(response.status === 200, "valid confirmation payload should dispatch");
+  assert(calls.confirmedConflictKeys?.[0] === confirmed[0], "confirmation keys should be forwarded unchanged");
 });
 
 Deno.test("monthly internal room overlap rejects the whole request and returns dates", async () => {
@@ -116,7 +195,7 @@ Deno.test("invalid dates, non-future times, and empty months do not write", asyn
     slots: [{ day_of_week: 1, start_time: "09:00", end_time: "10:00", room: "QA-A1" }],
   }));
   const body = await emptyMonth.json();
-  assert(emptyMonth.status === 400 && body.error.code === "NO_FUTURE_OCCURRENCES", "month without future dates should be rejected");
+  assert(emptyMonth.status === 400 && body.error.code === "NO_REMAINING_OCCURRENCES", "remaining-month request without future dates should be rejected");
   assert(calls.create === 0 && calls.createMonth === 0, "invalid requests should not write");
 });
 

@@ -1,5 +1,6 @@
 import type {
   RoomRentalConflict,
+  RoomRentalMonthRange,
   RoomRentalMonthSlot,
   RoomRentalOccurrence,
   RoomRentalOccurrenceInput,
@@ -71,11 +72,17 @@ export function buildMonthRoomRentals(
   monthStart: string,
   slots: RoomRentalMonthSlot[],
   now = new Date(),
+  range: RoomRentalMonthRange = "REMAINING_MONTH",
 ): RoomRentalOccurrence[] {
   if (!validDate(monthStart) || !monthStart.endsWith("-01")
-    || !Array.isArray(slots) || slots.length === 0 || slots.length > 100) {
+    || !Array.isArray(slots) || slots.length === 0 || slots.length > 100
+    || !["FULL_MONTH", "REMAINING_MONTH"].includes(range)) {
     throw codedError("INVALID_INPUT");
   }
+
+  const businessNow = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+  const currentBusinessMonth = businessNow.toISOString().slice(0, 7);
+  if (monthStart.slice(0, 7) < currentBusinessMonth) throw codedError("INVALID_INPUT");
 
   const [year, month] = monthStart.split("-").map(Number);
   const monthLength = new Date(Date.UTC(year, month, 0)).getUTCDate();
@@ -100,7 +107,7 @@ export function buildMonthRoomRentals(
       if (isoDay !== slot.day_of_week) continue;
       const start = new Date(`${date}T${slot.start_time}:00+07:00`);
       const end = new Date(`${date}T${slot.end_time}:00+07:00`);
-      if (start <= now) continue;
+      if (range === "REMAINING_MONTH" && start <= now) continue;
       occurrences.push({
         date,
         start_time: slot.start_time,
@@ -114,7 +121,9 @@ export function buildMonthRoomRentals(
       }
     }
   }
-  if (!occurrences.length) throw codedError("NO_FUTURE_OCCURRENCES");
+  if (!occurrences.length) {
+    throw codedError(range === "FULL_MONTH" ? "NO_MONTH_OCCURRENCES" : "NO_REMAINING_OCCURRENCES");
+  }
   return occurrences.sort((left, right) => left.starts_at.localeCompare(right.starts_at));
 }
 
@@ -131,10 +140,25 @@ export function findInternalRoomRentalConflicts(
       if (current.date !== other.date
         || current.room.trim().toLocaleLowerCase() !== other.room.trim().toLocaleLowerCase()
         || current.starts_at >= other.ends_at || current.ends_at <= other.starts_at) continue;
-      const key = `${current.date}:${current.room.trim().toLocaleLowerCase()}`;
+      const key = `REQUEST:${current.date}:${current.start_time}:${current.end_time}:${current.room.trim().toLocaleLowerCase()}:${other.start_time}:${other.end_time}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      conflicts.push({ date: current.date, room: current.room, reason: "DUPLICATE_REQUEST" });
+      conflicts.push({
+        key,
+        type: "REQUEST",
+        date: current.date,
+        start_time: current.start_time,
+        end_time: current.end_time,
+        starts_at: current.starts_at,
+        ends_at: current.ends_at,
+        room: current.room,
+        reason: "DUPLICATE_REQUEST",
+        action: null,
+        can_override: false,
+        conflict_starts_at: other.starts_at,
+        conflict_ends_at: other.ends_at,
+        conflict_room: other.room,
+      });
     }
   }
   return conflicts;

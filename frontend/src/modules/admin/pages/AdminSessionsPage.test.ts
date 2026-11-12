@@ -345,7 +345,7 @@ describe('AdminSessionsPage calendar', () => {
       deleted_payroll_items: 1,
     })
     mockState.createRoomRental.mockReset().mockResolvedValue({ rental_id: 'qa-rental-created', status: 'BOOKED' })
-    mockState.createRoomRentalMonth.mockReset().mockResolvedValue({ created_count: 4, status: 'BOOKED' })
+    mockState.createRoomRentalMonth.mockReset().mockResolvedValue({ created_count: 4, overwritten_count: 0, status: 'BOOKED' })
     mockState.rescheduleRoomRental.mockReset().mockResolvedValue({ rental_id: 'qa-rental-1', status: 'BOOKED' })
     mockState.cancelRoomRental.mockReset().mockResolvedValue({ rental_id: 'qa-rental-1', status: 'CANCELLED' })
     mockState.toastSuccess.mockReset()
@@ -1795,6 +1795,126 @@ describe('AdminSessionsPage calendar', () => {
       staff_id: 'qa-teacher-1', date, start_time: '17:30', end_time: '19:00', room: 'QA-Room-Rental',
     })
     expect(mockState.toastSuccess).toHaveBeenCalledWith('Đã tạo lượt thuê phòng.')
+  })
+
+  it('submits the selected full-month range, including elapsed dates', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Thuê phòng')
+    await flushPromises()
+    await getPageOrBody(wrapper, '#rental-staff').setValue('qa-teacher-1')
+    await clickButtonWithText(wrapper, 'Theo tháng')
+    await getPageOrBody(wrapper, '#rental-month').setValue(getBusinessDateKey(new Date()).slice(0, 7))
+    await clickButtonWithText(wrapper, 'Cả tháng')
+    await getPageOrBody(wrapper, '#rental-slot-room-1').setValue('QA-Room-Month')
+    await getPageOrBody(wrapper, '#rental-slot-start-1').setValue('09:00')
+    await getPageOrBody(wrapper, '#rental-slot-end-1').setValue('10:00')
+    await clickButtonWithText(wrapper, 'Tạo lịch tháng')
+    await flushPromises()
+
+    expect(mockState.createRoomRentalMonth).toHaveBeenCalledWith({
+      staff_id: 'qa-teacher-1',
+      month_start: `${getBusinessDateKey(new Date()).slice(0, 7)}-01`,
+      range: 'FULL_MONTH',
+      slots: [{ day_of_week: 1, start_time: '09:00', end_time: '10:00', room: 'QA-Room-Month' }],
+    })
+  })
+
+  it('shows exact eligible conflicts and requires explicit confirmation before overwriting', async () => {
+    const date = addCalendarDays(getBusinessDateKey(new Date()), 1)
+    const key = `RENTAL:qa-existing-rental:${date}`
+    const conflict = {
+      key,
+      type: 'RENTAL' as const,
+      date,
+      start_time: '09:00',
+      end_time: '10:00',
+      starts_at: `${date}T02:00:00.000Z`,
+      ends_at: `${date}T03:00:00.000Z`,
+      room: 'QA-Room-Month',
+      reason: 'BOOKED_RENTAL',
+      action: 'REPLACE_RENTAL' as const,
+      can_override: true,
+      conflict_id: 'qa-existing-rental',
+      conflict_starts_at: `${date}T02:00:00+00:00`,
+      conflict_ends_at: `${date}T03:00:00+00:00`,
+      conflict_room: 'QA-Room-Month',
+      renter_name: 'Giáo viên QA cũ',
+    }
+    const error = Object.assign(new Error('ROOM_RENTAL_CONFLICT'), {
+      code: 'ROOM_RENTAL_CONFLICT',
+      details: [conflict],
+    })
+    mockState.createRoomRentalMonth.mockRejectedValueOnce(error)
+
+    const wrapper = mountPage()
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Thuê phòng')
+    await flushPromises()
+    await getPageOrBody(wrapper, '#rental-staff').setValue('qa-teacher-1')
+    await clickButtonWithText(wrapper, 'Theo tháng')
+    await getPageOrBody(wrapper, '#rental-slot-room-1').setValue('QA-Room-Month')
+    await getPageOrBody(wrapper, '#rental-slot-start-1').setValue('09:00')
+    await getPageOrBody(wrapper, '#rental-slot-end-1').setValue('10:00')
+    await clickButtonWithText(wrapper, 'Tạo lịch tháng')
+    await flushPromises()
+
+    expect(pageAndBodyText(wrapper)).toContain('Lượt thuê của Giáo viên QA cũ')
+    expect(pageAndBodyText(wrapper)).toContain('Có thể ghi đè lượt thuê')
+    expect(pageAndBodyText(wrapper)).toContain('Xác nhận ghi đè lịch thuê')
+    await clickButtonWithText(wrapper, 'Xác nhận ghi đè lịch thuê')
+    await flushPromises()
+
+    expect(mockState.createRoomRentalMonth).toHaveBeenCalledTimes(2)
+    expect(mockState.createRoomRentalMonth).toHaveBeenLastCalledWith(expect.objectContaining({ confirmed_conflict_keys: [key] }))
+  })
+
+  it('labels a matching class overlap separately and confirms it without changing the class event', async () => {
+    const date = addCalendarDays(getBusinessDateKey(new Date()), 1)
+    const key = `SESSION:qa-session:${date}`
+    const conflict = {
+      key,
+      type: 'SESSION' as const,
+      date,
+      start_time: '15:00',
+      end_time: '16:00',
+      starts_at: `${date}T08:00:00.000Z`,
+      ends_at: `${date}T09:00:00.000Z`,
+      room: 'QA-Room-Month',
+      reason: 'SAME_CLASS_TEACHER',
+      action: 'ALLOW_CLASS_OVERLAP' as const,
+      can_override: true,
+      conflict_id: 'qa-session',
+      conflict_starts_at: `${date}T08:00:00+00:00`,
+      conflict_ends_at: `${date}T09:00:00+00:00`,
+      conflict_room: 'QA-Room-Month',
+      class_name: 'Lớp Toán QA',
+      teacher_names: ['Giáo viên QA 1'],
+    }
+    mockState.createRoomRentalMonth.mockRejectedValueOnce(Object.assign(new Error('ROOM_RENTAL_CONFLICT'), {
+      code: 'ROOM_RENTAL_CONFLICT',
+      details: [conflict],
+    }))
+
+    const wrapper = mountPage()
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Thuê phòng')
+    await flushPromises()
+    await getPageOrBody(wrapper, '#rental-staff').setValue('qa-teacher-1')
+    await clickButtonWithText(wrapper, 'Theo tháng')
+    await getPageOrBody(wrapper, '#rental-slot-room-1').setValue('QA-Room-Month')
+    await getPageOrBody(wrapper, '#rental-slot-start-1').setValue('15:00')
+    await getPageOrBody(wrapper, '#rental-slot-end-1').setValue('16:00')
+    await clickButtonWithText(wrapper, 'Tạo lịch tháng')
+    await flushPromises()
+
+    expect(pageAndBodyText(wrapper)).toContain('Buổi học lớp Lớp Toán QA')
+    expect(pageAndBodyText(wrapper)).toContain('GV: Giáo viên QA 1')
+    await clickButtonWithText(wrapper, 'Cho phép trùng lịch học và tạo')
+    await flushPromises()
+
+    expect(mockState.createRoomRentalMonth).toHaveBeenCalledTimes(2)
+    expect(mockState.createRoomRentalMonth).toHaveBeenLastCalledWith(expect.objectContaining({ confirmed_conflict_keys: [key] }))
   })
 
   it('reschedules and cancels only a selected future rental occurrence', async () => {

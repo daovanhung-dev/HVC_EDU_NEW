@@ -35,6 +35,7 @@ import {
 } from '@/services/commands'
 import type {
   DeleteSessionPreview,
+  RoomRentalConflictDetail,
   MonthWeekScheduleImportPreview,
   MonthWeekTemplateAdditionPreview,
   MonthWeekTemplateAdditionMatch,
@@ -169,7 +170,7 @@ const roomRentalModalOpen = ref(false)
 const roomRentalBusy = ref(false)
 const roomRentalError = ref('')
 const roomRentalLoadError = ref('')
-const roomRentalConflicts = ref<Array<{ date: string; room: string; reason: string }>>([])
+const roomRentalConflicts = ref<RoomRentalConflictDetail[]>([])
 const roomRentalEditing = ref<RoomRental | null>(null)
 const roomRentalDefaultDate = ref(getBusinessDateKey(new Date()))
 const roomRentalRequestVersion = ref(0)
@@ -641,13 +642,27 @@ function setEventFilter(value: EventFilter) {
   if (value === 'rentals') showAttendedSessions.value = false
 }
 
-function errorDetails(error: unknown): Array<{ date: string; room: string; reason: string }> {
+function errorDetails(error: unknown): RoomRentalConflictDetail[] {
   if (!error || typeof error !== 'object') return []
   const details = (error as { details?: unknown }).details
   if (!Array.isArray(details)) return []
-  return details.filter((row): row is { date: string; room: string; reason: string } =>
-    !!row && typeof row === 'object' && typeof row.date === 'string' && typeof row.room === 'string'
-      && typeof row.reason === 'string')
+  return details.filter((row): row is RoomRentalConflictDetail =>
+    !!row && typeof row === 'object'
+      && typeof row.key === 'string'
+      && typeof row.type === 'string'
+      && typeof row.date === 'string'
+      && typeof row.start_time === 'string'
+      && typeof row.end_time === 'string'
+      && typeof row.starts_at === 'string'
+      && typeof row.ends_at === 'string'
+      && typeof row.room === 'string'
+      && typeof row.reason === 'string'
+      && typeof row.can_override === 'boolean')
+}
+
+function clearRoomRentalConflicts() {
+  roomRentalError.value = ''
+  roomRentalConflicts.value = []
 }
 
 async function saveRoomRental(input: Parameters<typeof createRoomRental>[0]) {
@@ -676,7 +691,9 @@ async function saveRoomRentalMonth(input: Parameters<typeof createRoomRentalMont
     const result = await createRoomRentalMonth(input)
     roomRentalModalOpen.value = false
     calendarAnchorDate.value = input.month_start
-    toast.success(`Đã tạo ${result.created_count} lượt thuê phòng trong tháng.`)
+    const createdCount = result.created_count || 0
+    const overwrittenCount = result.overwritten_count || 0
+    toast.success(`Đã tạo ${createdCount} lượt mới và ghi đè ${overwrittenCount} lượt thuê trùng.`)
     await load()
   } catch (error) {
     roomRentalError.value = userErrorMessage(error, 'Không thể tạo lịch thuê phòng trong tháng.')
@@ -2404,6 +2421,7 @@ watch(sessionFormIsBackdated, (isBackdated) => {
     :busy="roomRentalBusy"
     :error="roomRentalError"
     :conflicts="roomRentalConflicts"
+    @clear-conflicts="clearRoomRentalConflicts"
     @create-single="saveRoomRental"
     @create-month="saveRoomRentalMonth"
     @reschedule="changeRoomRentalSchedule"

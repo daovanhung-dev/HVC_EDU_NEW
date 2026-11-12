@@ -16,6 +16,30 @@ export interface RoomRentalMonthSlotInput {
   room: string
 }
 
+export type RoomRentalMonthRange = 'FULL_MONTH' | 'REMAINING_MONTH'
+
+export interface RoomRentalConflictDetail {
+  key: string
+  type: 'REQUEST' | 'RENTAL' | 'SESSION' | 'RECURRING_SCHEDULE' | 'UNKNOWN'
+  date: string
+  start_time: string
+  end_time: string
+  starts_at: string
+  ends_at: string
+  room: string
+  reason: string
+  action: 'REPLACE_RENTAL' | 'ALLOW_CLASS_OVERLAP' | null
+  can_override: boolean
+  conflict_id?: string
+  conflict_starts_at?: string
+  conflict_ends_at?: string
+  conflict_room?: string | null
+  class_id?: string | null
+  class_name?: string | null
+  teacher_names?: string[]
+  renter_name?: string | null
+}
+
 export function createRoomRental(input: RoomRentalOccurrenceInput & { staff_id: string }) {
   return invokeFunction<typeof input, { rental_id: string; status: 'BOOKED' }>('admin-room-rentals', {
     operation: 'create_single',
@@ -26,9 +50,11 @@ export function createRoomRental(input: RoomRentalOccurrenceInput & { staff_id: 
 export function createRoomRentalMonth(input: {
   staff_id: string
   month_start: string
+  range: RoomRentalMonthRange
   slots: RoomRentalMonthSlotInput[]
+  confirmed_conflict_keys?: string[]
 }) {
-  return invokeFunction<typeof input & { operation: 'create_month' }, { created_count: number; status: 'BOOKED' }>(
+  return invokeFunction<typeof input & { operation: 'create_month' }, { created_count: number; overwritten_count: number; status: 'BOOKED' }>(
     'admin-room-rentals', { operation: 'create_month', ...input },
   )
 }

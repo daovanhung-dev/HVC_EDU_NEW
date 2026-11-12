@@ -36,7 +36,7 @@ Import assessment có thể giữ hàng nguồn kể cả khi chưa có attendan
 
 ## Lịch sử migration trong repo
 
-Migration phải được đọc theo thứ tự và kiểm tra migration sau có `CREATE OR REPLACE`, revoke/grant hoặc thay đổi cùng object. Các RPC trong phần này là lịch sử schema/implementation legacy; không tạo hoặc gọi chúng cho thay đổi mới. Hiện repo có `0001–0066`:
+Migration phải được đọc theo thứ tự và kiểm tra migration sau có `CREATE OR REPLACE`, revoke/grant hoặc thay đổi cùng object. Các RPC trong phần này là lịch sử schema/implementation legacy; không tạo hoặc gọi chúng cho thay đổi mới. Hiện repo có `0001–0067`:
 
 - `0001–0006`: extension, enum, Auth/profile, RBAC, hồ sơ student/staff và danh mục học thuật/lớp.
 - `0007–0019`: mô hình ClassMonth/session/attendance/timesheet và các bảng tài chính/notification/audit/function/RLS/index/seed của giai đoạn đầu. Phần tháng và tài chính hiện là lịch sử hoặc bị khóa khỏi app.
@@ -61,6 +61,7 @@ Migration phải được đọc theo thứ tự và kiểm tra migration sau c�
 - `0064`: lịch sử thêm RPC preview/apply lịch mẫu theo tháng; chỉ cập nhật buổi trùng tương lai đủ điều kiện, bảo toàn lịch cũ và lịch sử, kiểm tra xung đột trong cùng transaction, đồng thời không đặt override toàn tháng cho lịch lặp.
 - `0065`: gỡ hai RPC template và planner bền vững; luồng thêm lịch mẫu hiện dùng Edge Function `admin-month-week-template-addition` với transaction PostgreSQL trực tiếp.
 - `0066`: thêm `room_rentals`, RLS đọc Admin, trigger chặn xung đột với buổi/lịch lặp/lượt thuê, và kiểm tra ngược khi ghi lịch lớp; Edge Function `admin-room-rentals` xử lý tạo đơn/mẫu tháng, đổi lịch, hủy mềm và audit trong transaction.
+- `0067`: cho phép giao dịch tạo mẫu tháng lưu ngày đã qua theo quyền transaction-local; trigger vẫn chặn lịch lớp khác giáo viên và chỉ cho xung đột lớp cùng giáo viên khi Edge Function đã nhận xác nhận. Lịch thuê trùng được cập nhật tại chỗ và audit trước/sau.
 
 Không sửa, xóa hoặc đổi số migration đã có thể chạy ở môi trường khác. Thay đổi schema bằng migration tiếp theo. Migration production cần nằm trong phạm vi công việc và phải kiểm tra target/backup/migration history trực tiếp; local test không cần áp vào production.
 
