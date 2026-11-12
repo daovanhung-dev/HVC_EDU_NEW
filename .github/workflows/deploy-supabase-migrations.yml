@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy_production:
-        description: Apply pending migrations 0061 through 0065 after tests pass. A recovery point is required unless the one-run override is selected; production must have exactly those five migrations pending.
+        description: Apply pending migrations 0061 through 0066 and deploy admin-room-rentals after tests pass. A recovery point is required unless the one-run override is selected; production must have exactly those six migrations pending.
         required: false
         type: boolean
         default: false
@@ -103,6 +103,10 @@ jobs:
             supabase/functions/admin-month-week-template-addition/database.integration.test.ts
       - name: Test eligibility access control
         run: supabase test db --local supabase/tests/session_staff_timesheet_eligibility.test.sql
+      - name: Test room rental database rules
+        run: supabase test db --local supabase/tests/room_rentals.test.sql
+      - name: Test room rental Edge Function
+        run: deno test --config supabase/functions/admin-room-rentals/deno.json --allow-all supabase/functions/admin-room-rentals/handler.test.ts
 
   deploy:
     needs: test
@@ -130,9 +134,9 @@ jobs:
           dry_run="$(supabase db push --linked --dry-run --skip-vault 2>&1)"
           printf '%s\n' "$dry_run"
           pending="$(printf '%s\n' "$dry_run" | grep -Eo '[0-9]{4}_[a-z0-9_]+' | sort -u || true)"
-          expected=$'0061_admin_completed_session_correction\n0062_admin_session_completion_and_delete\n0063_admin_membership_start_date_sync\n0064_add_month_week_template\n0065_remove_month_template_addition_rpcs'
+          expected=$'0061_admin_completed_session_correction\n0062_admin_session_completion_and_delete\n0063_admin_membership_start_date_sync\n0064_add_month_week_template\n0065_remove_month_template_addition_rpcs\n0066_room_rentals'
           if [[ "$pending" != "$expected" ]]; then
-            echo "Refusing to push: expected only migrations 0061 through 0065 to be pending." >&2
+            echo "Refusing to push: expected only migrations 0061 through 0066 to be pending." >&2
             exit 1
           fi
       - name: Verify recovery point or explicit one-run override
@@ -163,6 +167,27 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      - name: Deploy room rental Edge Function
+        run: supabase functions deploy admin-room-rentals --project-ref dtftytlyaqmxjgynicqs
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      - name: Verify room rental database and Edge Function
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          schema_state="$(supabase db query --linked --output-format json "select to_regclass('public.room_rentals') is not null as table_exists, to_regprocedure('public.room_rental_conflict_reason(uuid,timestamp with time zone,timestamp with time zone,text)') is not null as conflict_check_exists;")"
+          printf '%s\n' "$schema_state"
+          table_exists="$(printf '%s' "$schema_state" | jq -r '.rows[0].table_exists // false')"
+          conflict_check_exists="$(printf '%s' "$schema_state" | jq -r '.rows[0].conflict_check_exists // false')"
+          if [[ "$table_exists" != "true" || "$conflict_check_exists" != "true" ]]; then
+            echo "Refusing to report success: room rental schema is incomplete." >&2
+            exit 1
+          fi
+          function_state="$(supabase functions list --project-ref dtftytlyaqmxjgynicqs --output-format json)"
+          printf '%s' "$function_state" | jq -e '.functions | any(.[]; .slug == "admin-room-rentals" and .status == "ACTIVE" and .verify_jwt == true)' >/dev/null
       - name: Verify remote migration history
         run: supabase migration list --linked
         env:
