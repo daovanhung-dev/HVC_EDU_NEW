@@ -42,6 +42,7 @@ const emit = defineEmits<{
   'clear-conflicts': []
   reschedule: [input: RoomRentalOccurrenceInput & { id: string }]
   cancel: [id: string]
+  delete: [id: string]
 }>()
 
 const formMode = ref<'single' | 'month'>('single')
@@ -53,16 +54,30 @@ const startTime = ref('17:30')
 const endTime = ref('19:30')
 const room = ref('')
 const dirty = ref(false)
-const confirmCancel = ref(false)
+const confirmationAction = ref<'cancel' | 'delete' | ''>('')
 let slotSequence = 0
 const weekdayOptions = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy', 'Chủ nhật']
 const slots = ref<Array<RoomRentalMonthSlotInput & { clientId: number }>>([])
 
 const editing = computed(() => props.mode === 'edit' && !!props.rental)
-const title = computed(() => editing.value ? 'Đổi lịch thuê phòng' : 'Thuê phòng')
+const canChangeRental = computed(() => editing.value
+  && props.rental?.status === 'BOOKED'
+  && new Date(props.rental.starts_at).getTime() > Date.now())
+const title = computed(() => !editing.value
+  ? 'Thuê phòng'
+  : canChangeRental.value ? 'Đổi lịch thuê phòng' : 'Chi tiết lượt thuê phòng')
+const rentalStatusLabel = computed(() => props.rental?.status === 'CANCELLED' ? 'Đã hủy' : 'Đã đặt')
+const rentalTeacherName = computed(() => props.rental?.staff?.full_name
+  || teachers.find((teacher) => teacher.id === props.rental?.staff_id)?.full_name
+  || 'Giáo viên')
+const rentalSummary = computed(() => {
+  const rental = props.rental
+  if (!rental) return ''
+  return `${rentalTeacherName.value} · ${formatBusinessDate(getBusinessDateKey(rental.starts_at))} · ${rentalDateTime(rental.starts_at)}–${rentalDateTime(rental.ends_at)} · ${rental.room} · ${rentalStatusLabel.value}`
+})
 const canSubmit = computed(() => {
-  if (props.busy) return false
-  if (editing.value) return !!date.value && !!startTime.value && !!endTime.value && !!room.value.trim() && endTime.value > startTime.value
+  if (props.busy || confirmationAction.value !== '') return false
+  if (editing.value) return canChangeRental.value && !!date.value && !!startTime.value && !!endTime.value && !!room.value.trim() && endTime.value > startTime.value
   if (!staffId.value) return false
   if (formMode.value === 'single') return !!date.value && !!startTime.value && !!endTime.value && !!room.value.trim() && endTime.value > startTime.value
   return !!monthStart.value && slots.value.length > 0 && slots.value.every((slot) => !!slot.room.trim() && !!slot.start_time && !!slot.end_time && slot.end_time > slot.start_time)
@@ -86,7 +101,7 @@ function firstFutureDate() {
 
 function resetFromProps() {
   dirty.value = false
-  confirmCancel.value = false
+  confirmationAction.value = ''
   formMode.value = 'single'
   staffId.value = props.rental?.staff_id || ''
   date.value = props.rental ? getBusinessDateKey(props.rental.starts_at) : firstFutureDate()
@@ -140,6 +155,19 @@ function confirmMonthConflicts() {
   submit(props.conflicts.map((conflict) => conflict.key))
 }
 
+function beginConfirmation(action: 'cancel' | 'delete') {
+  confirmationAction.value = action
+}
+
+function confirmRentalAction() {
+  if (!props.rental || props.busy) return
+  if (confirmationAction.value === 'cancel' && canChangeRental.value) {
+    emit('cancel', props.rental.id)
+  } else if (confirmationAction.value === 'delete') {
+    emit('delete', props.rental.id)
+  }
+}
+
 function conflictHeading(conflict: RoomRentalConflictDetail): string {
   if (conflict.type === 'RENTAL') return `Lượt thuê của ${conflict.renter_name || 'giáo viên khác'}`
   if (conflict.type === 'SESSION') return `Buổi học${conflict.class_name ? ` lớp ${conflict.class_name}` : ''}`
@@ -168,7 +196,7 @@ const confirmLabel = computed(() => hasRentalReplacement.value && hasClassOverla
   <FormModal
     :model-value="modelValue"
     :title="title"
-    :description="editing ? 'Chỉ đổi ngày, giờ và phòng của lượt này. Các lượt khác trong mẫu tháng không bị thay đổi.' : 'Lưu người thuê, phòng và thời gian. Lịch thuê không tạo điểm danh hoặc hồ sơ lớp học.'"
+    :description="editing ? canChangeRental ? 'Chỉ đổi ngày, giờ và phòng của lượt này. Các lượt khác trong mẫu tháng không bị thay đổi.' : 'Lượt thuê này chỉ xem được vì đã hủy, đã bắt đầu hoặc đã qua thời gian.' : 'Lưu người thuê, phòng và thời gian. Lịch thuê không tạo điểm danh hoặc hồ sơ lớp học.'"
     size="lg"
     :busy="busy"
     :dirty="dirty"
@@ -200,7 +228,25 @@ const confirmLabel = computed(() => hasRentalReplacement.value && hasClassOverla
         <div class="form-control-plaintext fw-semibold">{{ rental?.staff?.full_name || teachers.find((teacher) => teacher.id === rental?.staff_id)?.full_name || 'Giáo viên' }}</div>
       </div>
 
-      <template v-if="editing || formMode === 'single'">
+      <template v-if="editing && !canChangeRental">
+        <div class="col-md-6">
+          <span class="form-label d-block">Ngày</span>
+          <div class="form-control-plaintext fw-semibold">{{ formatBusinessDate(getBusinessDateKey(rental!.starts_at)) }}</div>
+        </div>
+        <div class="col-md-6">
+          <span class="form-label d-block">Thời gian</span>
+          <div class="form-control-plaintext fw-semibold">{{ rentalDateTime(rental!.starts_at) }}–{{ rentalDateTime(rental!.ends_at) }}</div>
+        </div>
+        <div class="col-md-6">
+          <span class="form-label d-block">Phòng</span>
+          <div class="form-control-plaintext fw-semibold">{{ rental!.room }}</div>
+        </div>
+        <div class="col-md-6">
+          <span class="form-label d-block">Trạng thái</span>
+          <div class="form-control-plaintext fw-semibold">{{ rentalStatusLabel }}</div>
+        </div>
+      </template>
+      <template v-else-if="editing || formMode === 'single'">
         <AppField id="rental-date" class="col-md-6" label="Ngày" required>
           <template #default="field"><input :id="field.id" v-model="date" type="date" class="form-control" required :min="defaultDate" data-modal-autofocus /></template>
         </AppField>
@@ -282,19 +328,26 @@ const confirmLabel = computed(() => hasRentalReplacement.value && hasClassOverla
     </div>
 
     <template v-if="editing" #footer>
-      <div class="d-flex flex-wrap gap-2 justify-content-between w-100">
-        <div class="d-flex flex-wrap gap-2">
-          <button v-if="!confirmCancel" type="button" class="btn btn-outline-danger" :disabled="busy" @click="confirmCancel = true">Hủy lượt thuê</button>
-          <template v-else>
-            <span class="align-self-center small text-danger" role="alert">Hủy lượt thuê này?</span>
-            <button type="button" class="btn btn-danger" :disabled="busy" @click="emit('cancel', rental!.id)">Xác nhận hủy</button>
-            <button type="button" class="btn btn-outline-secondary" :disabled="busy" @click="confirmCancel = false">Quay lại</button>
-          </template>
+      <div class="d-flex flex-column flex-sm-row flex-wrap gap-2 justify-content-between w-100">
+        <div v-if="confirmationAction" class="alert alert-danger d-flex flex-wrap align-items-center gap-2 mb-0 w-100" role="alert">
+          <div class="flex-grow-1">
+            <strong>{{ confirmationAction === 'delete' ? 'Xóa vĩnh viễn lượt thuê này?' : 'Hủy lượt thuê này?' }}</strong>
+            <div class="small">{{ rentalSummary }}</div>
+            <div v-if="confirmationAction === 'delete'" class="small">Không thể hoàn tác; nhật ký audit vẫn được giữ. Thay đổi chưa lưu trong biểu mẫu sẽ không được áp dụng.</div>
+          </div>
+          <button type="button" class="btn btn-danger" :disabled="busy" @click="confirmRentalAction"><span v-if="busy" class="app-button__spinner" aria-hidden="true"></span>{{ confirmationAction === 'delete' ? 'Xác nhận xóa vĩnh viễn' : 'Xác nhận hủy' }}</button>
+          <button type="button" class="btn btn-outline-secondary" :disabled="busy" @click="confirmationAction = ''">Quay lại</button>
         </div>
-        <div class="d-flex gap-2 ms-auto">
-          <button type="button" class="btn btn-outline-secondary" :disabled="busy" @click="emit('update:modelValue', false)">Đóng</button>
-          <button type="button" class="btn btn-primary" :disabled="!canSubmit" :aria-busy="busy || undefined" @click="submit"><span v-if="busy" class="app-button__spinner" aria-hidden="true"></span>{{ busy ? 'Đang lưu…' : 'Lưu đổi lịch' }}</button>
-        </div>
+        <template v-else>
+          <div class="d-flex flex-wrap gap-2">
+            <button v-if="canChangeRental" type="button" class="btn btn-outline-danger" :disabled="busy" @click="beginConfirmation('cancel')">Hủy lượt thuê</button>
+            <button type="button" class="btn btn-danger" :disabled="busy" @click="beginConfirmation('delete')">Xóa vĩnh viễn</button>
+          </div>
+          <div class="d-flex gap-2 ms-auto">
+            <button type="button" class="btn btn-outline-secondary" :disabled="busy" @click="emit('update:modelValue', false)">Đóng</button>
+            <button v-if="canChangeRental" type="button" class="btn btn-primary" :disabled="!canSubmit" :aria-busy="busy || undefined" @click="submit"><span v-if="busy" class="app-button__spinner" aria-hidden="true"></span>{{ busy ? 'Đang lưu…' : 'Lưu đổi lịch' }}</button>
+          </div>
+        </template>
       </div>
     </template>
   </FormModal>

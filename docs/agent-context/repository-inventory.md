@@ -211,6 +211,7 @@
 | supabase/functions/admin-room-rentals/handler.ts | Supabase / Edge Functions | TypeScript | Logic có thể kiểm thử tách biệt cho route: Edge Function admin room rentals. |
 | supabase/functions/admin-room-rentals/index.ts | Supabase / Edge Functions | TypeScript | HTTP entrypoint cho route: Edge Function admin room rentals. |
 | supabase/functions/admin-room-rentals/planner.ts | Supabase / Edge Functions | TypeScript | File TypeScript thuộc Supabase / Edge Functions: planner. |
+| supabase/functions/admin-room-rentals/store.test.ts | Supabase / Edge Functions | TypeScript | Test hồi quy cho store. |
 | supabase/functions/admin-room-rentals/store.ts | Supabase / Edge Functions | TypeScript | File TypeScript thuộc Supabase / Edge Functions: store. |
 | supabase/functions/admin-room-rentals/types.ts | Supabase / Edge Functions | TypeScript | File TypeScript thuộc Supabase / Edge Functions: types. |
 | supabase/functions/admin-session-attendance-finalize/deno.json | Supabase / Edge Functions | JSON/config | Cấu hình deno. |
@@ -327,4 +328,4 @@
 | supabase/tests/student_future_session_roster_sync.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra student future session roster sync bằng fixture database cô lập. |
 | supabase/tests/timesheet_workflow.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra timesheet workflow bằng fixture database cô lập. |
 
-Tổng: 320 đường dẫn có trong inventory.
+Tổng: 321 đường dẫn có trong inventory.

@@ -71,6 +71,12 @@ export function cancelRoomRental(id: string) {
   )
 }
 
+export function deleteRoomRental(id: string) {
+  return invokeFunction<{ operation: 'delete'; id: string }, { rental_id: string; status: 'DELETED' }>(
+    'admin-room-rentals', { operation: 'delete', id },
+  )
+}
+
 export interface CreateUserInput {
   role: 'ADMIN' | 'TEACHER' | 'STUDENT'
   username?: string

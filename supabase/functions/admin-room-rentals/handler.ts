@@ -21,6 +21,7 @@ export interface RoomRentalsStore {
   ): Promise<RoomRentalResult>;
   reschedule(input: RoomRentalOccurrence, rentalId: string, actorUserId: string): Promise<RoomRentalResult>;
   cancel(rentalId: string, actorUserId: string): Promise<RoomRentalResult>;
+  delete(rentalId: string, actorUserId: string): Promise<RoomRentalResult>;
 }
 
 export interface RoomRentalsDependencies {
@@ -145,6 +146,10 @@ export function createRoomRentalsHandler(dependencies: RoomRentalsDependencies) 
         }
         case "cancel": {
           result = await store.cancel(requireUuid(input.id), caller.user.id);
+          break;
+        }
+        case "delete": {
+          result = await store.delete(requireUuid(input.id), caller.user.id);
           break;
         }
         default:

@@ -51,7 +51,7 @@ export interface RoomRentalConflict {
 }
 
 export interface RoomRentalInput {
-  operation: "create_single" | "create_month" | "reschedule" | "cancel";
+  operation: "create_single" | "create_month" | "reschedule" | "cancel" | "delete";
   staff_id?: string;
   id?: string;
   date?: string;
@@ -68,7 +68,7 @@ export interface RoomRentalResult {
   created_count?: number;
   overwritten_count?: number;
   rental_id?: string;
-  status?: "BOOKED" | "CANCELLED";
+  status?: "BOOKED" | "CANCELLED" | "DELETED";
 }
 
 export interface RoomRentalCaller {

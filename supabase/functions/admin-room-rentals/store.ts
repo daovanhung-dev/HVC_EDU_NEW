@@ -23,8 +23,11 @@ interface RentalRow {
   starts_at: string;
   ends_at: string;
   status: "BOOKED" | "CANCELLED";
+  created_by?: string | null;
   cancelled_at: string | null;
   cancelled_by: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 interface ConflictRow {
@@ -533,7 +536,12 @@ async function overwriteRental(
   );
 }
 
-export function createRoomRentalsStore(): {
+export function createRoomRentalsStore(sql: Sql = postgres(databaseUrl(), {
+  max: 1,
+  idle_timeout: 20,
+  connect_timeout: 10,
+  prepare: false,
+})): {
   create(input: RoomRentalOccurrence, staffId: string, actorUserId: string): Promise<RoomRentalResult>;
   createMonth(
     occurrences: RoomRentalOccurrence[],
@@ -544,14 +552,8 @@ export function createRoomRentalsStore(): {
   ): Promise<RoomRentalResult>;
   reschedule(input: RoomRentalOccurrence, rentalId: string, actorUserId: string): Promise<RoomRentalResult>;
   cancel(rentalId: string, actorUserId: string): Promise<RoomRentalResult>;
+  delete(rentalId: string, actorUserId: string): Promise<RoomRentalResult>;
 } {
-  const sql: Sql = postgres(databaseUrl(), {
-    max: 1,
-    idle_timeout: 20,
-    connect_timeout: 10,
-    prepare: false,
-  });
-
   return {
     async create(input, staffId, actorUserId) {
       return await sql.begin(async (tx) => {
@@ -685,6 +687,36 @@ export function createRoomRentalsStore(): {
           "Admin cancelled a room rental.",
         );
         return { rental_id: rentalId, status: "CANCELLED" };
+      });
+    },
+
+    async delete(rentalId, actorUserId) {
+      return await sql.begin(async (tx) => {
+        await authorize(tx, actorUserId);
+        await lockScheduling(tx);
+        const rows = await tx<RentalRow[]>`
+          select id, staff_id, room, starts_at, ends_at, status, created_by,
+            cancelled_at, cancelled_by, created_at, updated_at
+          from public.room_rentals where id = ${rentalId}::uuid for update
+        `;
+        const existing = rows[0];
+        if (!existing) throw codedError("ROOM_RENTAL_NOT_FOUND");
+
+        const deletedRows = await tx<IdRow[]>`
+          delete from public.room_rentals where id = ${rentalId}::uuid returning id
+        `;
+        if (!deletedRows[0]) throw codedError("ROOM_RENTAL_WRITE_FAILED");
+
+        await writeAudit(
+          tx,
+          actorUserId,
+          "ROOM_RENTAL_DELETE",
+          rentalId,
+          existing,
+          null,
+          "Admin permanently deleted a room rental.",
+        );
+        return { rental_id: rentalId, status: "DELETED" };
       });
     },
   };

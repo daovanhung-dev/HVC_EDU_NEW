@@ -47,6 +47,7 @@ const mockState = vi.hoisted(() => ({
   createRoomRentalMonth: vi.fn(),
   rescheduleRoomRental: vi.fn(),
   cancelRoomRental: vi.fn(),
+  deleteRoomRental: vi.fn(),
   toastSuccess: vi.fn(),
   toastInfo: vi.fn(),
   toastError: vi.fn(),
@@ -94,6 +95,7 @@ vi.mock('@/services/commands', () => ({
   createRoomRentalMonth: mockState.createRoomRentalMonth,
   rescheduleRoomRental: mockState.rescheduleRoomRental,
   cancelRoomRental: mockState.cancelRoomRental,
+  deleteRoomRental: mockState.deleteRoomRental,
 }))
 
 vi.mock('bootstrap', () => ({
@@ -195,6 +197,11 @@ async function clickButtonWithText(wrapper: ReturnType<typeof mount>, text: stri
     .find((candidate) => candidate.text().trim() === text)
   if (!button) throw new Error(`Button not found: ${text}`)
   await button.trigger('click')
+}
+
+function hasButtonWithText(wrapper: ReturnType<typeof mount>, text: string) {
+  return [...wrapper.findAll('button'), ...new DOMWrapper(document.body).findAll('button')]
+    .some((candidate) => candidate.text().trim() === text)
 }
 
 async function chooseTeacher(wrapper: ReturnType<typeof mount>, pickerId: string, teacherId: string) {
@@ -348,6 +355,7 @@ describe('AdminSessionsPage calendar', () => {
     mockState.createRoomRentalMonth.mockReset().mockResolvedValue({ created_count: 4, overwritten_count: 0, status: 'BOOKED' })
     mockState.rescheduleRoomRental.mockReset().mockResolvedValue({ rental_id: 'qa-rental-1', status: 'BOOKED' })
     mockState.cancelRoomRental.mockReset().mockResolvedValue({ rental_id: 'qa-rental-1', status: 'CANCELLED' })
+    mockState.deleteRoomRental.mockReset().mockResolvedValue({ rental_id: 'qa-rental-1', status: 'DELETED' })
     mockState.toastSuccess.mockReset()
     mockState.toastInfo.mockReset()
     mockState.toastError.mockReset()
@@ -1940,5 +1948,110 @@ describe('AdminSessionsPage calendar', () => {
     await clickButtonWithText(wrapper, 'Xác nhận hủy')
     await flushPromises()
     expect(mockState.cancelRoomRental).toHaveBeenCalledWith('qa-edit-rental')
+  })
+
+  it('opens past and cancelled rentals as read-only details when history is shown', async () => {
+    const pastDate = addCalendarDays(getBusinessDateKey(new Date()), -2)
+    const futureDate = addCalendarDays(getBusinessDateKey(new Date()), 2)
+    mockState.getRoomRentals.mockResolvedValue([
+      makeRental('qa-past-rental', pastDate),
+      makeRental('qa-cancelled-rental', futureDate, 'CANCELLED'),
+    ])
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.findAll('.calendar-event-rental')).toHaveLength(0)
+    await clickButtonWithText(wrapper, 'Hiện lịch sử')
+    expect(wrapper.findAll('.calendar-event-rental')).toHaveLength(2)
+
+    await wrapper.findAll('.calendar-event-rental')[0].trigger('click')
+    await flushPromises()
+    expect(pageAndBodyText(wrapper)).toContain('Chi tiết lượt thuê phòng')
+    expect(pageAndBodyText(wrapper)).toContain('Đã đặt')
+    expect(findPageOrBody(wrapper, '#rental-date').exists()).toBe(false)
+    expect(hasButtonWithText(wrapper, 'Hủy lượt thuê')).toBe(false)
+    expect(hasButtonWithText(wrapper, 'Lưu đổi lịch')).toBe(false)
+    expect(hasButtonWithText(wrapper, 'Xóa vĩnh viễn')).toBe(true)
+
+    await clickButtonWithText(wrapper, 'Đóng')
+    await wrapper.findAll('.calendar-event-rental')[1].trigger('click')
+    await flushPromises()
+    expect(pageAndBodyText(wrapper)).toContain('Đã hủy')
+    expect(findPageOrBody(wrapper, '#rental-date').exists()).toBe(false)
+    expect(hasButtonWithText(wrapper, 'Hủy lượt thuê')).toBe(false)
+    expect(hasButtonWithText(wrapper, 'Xóa vĩnh viễn')).toBe(true)
+  })
+
+  it('confirms deletion of one selected rental and leaves other calendar events intact', async () => {
+    const selectedDate = addCalendarDays(getBusinessDateKey(new Date()), 2)
+    const otherDate = addCalendarDays(getBusinessDateKey(new Date()), 3)
+    const selectedRental = { ...makeRental('qa-delete-rental', selectedDate), room: 'QA-Room-Delete' }
+    const otherRental = { ...makeRental('qa-keep-rental', otherDate), room: 'QA-Room-Keep' }
+    let rentals = [selectedRental, otherRental]
+    mockState.getMySessions.mockResolvedValue([
+      makeSession('qa-unrelated-session', 'Lớp Toán QA', '08:00', '09:00', otherDate),
+    ])
+    mockState.getRoomRentals.mockImplementation(async () => rentals)
+    mockState.deleteRoomRental.mockImplementation(async (id: string) => {
+      rentals = rentals.filter((rental) => rental.id !== id)
+      return { rental_id: id, status: 'DELETED' }
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const rentalEvent = wrapper.findAll('.calendar-event-rental').find((event) => event.text().includes(selectedRental.room))
+    expect(rentalEvent?.exists()).toBe(true)
+    await rentalEvent!.trigger('click')
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Xóa vĩnh viễn')
+
+    const confirmation = pageAndBodyText(wrapper)
+    expect(confirmation).toContain('Xóa vĩnh viễn lượt thuê này?')
+    expect(confirmation).toContain('Giáo viên QA 1')
+    expect(confirmation).toContain(selectedRental.room)
+    expect(confirmation).toContain('Đã đặt')
+    expect(confirmation).toContain('Không thể hoàn tác')
+    await clickButtonWithText(wrapper, 'Xác nhận xóa vĩnh viễn')
+    await flushPromises()
+
+    expect(mockState.deleteRoomRental).toHaveBeenCalledWith(selectedRental.id)
+    expect(mockState.toastSuccess).toHaveBeenCalledWith('Đã xóa vĩnh viễn lượt thuê phòng. Nhật ký audit được giữ lại.')
+    expect(wrapper.findAll('.calendar-event-rental')).toHaveLength(1)
+    expect(wrapper.find('.calendar-event-rental').text()).toContain(otherRental.room)
+    expect(wrapper.findAll('.calendar-event').some((event) => event.text().includes('Lớp Toán QA'))).toBe(true)
+  })
+
+  it('does not delete a rental when the deletion confirmation is cancelled', async () => {
+    const date = addCalendarDays(getBusinessDateKey(new Date()), 2)
+    mockState.getRoomRentals.mockResolvedValue([makeRental('qa-delete-cancelled-confirm', date)])
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('.calendar-event-rental').trigger('click')
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Xóa vĩnh viễn')
+    await clickButtonWithText(wrapper, 'Quay lại')
+    expect(mockState.deleteRoomRental).not.toHaveBeenCalled()
+    expect(pageAndBodyText(wrapper)).toContain('Đổi lịch thuê phòng')
+    await clickButtonWithText(wrapper, 'Đóng')
+    expect(mockState.deleteRoomRental).not.toHaveBeenCalled()
+  })
+
+  it('keeps the rental visible and reports an error when permanent deletion fails', async () => {
+    const date = addCalendarDays(getBusinessDateKey(new Date()), 2)
+    mockState.getRoomRentals.mockResolvedValue([makeRental('qa-delete-failure', date)])
+    mockState.deleteRoomRental.mockRejectedValueOnce(new Error('ROOM_RENTAL_NOT_FOUND'))
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('.calendar-event-rental').trigger('click')
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Xóa vĩnh viễn')
+    await clickButtonWithText(wrapper, 'Xác nhận xóa vĩnh viễn')
+    await flushPromises()
+
+    expect(wrapper.find('.calendar-event-rental').exists()).toBe(true)
+    expect(pageAndBodyText(wrapper)).toContain('Không tìm thấy lượt thuê phòng.')
+    expect(mockState.toastSuccess).not.toHaveBeenCalled()
   })
 })

@@ -11,6 +11,7 @@ import {
   addMonthWithWeekTemplate,
   createManualSession,
   deleteSession,
+  deleteRoomRental,
   deleteSessionsForMonth,
   getMonthWeekScheduleTemplate,
   importMonthWeekSchedule,
@@ -48,6 +49,16 @@ describe('session room scheduling commands', () => {
     expect(mockState.invokeFunction).toHaveBeenCalledWith('admin-export-student-logins', {
       user_ids: ['qa-user-1', 'qa-user-2'],
     })
+  })
+
+  it('permanently deletes only the selected room rental through its Edge Function', async () => {
+    await deleteRoomRental('qa-rental-delete')
+
+    expect(mockState.invokeFunction).toHaveBeenCalledWith('admin-room-rentals', {
+      operation: 'delete',
+      id: 'qa-rental-delete',
+    })
+    expect(mockState.rpc).not.toHaveBeenCalled()
   })
 
   it('sends the room when creating a manual session', async () => {

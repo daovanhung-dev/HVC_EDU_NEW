@@ -21,6 +21,7 @@ import {
   correctSessionSchedule,
   correctSessionLearning,
   cancelRoomRental,
+  deleteRoomRental,
   createRoomRental,
   createRoomRentalMonth,
   recordAdminSessionAttendance,
@@ -612,7 +613,7 @@ function eventAriaLabel(event: CalendarEvent) {
 }
 
 function eventCanOpen(event: CalendarEvent) {
-  return event.kind === 'session' || (event.rental.status === 'BOOKED' && new Date(event.startsAt) > new Date())
+  return event.kind === 'session' || event.kind === 'rental'
 }
 
 function openCreateRoomRental() {
@@ -624,7 +625,7 @@ function openCreateRoomRental() {
 }
 
 function openRoomRental(event: CalendarEvent) {
-  if (event.kind !== 'rental' || !eventCanOpen(event)) return
+  if (event.kind !== 'rental') return
   roomRentalEditing.value = event.rental
   roomRentalDefaultDate.value = refreshTodayDateKey()
   roomRentalError.value = ''
@@ -731,6 +732,23 @@ async function cancelRoomRentalOccurrence(id: string) {
     await load()
   } catch (error) {
     roomRentalError.value = userErrorMessage(error, 'Không thể hủy lượt thuê phòng.')
+  } finally {
+    roomRentalBusy.value = false
+  }
+}
+
+async function deleteRoomRentalOccurrence(id: string) {
+  if (!roomRentalEditing.value || roomRentalEditing.value.id !== id) return
+  roomRentalBusy.value = true
+  roomRentalError.value = ''
+  try {
+    await deleteRoomRental(id)
+    roomRentalModalOpen.value = false
+    roomRentalEditing.value = null
+    toast.success('Đã xóa vĩnh viễn lượt thuê phòng. Nhật ký audit được giữ lại.')
+    await load()
+  } catch (error) {
+    roomRentalError.value = userErrorMessage(error, 'Không thể xóa vĩnh viễn lượt thuê phòng. Dữ liệu vẫn được giữ nguyên.')
   } finally {
     roomRentalBusy.value = false
   }
@@ -2426,6 +2444,7 @@ watch(sessionFormIsBackdated, (isBackdated) => {
     @create-month="saveRoomRentalMonth"
     @reschedule="changeRoomRentalSchedule"
     @cancel="cancelRoomRentalOccurrence"
+    @delete="deleteRoomRentalOccurrence"
   />
 
   <div class="card border-0 shadow-sm mb-4">

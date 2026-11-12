@@ -33,6 +33,7 @@ function dependencies(options: {
     confirmedConflictKeys: string[] | undefined;
     reschedule: number;
     cancel: number;
+    delete: number;
   } = {
     auth: 0,
     stores: 0,
@@ -42,6 +43,7 @@ function dependencies(options: {
     confirmedConflictKeys: undefined,
     reschedule: 0,
     cancel: 0,
+    delete: 0,
   };
   const store: RoomRentalsStore = {
     create: async () => { calls.create += 1; return { rental_id: QA_RENTAL, status: "BOOKED" }; },
@@ -53,6 +55,7 @@ function dependencies(options: {
     },
     reschedule: async () => { calls.reschedule += 1; return { rental_id: QA_RENTAL, status: "BOOKED" }; },
     cancel: async () => { calls.cancel += 1; return { rental_id: QA_RENTAL, status: "CANCELLED" }; },
+    delete: async () => { calls.delete += 1; return { rental_id: QA_RENTAL, status: "DELETED" }; },
     ...options.store,
   };
   const deps: RoomRentalsDependencies = {
@@ -174,11 +177,13 @@ Deno.test("monthly internal room overlap rejects the whole request and returns d
 
 Deno.test("non-admin callers and inactive admins are rejected before store access", async () => {
   for (const options of [{ role: "TEACHER" }, { role: "ADMIN", status: "INACTIVE" }]) {
-    const { calls, handler } = dependencies(options);
-    const response = await handler(request({ operation: "cancel", id: QA_RENTAL }));
-    const body = await response.json();
-    assert(response.status === 403 && body.error.code === "FORBIDDEN", "caller should be denied");
-    assert(calls.stores === 0, "unauthorized call must not access store");
+    for (const operation of ["cancel", "delete"]) {
+      const { calls, handler } = dependencies(options);
+      const response = await handler(request({ operation, id: QA_RENTAL }));
+      const body = await response.json();
+      assert(response.status === 403 && body.error.code === "FORBIDDEN", "caller should be denied");
+      assert(calls.stores === 0, "unauthorized call must not access store");
+    }
   }
 });
 
@@ -199,15 +204,25 @@ Deno.test("invalid dates, non-future times, and empty months do not write", asyn
   assert(calls.create === 0 && calls.createMonth === 0, "invalid requests should not write");
 });
 
-Deno.test("reschedule and cancel dispatch only their requested booking", async () => {
+Deno.test("reschedule, cancel, and permanent deletion dispatch only their requested booking", async () => {
   const { calls, handler } = dependencies();
   const changed = await handler(request({
     operation: "reschedule", id: QA_RENTAL, date: "2026-12-02",
     start_time: "13:00", end_time: "14:00", room: "QA-B1",
   }));
   const cancelled = await handler(request({ operation: "cancel", id: QA_RENTAL }));
-  assert(changed.status === 200 && cancelled.status === 200, "both admin actions should succeed");
-  assert(calls.reschedule === 1 && calls.cancel === 1, "operations should route separately");
+  const deleted = await handler(request({ operation: "delete", id: QA_RENTAL }));
+  const deletedBody = await deleted.json();
+  assert(changed.status === 200 && cancelled.status === 200 && deleted.status === 200, "admin actions should succeed");
+  assert(deletedBody.data.status === "DELETED", "delete should report its terminal result");
+  assert(calls.reschedule === 1 && calls.cancel === 1 && calls.delete === 1, "operations should route separately");
+});
+
+Deno.test("invalid delete ids do not dispatch to the store", async () => {
+  const { calls, handler } = dependencies();
+  const response = await handler(request({ operation: "delete", id: "not-a-uuid" }));
+  assert(response.status === 400, "an invalid id should be rejected");
+  assert(calls.delete === 0, "invalid input must not delete a rental");
 });
 
 Deno.test("non-POST methods are rejected before authentication", async () => {

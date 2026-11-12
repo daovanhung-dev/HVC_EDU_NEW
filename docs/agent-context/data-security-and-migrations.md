@@ -10,7 +10,7 @@
 - `auth.users` là danh tính đăng nhập; `profiles` nối user với role, trạng thái và cờ đổi mật khẩu. `students`/`staff` là hồ sơ domain tương ứng.
 - `subjects`, `grades`, `classes` là danh mục lớp học. `class_memberships` nối học sinh-lớp theo ngày hiệu lực.
 - `class_schedules` và `class_schedule_staff` mô tả lịch lặp/giáo viên theo slot. `sessions` là buổi cụ thể; `session_students` lưu roster buổi; `session_staff` lưu phân công teacher và ngoại lệ.
-- `room_rentals` lưu lượt thuê cụ thể gồm giáo viên, tên phòng, thời gian và trạng thái `BOOKED`/`CANCELLED`; không có roster/attendance. Admin/ROOT_ADMIN đọc qua RLS; ghi/đổi/hủy chỉ qua Edge Function `admin-room-rentals` với transaction PostgreSQL và audit.
+- `room_rentals` lưu lượt thuê cụ thể gồm giáo viên, tên phòng, thời gian và trạng thái `BOOKED`/`CANCELLED`; không có roster/attendance. Admin/ROOT_ADMIN đọc qua RLS; tạo/đổi/hủy/xóa vĩnh viễn chỉ qua Edge Function `admin-room-rentals` với transaction PostgreSQL và audit. Xóa chỉ tác động lượt được chọn; audit giữ snapshot trước khi xóa.
 - `month_week_schedule_templates` và `month_week_schedule_occurrences` giữ workbook tuần theo tháng cùng liên kết đến các buổi được khớp/tạo; luồng RPC `CLASS_MANAGE` trong lịch sử/source hiện có là legacy, không thay lịch lặp `class_schedules` và không được mở rộng.
 - `student_attendances` lưu trạng thái điểm danh, phút đi muộn, lý do, thang đánh giá riêng, feedback và nhận xét. `session_students.assessment_snapshot` cùng `sessions.import_metadata` giữ nguồn/import lịch sử.
 - `timesheets` hiện là yêu cầu chấm công theo buổi. Audit lưu vết một số thay đổi hồ sơ, membership, lịch, buổi và học tập.
