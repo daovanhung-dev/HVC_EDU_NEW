@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia } from 'pinia'
 import * as XLSX from 'xlsx'
 import type { SessionRow } from '@/shared/types/domain'
-import { addCalendarDays, formatBusinessDate, formatBusinessMonth, getBusinessDateKey, shiftCalendarMonth } from '@/shared/utils/session-calendar'
+import { addCalendarDays, formatBusinessDate, formatBusinessMonth, getBusinessDateKey, getWeekDateKeys, shiftCalendarMonth } from '@/shared/utils/session-calendar'
 import { MONTH_WEEK_SCHEDULE_HEADERS } from '@/modules/admin/utils/month-week-schedule-import'
 import AdminSessionsPage from './AdminSessionsPage.vue'
 
@@ -361,7 +361,7 @@ describe('AdminSessionsPage calendar', () => {
     mockState.toastError.mockReset()
   })
 
-  it('defaults to month view and supports month, week, and list modes', async () => {
+  it('defaults to the weekly timetable and keeps month and list modes available', async () => {
     mockState.getMySessions.mockResolvedValue([
       makeSession('qa-session-late', 'Lớp Lý QA', '11:30', '12:30'),
       makeSession('qa-session-early', 'Lớp Toán QA', '08:30', '09:30'),
@@ -369,27 +369,75 @@ describe('AdminSessionsPage calendar', () => {
     const wrapper = mountPage()
     await flushPromises()
 
-    expect(wrapper.find('.calendar-grid-month').exists()).toBe(true)
-    expect([28, 35, 42]).toContain(wrapper.findAll('.calendar-day').length)
-    expect(wrapper.find('.calendar-weekdays').text()).toContain('Thứ Hai')
+    expect(wrapper.find('.week-timetable').exists()).toBe(true)
+    expect(wrapper.findAll('.week-timetable__day')).toHaveLength(7)
+    expect(wrapper.find('.week-timetable__heading').text()).toContain('Thứ Hai')
+    expect(wrapper.find('.week-timetable__time-label').text()).toBe('06:00')
+    expect(wrapper.findAll('.week-timetable__time-label').at(-1)?.text()).toBe('22:00')
     expect(wrapper.findAll('.calendar-event-name').map((event) => event.text())).toEqual(['Lớp Toán QA', 'Lớp Lý QA'])
     expect(wrapper.findAll('.calendar-event').map((event) => event.text())).toContainEqual(expect.stringContaining('SCHEDULED'))
+    const earlyEvent = wrapper.findAll('.week-timetable__event').find((event) => event.text().includes('Lớp Toán QA'))
+    expect(earlyEvent?.attributes('style')).toContain('top: 150px')
+    expect(earlyEvent?.attributes('style')).toContain('height: 60px')
+    expect(earlyEvent?.text()).toContain('08:30–09:30')
 
     await wrapper.get('button[aria-label="Kỳ trước"]').trigger('click')
-    const previousMonth = shiftCalendarMonth(getBusinessDateKey(new Date()), -1)
-    expect(wrapper.find('.calendar-period-title').text()).toBe(formatBusinessMonth(previousMonth))
-    expect(wrapper.find('.calendar-grid-month').exists()).toBe(true)
+    const previousWeek = getWeekDateKeys(addCalendarDays(getBusinessDateKey(new Date()), -7))
+    expect(wrapper.find('.calendar-period-title').text()).toBe(`${formatBusinessDate(previousWeek[0])} – ${formatBusinessDate(previousWeek[6])}`)
 
-    await clickButtonWithText(wrapper, 'Tuần')
-    expect(wrapper.find('.calendar-grid-week').exists()).toBe(true)
-    expect(wrapper.findAll('.calendar-day')).toHaveLength(7)
+    await clickButtonWithText(wrapper, 'Tháng')
+    expect(wrapper.find('.calendar-grid-month').exists()).toBe(true)
+    expect([28, 35, 42]).toContain(wrapper.findAll('.calendar-day').length)
 
     await clickButtonWithText(wrapper, 'Danh sách')
     expect(wrapper.find('.session-list').text()).toContain('Lớp Toán QA')
     expect(wrapper.find('.session-list').text()).toContain('Lớp Lý QA')
     expect(wrapper.find('thead').text()).toContain('Thời gian')
     expect(wrapper.find('.calendar-grid').exists()).toBe(false)
-    expect(previousMonth).toMatch(/^\d{4}-\d{2}-01$/)
+    expect(previousWeek).toHaveLength(7)
+  })
+
+  it('renders overlapping lessons and room rentals in proportional parallel lanes', async () => {
+    const date = getBusinessDateKey(new Date())
+    mockState.getMySessions.mockResolvedValue([
+      makeSession('qa-overlap-session', 'Lớp Toán trùng lịch QA', '10:00', '12:00', date),
+    ])
+    mockState.getRoomRentals.mockResolvedValue([{
+      ...makeRental('qa-overlap-rental', date),
+      starts_at: `${date}T11:00:00+07:00`,
+      ends_at: `${date}T12:30:00+07:00`,
+    }])
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const sessionEvent = wrapper.findAll('.week-timetable__event').find((event) => event.text().includes('Lớp Toán trùng lịch QA'))
+    const rentalEvent = wrapper.findAll('.week-timetable__event').find((event) => event.text().includes('Thuê phòng'))
+    expect(sessionEvent?.attributes('style')).toContain('top: 240px')
+    expect(sessionEvent?.attributes('style')).toContain('height: 120px')
+    expect(sessionEvent?.attributes('style')).toContain('width: calc(50% - 4px)')
+    expect(rentalEvent?.attributes('style')).toContain('top: 300px')
+    expect(rentalEvent?.attributes('style')).toContain('height: 90px')
+    expect(rentalEvent?.attributes('style')).toContain('left: calc(50% + 2px)')
+    expect(rentalEvent?.text()).toContain('11:00–12:30')
+  })
+
+  it('expands the visible timetable range around events outside the default hours', async () => {
+    const date = getBusinessDateKey(new Date())
+    mockState.getMySessions.mockResolvedValue([
+      makeSession('qa-before-hours', 'Buổi sớm QA', '05:15', '06:15', date),
+      makeSession('qa-after-hours', 'Buổi muộn QA', '22:30', '23:00', date),
+    ])
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.find('.week-timetable__time-label').text()).toBe('05:00')
+    expect(wrapper.findAll('.week-timetable__time-label').at(-1)?.text()).toBe('23:00')
+    const earlyEvent = wrapper.findAll('.week-timetable__event').find((event) => event.text().includes('Buổi sớm QA'))
+    const lateEvent = wrapper.findAll('.week-timetable__event').find((event) => event.text().includes('Buổi muộn QA'))
+    expect(earlyEvent?.attributes('style')).toContain('top: 15px')
+    expect(earlyEvent?.attributes('style')).toContain('height: 60px')
+    expect(lateEvent?.attributes('style')).toContain('top: 1050px')
+    expect(lateEvent?.attributes('style')).toContain('height: 30px')
   })
 
   it('previews an Excel month template and applies only after a conflict-free preview', async () => {
@@ -496,7 +544,7 @@ describe('AdminSessionsPage calendar', () => {
     expect(wrapper.findAll('.calendar-event-name').map((event) => event.text())).toHaveLength(3)
 
     await clickButtonWithText(wrapper, 'Tuần')
-    expect(wrapper.findAll('.session-agenda__item')).toHaveLength(3)
+    expect(wrapper.findAll('.week-timetable__event')).toHaveLength(3)
     await clickButtonWithText(wrapper, 'Danh sách')
     expect(wrapper.findAll('tbody tr')).toHaveLength(3)
     expect(wrapper.find('.session-list').text()).toContain('Buổi đã hủy QA')
@@ -1556,7 +1604,8 @@ describe('AdminSessionsPage calendar', () => {
 
     expect(mockState.createManualSession).toHaveBeenCalledOnce()
     expect((wrapper.get('#session-class-filter').element as HTMLSelectElement).value).toBe('qa-class-2')
-    expect(wrapper.find('.calendar-period-title').text()).toBe(formatBusinessMonth(createdDate))
+    const createdWeek = getWeekDateKeys(createdDate)
+    expect(wrapper.find('.calendar-period-title').text()).toBe(`${formatBusinessDate(createdWeek[0])} – ${formatBusinessDate(createdWeek[6])}`)
     expect(wrapper.find('.calendar-event-name').text()).toBe('Lớp mới QA')
     const historyButton = wrapper.findAll('button').find((button) => button.text().trim() === 'Ẩn lịch sử')
     expect(historyButton?.attributes('aria-pressed')).toBe('true')
@@ -1586,7 +1635,8 @@ describe('AdminSessionsPage calendar', () => {
     await flushPromises()
 
     expect(mockState.createManualSession).toHaveBeenCalledOnce()
-    expect(wrapper.find('.calendar-period-title').text()).toBe(formatBusinessMonth(createdDate))
+    const createdWeek = getWeekDateKeys(createdDate)
+    expect(wrapper.find('.calendar-period-title').text()).toBe(`${formatBusinessDate(createdWeek[0])} – ${formatBusinessDate(createdWeek[6])}`)
     expect(wrapper.find('.calendar-event-name').text()).toBe('Lớp tương lai QA')
     expect((wrapper.get('#session-class-filter').element as HTMLSelectElement).value).toBe('qa-class-2')
     const historyButton = wrapper.findAll('button').find((button) => button.text().trim() === 'Hiện lịch sử')
@@ -1927,13 +1977,18 @@ describe('AdminSessionsPage calendar', () => {
 
   it('reschedules and cancels only a selected future rental occurrence', async () => {
     const date = addCalendarDays(getBusinessDateKey(new Date()), 2)
-    mockState.getRoomRentals.mockResolvedValue([makeRental('qa-edit-rental', date)])
+    const rescheduledDate = addCalendarDays(date, 2)
+    let currentRentalDate = date
+    mockState.getRoomRentals.mockImplementation(async () => [makeRental('qa-edit-rental', currentRentalDate)])
+    mockState.rescheduleRoomRental.mockImplementation(async () => {
+      currentRentalDate = rescheduledDate
+      return { rental_id: 'qa-edit-rental', status: 'BOOKED' }
+    })
     const wrapper = mountPage()
     await flushPromises()
 
     await wrapper.get('.calendar-event-rental').trigger('click')
     await flushPromises()
-    const rescheduledDate = addCalendarDays(date, 2)
     await getPageOrBody(wrapper, '#rental-date').setValue(rescheduledDate)
     await getPageOrBody(wrapper, '#rental-room').setValue('QA-Room-Changed')
     await clickButtonWithText(wrapper, 'Lưu đổi lịch')

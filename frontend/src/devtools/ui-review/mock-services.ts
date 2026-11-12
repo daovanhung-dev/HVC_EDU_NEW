@@ -324,6 +324,13 @@ export async function cancelRoomRental(id: string) {
   if (row) { row.status = 'CANCELLED'; row.cancelled_at = new Date().toISOString() }
   return { rental_id: id, status: 'CANCELLED' }
 }
+export async function deleteRoomRental(id: string) {
+  await query(true)
+  const index = roomRentals.findIndex((rental) => rental.id === id)
+  if (index < 0) throw new Error('ROOM_RENTAL_NOT_FOUND')
+  roomRentals.splice(index, 1)
+  return { rental_id: id, status: 'DELETED' }
+}
 export function getSessionAttendanceSummaries(sessionIds: string[]) {
   const summaries = Object.fromEntries(sessionIds.map((id) => [id, { roster_count: 0, attendance_count: 0 }]))
   for (const session of sessions.filter((item) => sessionIds.includes(item.id))) {

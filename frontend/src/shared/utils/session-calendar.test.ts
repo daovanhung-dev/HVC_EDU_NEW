@@ -3,9 +3,12 @@ import {
   addCalendarDays,
   formatBusinessTime,
   getBusinessDateKey,
+  getBusinessTimeMinutes,
   getMonthGridDateKeys,
+  getTimetableTimeRange,
   getWeekDateKeys,
   groupSessionsByBusinessDate,
+  layoutTimedEvents,
   shiftCalendarMonth,
 } from './session-calendar'
 
@@ -39,5 +42,29 @@ describe('session calendar date helpers', () => {
     expect(grouped['2026-09-30']?.map((session) => session.id)).toEqual(['early', 'late'])
     expect(grouped['2026-10-01']?.map((session) => session.id)).toEqual(['next-day'])
     expect(formatBusinessTime('2026-09-30T17:30:00.000Z')).toContain('00:30')
+    expect(getBusinessTimeMinutes('2026-09-30T17:30:00.000Z')).toBe(30)
+  })
+
+  it('uses the default timetable range and expands it to half-hour boundaries', () => {
+    expect(getTimetableTimeRange([])).toEqual({ startMinute: 360, endMinute: 1320 })
+    expect(getTimetableTimeRange([
+      { id: 'early', startsAt: '2026-09-30T05:12:00+07:00', endsAt: '2026-09-30T06:10:00+07:00' },
+      { id: 'late', startsAt: '2026-09-30T21:30:00+07:00', endsAt: '2026-09-30T23:11:00+07:00' },
+    ])).toEqual({ startMinute: 300, endMinute: 1410 })
+  })
+
+  it('places overlapping events in parallel lanes and reuses lanes at touching boundaries', () => {
+    const placements = layoutTimedEvents([
+      { id: 'long', startsAt: '2026-09-30T08:00:00+07:00', endsAt: '2026-09-30T10:00:00+07:00' },
+      { id: 'overlap', startsAt: '2026-09-30T08:30:00+07:00', endsAt: '2026-09-30T09:30:00+07:00' },
+      { id: 'touching', startsAt: '2026-09-30T09:30:00+07:00', endsAt: '2026-09-30T10:30:00+07:00' },
+      { id: 'after', startsAt: '2026-09-30T10:30:00+07:00', endsAt: '2026-09-30T11:00:00+07:00' },
+    ])
+
+    expect(placements.map(({ event }) => event.id)).toEqual(['long', 'overlap', 'touching', 'after'])
+    expect(placements.map(({ lane, laneCount }) => [lane, laneCount])).toEqual([
+      [0, 2], [1, 2], [1, 2], [0, 1],
+    ])
+    expect(placements[0].endMinute - placements[0].startMinute).toBe(120)
   })
 })

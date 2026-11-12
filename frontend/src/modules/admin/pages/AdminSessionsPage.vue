@@ -90,7 +90,9 @@ import {
   formatBusinessTime,
   getBusinessDateKey,
   getMonthGridDateKeys,
+  getTimetableTimeRange,
   getWeekDateKeys,
+  layoutTimedEvents,
   shiftCalendarMonth,
 } from '@/shared/utils/session-calendar'
 import {
@@ -163,7 +165,7 @@ const deleteSessionPreview = ref<DeleteSessionPreview | null>(null)
 const startInput = ref('')
 const endInput = ref('')
 const sessionRoomInput = ref('')
-const viewMode = ref<ViewMode>('month')
+const viewMode = ref<ViewMode>('week')
 const eventFilter = ref<EventFilter>('all')
 const calendarAnchorDate = ref(getBusinessDateKey(new Date()))
 const todayDateKey = ref(getBusinessDateKey(new Date()))
@@ -496,6 +498,27 @@ const visibleEventsByDate = computed<Record<string, CalendarEvent[]>>(() => {
   }
   return grouped
 })
+const weekEvents = computed(() => weekDateKeys.value.flatMap((dateKey) => visibleEventsByDate.value[dateKey] || []))
+const timetableRange = computed(() => getTimetableTimeRange(weekEvents.value))
+const timetableHeightPx = computed(() => timetableRange.value.endMinute - timetableRange.value.startMinute)
+const timetableTicks = computed(() => {
+  const ticks: Array<{ minute: number; label: string; hour: boolean }> = []
+  for (let minute = timetableRange.value.startMinute; minute <= timetableRange.value.endMinute; minute += 30) {
+    const dayOffset = Math.floor(minute / (24 * 60))
+    const dayMinute = ((minute % (24 * 60)) + (24 * 60)) % (24 * 60)
+    const time = `${String(Math.floor(dayMinute / 60)).padStart(2, '0')}:${String(dayMinute % 60).padStart(2, '0')}`
+    ticks.push({ minute, label: dayOffset ? `${time} +${dayOffset}` : time, hour: minute % 60 === 0 })
+  }
+  return ticks
+})
+const timetableEventsByDate = computed(() => Object.fromEntries(weekDateKeys.value.map((dateKey) => [
+  dateKey,
+  layoutTimedEvents(visibleEventsByDate.value[dateKey] || []).map((placement) => ({
+    ...placement,
+    topPx: placement.startMinute - timetableRange.value.startMinute,
+    heightPx: placement.endMinute - placement.startMinute,
+  })),
+])))
 const agendaEvents = computed(() => visibleEvents.value.filter((event) => sessionDateKeysInView.value.has(getBusinessDateKey(event.startsAt))))
 const listEmptyMessage = computed(() => {
   if (eventFilter.value === 'rentals') {
@@ -2410,7 +2433,7 @@ watch(sessionFormIsBackdated, (isBackdated) => {
 </script>
 
 <template>
-  <AppPageHeader title="Buổi học" eyebrow="Lịch giảng dạy" description="Xem lịch tháng, tuần hoặc danh sách; quản lý buổi, khung lịch lặp và lượt thuê phòng.">
+  <AppPageHeader title="Buổi học" eyebrow="Lịch giảng dạy" description="Xem lịch tuần, tháng hoặc danh sách; quản lý buổi, khung lịch lặp và lượt thuê phòng.">
     <template #actions>
       <button class="btn btn-primary" @click="scheduleEditorOpen = !scheduleEditorOpen">Chỉnh sửa lịch</button>
       <button class="btn btn-outline-primary" :disabled="loading" @click="openWeeklyTemplate('replace')">Tạo lịch mẫu</button>
@@ -2740,8 +2763,8 @@ watch(sessionFormIsBackdated, (isBackdated) => {
       <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
         <div class="d-flex flex-wrap align-items-center gap-2">
           <div class="btn-group" role="group" aria-label="Chế độ hiển thị buổi học">
-            <button class="btn" :class="viewMode === 'month' ? 'btn-primary' : 'btn-outline-primary'" :aria-pressed="viewMode === 'month'" @click="viewMode = 'month'">Tháng</button>
             <button class="btn" :class="viewMode === 'week' ? 'btn-primary' : 'btn-outline-primary'" :aria-pressed="viewMode === 'week'" @click="viewMode = 'week'">Tuần</button>
+            <button class="btn" :class="viewMode === 'month' ? 'btn-primary' : 'btn-outline-primary'" :aria-pressed="viewMode === 'month'" @click="viewMode = 'month'">Tháng</button>
             <button class="btn" :class="viewMode === 'list' ? 'btn-primary' : 'btn-outline-primary'" :aria-pressed="viewMode === 'list'" @click="viewMode = 'list'">Danh sách</button>
           </div>
           <label class="visually-hidden" for="session-event-filter">Lọc loại lịch</label>
@@ -2804,7 +2827,85 @@ watch(sessionFormIsBackdated, (isBackdated) => {
             </div>
           </div>
 
-          <div v-else key="calendar" class="session-calendar-view">
+          <div v-else-if="viewMode === 'week'" key="week" class="session-calendar-view">
+            <div class="week-timetable-scroll" role="region" aria-label="Thời khóa biểu theo tuần" tabindex="0">
+              <div class="week-timetable">
+                <div class="week-timetable__corner">Giờ</div>
+                <div
+                  v-for="(dateKey, dayIndex) in weekDateKeys"
+                  :key="dateKey"
+                  class="week-timetable__heading"
+                  :class="{ 'week-timetable__heading--today': dateKey === todayDateKey }"
+                  :aria-label="`${weekdayLabels[dayIndex]}, ${formatBusinessDate(dateKey)}`"
+                >
+                  <span class="week-timetable__weekday">{{ weekdayLabels[dayIndex] }}</span>
+                  <span class="week-timetable__date" :title="formatBusinessDate(dateKey)">{{ dateKey.slice(8) }}/{{ dateKey.slice(5, 7) }}</span>
+                  <span v-if="dateKey === todayDateKey" class="badge text-bg-primary week-timetable__today">Hôm nay</span>
+                  <button class="btn btn-sm btn-outline-primary calendar-add-button" :aria-label="`Thêm buổi ngày ${formatBusinessDate(dateKey)}`" @click="openSessionForm(dateKey)">+</button>
+                </div>
+                <div class="week-timetable__time-axis" :style="{ height: `${timetableHeightPx}px` }" aria-hidden="true">
+                  <template v-for="tick in timetableTicks" :key="tick.minute">
+                    <div class="week-timetable__axis-line" :class="{ 'week-timetable__axis-line--hour': tick.hour }" :style="{ top: `${tick.minute - timetableRange.startMinute}px` }"></div>
+                    <span class="week-timetable__time-label" :class="{ 'week-timetable__time-label--hour': tick.hour }" :style="{ top: `${tick.minute - timetableRange.startMinute}px` }">{{ tick.label }}</span>
+                  </template>
+                </div>
+                <section
+                  v-for="(dateKey, dayIndex) in weekDateKeys"
+                  :key="`day-${dateKey}`"
+                  class="week-timetable__day calendar-day"
+                  :class="{ 'calendar-day-today': dateKey === todayDateKey }"
+                  :style="{ height: `${timetableHeightPx}px` }"
+                  :aria-label="`${weekdayLabels[dayIndex]}, ${formatBusinessDate(dateKey)}`"
+                >
+                  <div
+                    v-for="tick in timetableTicks"
+                    :key="tick.minute"
+                    class="week-timetable__grid-line"
+                    :class="{ 'week-timetable__grid-line--hour': tick.hour }"
+                    :style="{ top: `${tick.minute - timetableRange.startMinute}px` }"
+                    aria-hidden="true"
+                  ></div>
+                  <button
+                    v-for="placement in timetableEventsByDate[dateKey] || []"
+                    :key="`${placement.event.kind}-${placement.event.id}`"
+                    class="calendar-event week-timetable__event"
+                    :class="[
+                      { 'calendar-event-selected': placement.event.kind === 'session' && selected?.id === placement.event.session.id },
+                      { 'calendar-event-rental': placement.event.kind === 'rental' },
+                    ]"
+                    :style="{
+                      top: `${placement.topPx}px`,
+                      height: `${placement.heightPx}px`,
+                      left: `calc(${placement.lane * 100 / placement.laneCount}% + 2px)`,
+                      width: `calc(${100 / placement.laneCount}% - 4px)`,
+                    }"
+                    :aria-pressed="placement.event.kind === 'session' ? selected?.id === placement.event.session.id : undefined"
+                    :aria-label="eventAriaLabel(placement.event)"
+                    :disabled="!eventCanOpen(placement.event)"
+                    :title="`${eventTypeLabel(placement.event)} · ${eventAriaLabel(placement.event)} · Phòng ${eventRoom(placement.event)}`"
+                    @click="selectCalendarEvent(placement.event)"
+                  >
+                    <span class="week-timetable__event-heading">
+                      <span class="calendar-event-kind">{{ eventTypeLabel(placement.event) }}</span>
+                      <span class="badge week-timetable__event-status" :class="eventStatusClass(placement.event)">{{ eventStatusLabel(placement.event) }}</span>
+                    </span>
+                    <span class="calendar-event-time">{{ formatBusinessTime(placement.event.startsAt) }}–{{ formatBusinessTime(placement.event.endsAt) }}</span>
+                    <span class="calendar-event-name">{{ eventPrimaryLabel(placement.event) }}</span>
+                    <span v-if="placement.heightPx >= 60" class="calendar-event-room">{{ placement.event.kind === 'rental' ? `Phòng ${eventRoom(placement.event)}` : eventRoom(placement.event) }}</span>
+                  </button>
+                </section>
+              </div>
+            </div>
+            <div v-if="loading" class="text-center text-secondary py-3" role="status">Đang tải buổi học…</div>
+            <div v-else-if="!loading && !errorMessage && !visibleCalendarEventCount" class="session-calendar-empty text-center text-secondary py-3">
+              <p class="mb-2">{{ calendarEmptyMessage }}</p>
+              <button v-if="!showHistory && (hiddenHistorySessions.length || (eventFilter !== 'sessions' && hiddenHistoryRentals.length))" type="button" class="btn btn-sm btn-outline-primary" @click="revealHiddenHistory">
+                {{ hiddenHistorySessionsInView.length ? 'Hiện lịch sử' : 'Xem lịch sử trong danh sách' }}
+              </button>
+            </div>
+          </div>
+
+          <div v-else key="month" class="session-calendar-view">
             <div class="calendar-scroll" :aria-label="viewMode === 'month' ? 'Lịch tháng' : 'Lịch tuần'">
               <div class="calendar-weekdays" aria-hidden="true">
                 <div v-for="day in weekdayLabels" :key="day" class="calendar-weekday">{{ day }}</div>
@@ -3282,5 +3383,217 @@ watch(sessionFormIsBackdated, (isBackdated) => {
 .calendar-event-room {
   color: var(--bs-secondary-color);
   font-size: 0.72rem;
+}
+
+.week-timetable-scroll {
+  max-height: min(72vh, 880px);
+  overflow: auto;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.5rem;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.week-timetable {
+  display: grid;
+  grid-template-columns: 4.25rem repeat(7, minmax(8.5rem, 1fr));
+  grid-template-rows: auto auto;
+  min-width: 1010px;
+}
+
+.week-timetable__corner,
+.week-timetable__heading {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  min-height: 3.7rem;
+  background: var(--bs-tertiary-bg);
+  border-right: 1px solid var(--bs-border-color);
+  border-bottom: 1px solid var(--bs-border-color);
+}
+
+.week-timetable__corner {
+  left: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--bs-secondary-color);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.week-timetable__heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: 1fr 1fr;
+  align-items: center;
+  column-gap: 0.35rem;
+  padding: 0.25rem 0.4rem;
+}
+
+.week-timetable__heading--today {
+  box-shadow: inset 0 -2px 0 var(--bs-primary);
+}
+
+.week-timetable__weekday {
+  overflow: hidden;
+  color: var(--bs-secondary-color);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.week-timetable__date {
+  overflow: hidden;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.week-timetable__today {
+  grid-column: 2;
+  grid-row: 2;
+  justify-self: end;
+  font-size: 0.58rem;
+}
+
+.week-timetable__heading .calendar-add-button {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.week-timetable__time-axis {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  width: 4.25rem;
+  background: var(--bs-body-bg);
+  border-right: 1px solid var(--bs-border-color);
+}
+
+.week-timetable__axis-line,
+.week-timetable__grid-line {
+  position: absolute;
+  right: 0;
+  left: 0;
+  border-top: 1px dashed var(--bs-border-color);
+  pointer-events: none;
+}
+
+.week-timetable__axis-line--hour,
+.week-timetable__grid-line--hour {
+  border-top-style: solid;
+}
+
+.week-timetable__time-label {
+  position: absolute;
+  right: 0.25rem;
+  z-index: 1;
+  padding: 0 0.1rem;
+  transform: translateY(-50%);
+  background: var(--bs-body-bg);
+  color: var(--bs-secondary-color);
+  font-size: 0.62rem;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.week-timetable__time-label--hour {
+  color: var(--bs-body-color);
+  font-weight: 600;
+}
+
+.week-timetable__time-label:first-of-type {
+  transform: translateY(0);
+}
+
+.week-timetable__time-label:last-of-type {
+  transform: translateY(-100%);
+}
+
+.week-timetable__day {
+  position: relative;
+  min-height: 0;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  border-right: 1px solid var(--bs-border-color);
+  border-bottom: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+}
+
+.week-timetable__day .week-timetable__grid-line {
+  z-index: 0;
+}
+
+.week-timetable__event {
+  position: absolute;
+  z-index: 1;
+  min-width: 0;
+  min-height: 0;
+  align-items: stretch;
+  gap: 0.06rem;
+  padding: 0.12rem 0.18rem;
+  overflow: hidden;
+  font-size: 0.66rem;
+  line-height: 1.08;
+}
+
+.week-timetable__event-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.12rem;
+}
+
+.week-timetable__event .calendar-event-kind {
+  overflow: hidden;
+  font-size: 0.54rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.week-timetable__event-status {
+  flex: 0 0 auto;
+  padding: 0.12rem 0.22rem;
+  font-size: 0.52rem;
+  line-height: 1;
+}
+
+.week-timetable__event .calendar-event-time {
+  overflow: hidden;
+  font-size: 0.58rem;
+  text-overflow: ellipsis;
+}
+
+.week-timetable__event .calendar-event-name,
+.week-timetable__event .calendar-event-room {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.week-timetable__event .calendar-event-room {
+  font-size: 0.58rem;
+}
+
+.week-timetable__event:focus-visible {
+  z-index: 2;
+}
+
+@media (max-width: 575.98px) {
+  .week-timetable-scroll {
+    max-height: 70vh;
+    touch-action: pan-x pan-y;
+  }
+
+  .week-timetable__heading {
+    padding-inline: 0.3rem;
+  }
 }
 </style>

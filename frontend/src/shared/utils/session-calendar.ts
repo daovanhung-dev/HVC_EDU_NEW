@@ -1,4 +1,17 @@
 const BUSINESS_TIME_ZONE = 'Asia/Ho_Chi_Minh'
+export const TIMETABLE_TICK_MINUTES = 30
+export const DEFAULT_TIMETABLE_START_MINUTE = 6 * 60
+export const DEFAULT_TIMETABLE_END_MINUTE = 22 * 60
+
+export type TimedCalendarEvent = { id: string; startsAt: string; endsAt: string }
+export type TimetableTimeRange = { startMinute: number; endMinute: number }
+export type TimedEventPlacement<T> = {
+  event: T
+  startMinute: number
+  endMinute: number
+  lane: number
+  laneCount: number
+}
 
 function pad(value: number): string {
   return String(value).padStart(2, '0')
@@ -38,6 +51,87 @@ export function getBusinessDateKey(value: string | Date): string {
   }).formatToParts(date)
   const part = (type: string) => parts.find((item) => item.type === type)?.value || ''
   return `${part('year')}-${part('month')}-${part('day')}`
+}
+
+export function getBusinessTimeMinutes(value: string | Date): number {
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) throw new RangeError('Invalid calendar time')
+
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: BUSINESS_TIME_ZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date)
+  const part = (type: string) => Number(parts.find((item) => item.type === type)?.value)
+  return part('hour') * 60 + part('minute')
+}
+
+function eventInterval(event: TimedCalendarEvent) {
+  const start = Date.parse(event.startsAt)
+  const end = Date.parse(event.endsAt)
+  const durationMinutes = (end - start) / 60_000
+  if (!Number.isFinite(start) || !Number.isFinite(end) || durationMinutes <= 0) {
+    throw new RangeError(`Invalid event time range: ${event.id}`)
+  }
+
+  const startMinute = getBusinessTimeMinutes(new Date(start))
+  return { startMinute, endMinute: startMinute + durationMinutes }
+}
+
+export function getTimetableTimeRange(events: readonly TimedCalendarEvent[]): TimetableTimeRange {
+  if (!events.length) {
+    return { startMinute: DEFAULT_TIMETABLE_START_MINUTE, endMinute: DEFAULT_TIMETABLE_END_MINUTE }
+  }
+
+  const intervals = events.map(eventInterval)
+  const earliest = Math.min(...intervals.map(({ startMinute }) => startMinute))
+  const latest = Math.max(...intervals.map(({ endMinute }) => endMinute))
+  return {
+    startMinute: Math.min(DEFAULT_TIMETABLE_START_MINUTE, Math.floor(earliest / TIMETABLE_TICK_MINUTES) * TIMETABLE_TICK_MINUTES),
+    endMinute: Math.max(DEFAULT_TIMETABLE_END_MINUTE, Math.ceil(latest / TIMETABLE_TICK_MINUTES) * TIMETABLE_TICK_MINUTES),
+  }
+}
+
+export function layoutTimedEvents<T extends TimedCalendarEvent>(events: readonly T[]): TimedEventPlacement<T>[] {
+  const sorted = events
+    .map((event) => ({ event, ...eventInterval(event), lane: 0 }))
+    .sort((left, right) => left.startMinute - right.startMinute
+      || left.endMinute - right.endMinute
+      || left.event.id.localeCompare(right.event.id))
+  const placements: TimedEventPlacement<T>[] = []
+  let group: typeof sorted = []
+  let groupEnd = Number.NEGATIVE_INFINITY
+
+  const flushGroup = () => {
+    if (!group.length) return
+    const laneEnds: number[] = []
+    for (const item of group) {
+      let lane = laneEnds.findIndex((laneEnd) => laneEnd <= item.startMinute)
+      if (lane < 0) lane = laneEnds.length
+      laneEnds[lane] = item.endMinute
+      item.lane = lane
+    }
+    for (const item of group) {
+      placements.push({
+        event: item.event,
+        startMinute: item.startMinute,
+        endMinute: item.endMinute,
+        lane: item.lane,
+        laneCount: laneEnds.length,
+      })
+    }
+    group = []
+    groupEnd = Number.NEGATIVE_INFINITY
+  }
+
+  for (const item of sorted) {
+    if (group.length && item.startMinute >= groupEnd) flushGroup()
+    group.push(item)
+    groupEnd = Math.max(groupEnd, item.endMinute)
+  }
+  flushGroup()
+  return placements
 }
 
 export function addCalendarDays(dateKey: string, days: number): string {
