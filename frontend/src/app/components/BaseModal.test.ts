@@ -9,6 +9,7 @@ vi.mock('bootstrap', () => ({
   Modal: class MockModal {
     private backdrop: HTMLElement | null = null
     private isShown = false
+    private previousBodyOverflow = ''
 
     constructor(private readonly element: HTMLElement) {
       modalControls.hide.set(element, () => this.hide())
@@ -20,6 +21,8 @@ vi.mock('bootstrap', () => ({
       this.element.style.display = 'block'
       this.element.classList.add('show')
       this.element.setAttribute('aria-hidden', 'false')
+      this.previousBodyOverflow = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
       document.body.classList.add('modal-open')
       this.backdrop?.remove()
       this.backdrop = document.createElement('div')
@@ -40,6 +43,7 @@ vi.mock('bootstrap', () => ({
       this.backdrop?.remove()
       this.backdrop = null
       if (!document.querySelector('.app-modal.show')) document.body.classList.remove('modal-open')
+      document.body.style.overflow = this.previousBodyOverflow
       this.element.dispatchEvent(new Event('hidden.bs.modal'))
     }
 
@@ -47,7 +51,6 @@ vi.mock('bootstrap', () => ({
       this.backdrop?.remove()
       this.backdrop = null
       modalControls.hide.delete(this.element)
-      if (!document.querySelector('.app-modal.show')) document.body.classList.remove('modal-open')
     }
   },
 }))
@@ -153,6 +156,22 @@ describe('BaseModal', () => {
     await close.trigger('keydown', { key: 'Tab', shiftKey: true })
     expect(document.activeElement).toBe(content.element)
     wrapper.unmount()
+  })
+
+  it('releases the page scroll lock when unmounted while open', async () => {
+    const wrapper = mount(ModalHost, { attachTo: document.body, props: { initiallyOpen: true } })
+    await flushPromises()
+    await nextTick()
+
+    expect(document.body.classList).toContain('modal-open')
+    expect(document.body.style.overflow).toBe('hidden')
+    expect(document.body.querySelector('.modal-backdrop')).not.toBeNull()
+
+    wrapper.unmount()
+
+    expect(document.body.classList).not.toContain('modal-open')
+    expect(document.body.style.overflow).toBe('')
+    expect(document.body.querySelector('.modal-backdrop')).toBeNull()
   })
 
   it('asks before discarding a dirty form when Escape is pressed', async () => {

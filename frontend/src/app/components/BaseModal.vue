@@ -25,6 +25,7 @@ const descriptionId = `app-modal-description-${useId()}`
 let instance: Modal | null = null
 let returnFocus: HTMLElement | null = null
 let allowHide = false
+let showRequested = false
 
 function onHide(event: Event) {
   if (props.busy && !allowHide) {
@@ -46,6 +47,7 @@ function onHide(event: Event) {
 }
 
 function onHidden() {
+  showRequested = false
   if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true })
   returnFocus = null
   emit('hidden')
@@ -89,7 +91,11 @@ onMounted(() => {
   element.value.addEventListener('hide.bs.modal', onHide)
   element.value.addEventListener('hidden.bs.modal', onHidden)
   element.value.addEventListener('keydown', onKeydown)
-  if (props.modelValue) void nextTick(() => instance?.show())
+  if (props.modelValue) void nextTick(() => {
+    if (!instance) return
+    showRequested = true
+    instance.show()
+  })
 })
 
 watch(() => props.modelValue, async (open) => {
@@ -97,6 +103,7 @@ watch(() => props.modelValue, async (open) => {
   if (!element.value || !instance) return
   if (open) {
     returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    showRequested = true
     instance.show()
     await nextTick()
     const autofocus = element.value.querySelector<HTMLElement>('[data-modal-autofocus]')
@@ -118,10 +125,36 @@ watch(() => props.modelValue, async (open) => {
 
 onBeforeUnmount(() => {
   if (!element.value) return
-  element.value.removeEventListener('hide.bs.modal', onHide)
-  element.value.removeEventListener('hidden.bs.modal', onHidden)
-  element.value.removeEventListener('keydown', onKeydown)
-  instance?.dispose()
+  const modalElement = element.value
+  const modalInstance = instance
+  modalElement.removeEventListener('hide.bs.modal', onHide)
+  modalElement.removeEventListener('hidden.bs.modal', onHidden)
+  modalElement.removeEventListener('keydown', onKeydown)
+
+  if (!modalInstance) return
+
+  const isActive = showRequested
+    || modalElement.classList.contains('show')
+    || modalElement.getAttribute('aria-hidden') === 'false'
+
+  if (!isActive) {
+    modalInstance.dispose()
+    instance = null
+    return
+  }
+
+  const disposeAfterHide = () => {
+    modalElement.removeEventListener('shown.bs.modal', hideAfterShow)
+    modalInstance.dispose()
+  }
+  const hideAfterShow = () => modalInstance.hide()
+
+  // Bootstrap's dispose() does not restore the body scroll lock. Let hide()
+  // complete its normal cleanup, including when the opening transition is
+  // still in progress as the route unmounts this component.
+  modalElement.addEventListener('hidden.bs.modal', disposeAfterHide, { once: true })
+  modalElement.addEventListener('shown.bs.modal', hideAfterShow, { once: true })
+  modalInstance.hide()
   instance = null
 })
 </script>
