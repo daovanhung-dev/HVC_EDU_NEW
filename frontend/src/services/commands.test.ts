@@ -8,6 +8,7 @@ vi.mock('./edge-functions', () => ({ invokeFunction: mockState.invokeFunction })
 import {
   adminExportStudentLogins,
   adminResetPasswordBulk,
+  addClassMembership,
   addMonthWithWeekTemplate,
   createManualSession,
   deleteSession,
@@ -58,6 +59,30 @@ describe('session room scheduling commands', () => {
       operation: 'delete',
       id: 'qa-rental-delete',
     })
+    expect(mockState.rpc).not.toHaveBeenCalled()
+  })
+
+  it('adds a class membership and synchronizes the month through the Edge Function without RPC', async () => {
+    mockState.invokeFunction.mockResolvedValueOnce({
+      membership_id: 'qa-membership',
+      sessions_updated: 3,
+      students_added: 3,
+      sessions_skipped_with_attendance: 1,
+    })
+
+    const result = await addClassMembership({
+      class_id: 'qa-class',
+      student_id: 'qa-student',
+      start_date: '2026-11-12',
+    })
+
+    expect(mockState.invokeFunction).toHaveBeenCalledWith('admin-class-membership', {
+      operation: 'add',
+      class_id: 'qa-class',
+      student_id: 'qa-student',
+      start_date: '2026-11-12',
+    })
+    expect(result.sessions_updated).toBe(3)
     expect(mockState.rpc).not.toHaveBeenCalled()
   })
 

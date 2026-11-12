@@ -144,12 +144,33 @@ function setKeepSameName(rowNumber: number, keep: boolean) {
   previewRows.value = previewRows.value.map((row) => row.row_number === rowNumber ? { ...row, keep_same_name: keep } : row)
 }
 
-function apiFailureMessage(code: string): string {
+function apiFailureMessage(code: string, rawDetails?: unknown): string {
+  if (code === 'MEMBERSHIP_ROSTER_SYNC_CONFLICT') {
+    let details: Record<string, unknown> = {}
+    if (typeof rawDetails === 'string') {
+      try { details = JSON.parse(rawDetails) as Record<string, unknown> } catch { details = {} }
+    } else if (rawDetails && typeof rawDetails === 'object') {
+      details = rawDetails as Record<string, unknown>
+    }
+    const date = typeof details.session_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(details.session_date)
+      ? details.session_date
+      : null
+    const reason = details.reason === 'ROOM_REQUIRED_FOR_OVERLAP'
+      ? 'cần khai báo phòng cho hai buổi trùng giờ'
+      : details.reason === 'ROOM_ALREADY_BOOKED'
+        ? 'phòng đã có lịch khác trong khung giờ'
+        : 'học sinh có buổi học khác trùng giờ'
+    return `Xung đột ở buổi${date ? ` ngày ${date}` : ''}: ${reason}. Tài khoản và membership của dòng này đã được hoàn tác.`
+  }
   const messages: Record<string, string> = {
     INVALID_INPUT: 'Dữ liệu dòng không hợp lệ.',
     USERNAME_ALREADY_EXISTS: 'Không tạo được tên đăng nhập.',
     EMAIL_ALREADY_EXISTS: 'Email tài khoản đã được sử dụng.',
     PHONE_ALREADY_EXISTS: 'Số điện thoại đang được gắn với tài khoản khác.',
+    STUDENT_ALREADY_IN_CLASS: 'Học sinh đã được xếp vào lớp trong khoảng ngày này.',
+    CLASS_NOT_ACTIVE: 'Lớp đã chọn không còn hoạt động.',
+    STUDENT_NOT_ACTIVE: 'Hồ sơ học sinh không còn hoạt động.',
+    MEMBERSHIP_CREATE_FAILED: 'Không thể lưu lượt xếp lớp.',
     ACCOUNT_ROLLBACK_FAILED: 'Lỗi khi tạo tài khoản và hệ thống không thể hoàn tác đầy đủ; cần kiểm tra trước khi thử lại.',
     STUDENT_CREATE_FAILED: 'Không tạo được tài khoản hoặc xếp lớp.',
   }
@@ -208,9 +229,14 @@ async function retryFailedRows() {
 }
 
 function resultMessage(row: AdminStudentIntakeResult): string {
-  if (row.status === 'CREATED') return 'Đã tạo tài khoản và xếp lớp.'
+  if (row.status === 'CREATED') {
+    const attendanceNote = row.sessions_skipped_with_attendance
+      ? ` Giữ nguyên ${row.sessions_skipped_with_attendance} buổi có attendance.`
+      : ''
+    return `Đã tạo tài khoản, xếp lớp và đồng bộ ${row.sessions_updated} buổi còn lại trong tháng.${attendanceNote}`
+  }
   if (row.status === 'SKIPPED') return row.reason_code === 'STUDENT_CODE_ALREADY_EXISTS' ? 'Mã học sinh đã có; đã bỏ qua.' : 'Số điện thoại học sinh đã có; đã bỏ qua.'
-  return apiFailureMessage(row.reason_code)
+  return apiFailureMessage(row.reason_code, row.details)
 }
 </script>
 

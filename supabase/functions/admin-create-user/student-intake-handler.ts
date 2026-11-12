@@ -22,14 +22,22 @@ export interface CreatedStudentAccount {
   student_code: string
   username: string
   temporary_password: string
+  sessions_updated: number
+  students_added: number
+  sessions_skipped_with_attendance: number
 }
 
 export interface StudentIntakeDependencies {
   todayDate(): string
-  hasPermission(userId: string, permission: 'STUDENTS_MANAGE' | 'CLASS_MANAGE'): Promise<boolean>
+  hasPermission(
+    userId: string,
+    permission: 'STUDENTS_MANAGE' | 'CLASS_MANAGE',
+  ): Promise<boolean>
   isActiveClass(classId: string): Promise<boolean>
   getExistingStudents(): Promise<StudentIntakeExistingStudent[]>
-  createStudent(input: StudentIntakeCandidate & { class_id: string; start_date: string }): Promise<CreatedStudentAccount>
+  createStudent(
+    input: StudentIntakeCandidate & { class_id: string; start_date: string },
+  ): Promise<CreatedStudentAccount>
 }
 
 export interface StudentIntakeBatchInput {
@@ -41,8 +49,17 @@ export interface StudentIntakeBatchInput {
 
 export type StudentIntakeRowResult =
   | ({ row_number: number; status: 'CREATED' } & CreatedStudentAccount)
-  | { row_number: number; status: 'SKIPPED'; reason_code: 'STUDENT_CODE_ALREADY_EXISTS' | 'STUDENT_PHONE_ALREADY_EXISTS' }
-  | { row_number: number; status: 'FAILED'; reason_code: string }
+  | {
+    row_number: number
+    status: 'SKIPPED'
+    reason_code: 'STUDENT_CODE_ALREADY_EXISTS' | 'STUDENT_PHONE_ALREADY_EXISTS'
+  }
+  | {
+    row_number: number
+    status: 'FAILED'
+    reason_code: string
+    details?: unknown
+  }
 
 export type StudentIntakeBatchOutcome =
   | { ok: true; results: StudentIntakeRowResult[] }
@@ -64,7 +81,8 @@ function normalizePhone(value: string | null | undefined): string {
 function isDate(value: string): boolean {
   if (!DATE_PATTERN.test(value)) return false
   const parsed = new Date(`${value}T00:00:00.000Z`)
-  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
+  return Number.isFinite(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value
 }
 
 function text(value: unknown): string {
@@ -85,26 +103,46 @@ function isDuplicate(
 ): 'STUDENT_CODE_ALREADY_EXISTS' | 'STUDENT_PHONE_ALREADY_EXISTS' | null {
   const code = normalizeCode(candidate.student_code)
   const phone = normalizePhone(candidate.phone)
-  if (code && existing.some((student) => normalizeCode(student.student_code) === code)) {
+  if (
+    code &&
+    existing.some((student) => normalizeCode(student.student_code) === code)
+  ) {
     return 'STUDENT_CODE_ALREADY_EXISTS'
   }
-  if (phone && existing.some((student) => normalizePhone(student.phone) === phone)) {
+  if (
+    phone && existing.some((student) => normalizePhone(student.phone) === phone)
+  ) {
     return 'STUDENT_PHONE_ALREADY_EXISTS'
   }
   return null
 }
 
 function errorCode(error: unknown): string {
-  if (error && typeof error === 'object' && typeof (error as { code?: unknown }).code === 'string') {
+  if (
+    error && typeof error === 'object' &&
+    typeof (error as { code?: unknown }).code === 'string'
+  ) {
     const value = error as { code: string; message?: string; details?: string }
     if (value.code === '23505') {
-      const combined = `${value.message || ''} ${value.details || ''}`.toLowerCase()
-      if (combined.includes('students_student_code_key') || combined.includes('(student_code)')) return 'STUDENT_CODE_ALREADY_EXISTS'
-      if (combined.includes('profiles_phone_uidx') || combined.includes('(phone)')) return 'PHONE_ALREADY_EXISTS'
+      const combined = `${value.message || ''} ${value.details || ''}`
+        .toLowerCase()
+      if (
+        combined.includes('students_student_code_key') ||
+        combined.includes('(student_code)')
+      ) return 'STUDENT_CODE_ALREADY_EXISTS'
+      if (
+        combined.includes('profiles_phone_uidx') || combined.includes('(phone)')
+      ) return 'PHONE_ALREADY_EXISTS'
     }
     return value.code
   }
   return 'STUDENT_CREATE_FAILED'
+}
+
+function errorDetails(error: unknown): unknown {
+  if (!error || typeof error !== 'object') return undefined
+  const details = (error as { details?: unknown }).details
+  return details && typeof details === 'object' ? details : undefined
 }
 
 export async function processStudentIntakeBatch(
@@ -113,7 +151,12 @@ export async function processStudentIntakeBatch(
   dependencies: StudentIntakeDependencies,
 ): Promise<StudentIntakeBatchOutcome> {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
-    return { ok: false, status: 400, code: 'INVALID_INPUT', message: 'Dữ liệu nhập học không hợp lệ.' }
+    return {
+      ok: false,
+      status: 400,
+      code: 'INVALID_INPUT',
+      message: 'Dữ liệu nhập học không hợp lệ.',
+    }
   }
   const batch = input as Partial<StudentIntakeBatchInput>
   if (
@@ -124,31 +167,75 @@ export async function processStudentIntakeBatch(
     batch.students.length > MAX_STUDENT_INTAKE_ROWS ||
     !batch.students.every(validCandidate)
   ) {
-    return { ok: false, status: 400, code: 'INVALID_INPUT', message: `Biểu mẫu cần có từ 1 đến ${MAX_STUDENT_INTAKE_ROWS} dòng hợp lệ.` }
+    return {
+      ok: false,
+      status: 400,
+      code: 'INVALID_INPUT',
+      message: `Biểu mẫu cần có từ 1 đến ${MAX_STUDENT_INTAKE_ROWS} dòng hợp lệ.`,
+    }
   }
   if (batch.start_date !== dependencies.todayDate()) {
-    return { ok: false, status: 400, code: 'START_DATE_MUST_BE_TODAY', message: 'Ngày bắt đầu nhập học đã thay đổi. Hãy mở lại biểu mẫu để dùng ngày hôm nay.' }
+    return {
+      ok: false,
+      status: 400,
+      code: 'START_DATE_MUST_BE_TODAY',
+      message: 'Ngày bắt đầu nhập học đã thay đổi. Hãy mở lại biểu mẫu để dùng ngày hôm nay.',
+    }
   }
-  if (new Set(batch.students.map((student) => student.row_number)).size !== batch.students.length) {
-    return { ok: false, status: 400, code: 'INVALID_INPUT', message: 'Số dòng biểu mẫu bị lặp.' }
+  if (
+    new Set(batch.students.map((student) => student.row_number)).size !==
+      batch.students.length
+  ) {
+    return {
+      ok: false,
+      status: 400,
+      code: 'INVALID_INPUT',
+      message: 'Số dòng biểu mẫu bị lặp.',
+    }
   }
   if (!['ROOT_ADMIN', 'ADMIN'].includes(caller.profile.role)) {
-    return { ok: false, status: 403, code: 'FORBIDDEN', message: 'Bạn không có quyền nhập học sinh.' }
+    return {
+      ok: false,
+      status: 403,
+      code: 'FORBIDDEN',
+      message: 'Bạn không có quyền nhập học sinh.',
+    }
   }
 
   if (caller.profile.role !== 'ROOT_ADMIN') {
-    const canManageStudents = await dependencies.hasPermission(caller.user.id, 'STUDENTS_MANAGE')
+    const canManageStudents = await dependencies.hasPermission(
+      caller.user.id,
+      'STUDENTS_MANAGE',
+    )
     if (!canManageStudents) {
-      return { ok: false, status: 403, code: 'FORBIDDEN', message: 'Tài khoản chưa được cấp quyền quản lý học sinh.' }
+      return {
+        ok: false,
+        status: 403,
+        code: 'FORBIDDEN',
+        message: 'Tài khoản chưa được cấp quyền quản lý học sinh.',
+      }
     }
-    const canManageClass = await dependencies.hasPermission(caller.user.id, 'CLASS_MANAGE')
+    const canManageClass = await dependencies.hasPermission(
+      caller.user.id,
+      'CLASS_MANAGE',
+    )
     if (!canManageClass) {
-      return { ok: false, status: 403, code: 'FORBIDDEN', message: 'Tài khoản chưa được cấp quyền xếp học sinh vào lớp.' }
+      return {
+        ok: false,
+        status: 403,
+        code: 'FORBIDDEN',
+        message: 'Tài khoản chưa được cấp quyền xếp học sinh vào lớp.',
+      }
     }
   }
 
   if (!await dependencies.isActiveClass(batch.class_id)) {
-    return { ok: false, status: 400, code: 'CLASS_NOT_ACTIVE', message: 'Lớp đã chọn không còn hoạt động.' }
+    return {
+      ok: false,
+      status: 400,
+      code: 'CLASS_NOT_ACTIVE',
+      message: 'Lớp đã chọn không còn hoạt động.',
+    }
   }
 
   let existingStudents = await dependencies.getExistingStudents()
@@ -165,13 +252,24 @@ export async function processStudentIntakeBatch(
       parent_phone: text(rawCandidate.parent_phone),
     }
     if (!candidate.full_name) {
-      results.push({ row_number: candidate.row_number, status: 'FAILED', reason_code: 'INVALID_INPUT' })
+      results.push({
+        row_number: candidate.row_number,
+        status: 'FAILED',
+        reason_code: 'INVALID_INPUT',
+      })
       continue
     }
 
-    const duplicate = isDuplicate(candidate, [...existingStudents, ...createdInBatch])
+    const duplicate = isDuplicate(candidate, [
+      ...existingStudents,
+      ...createdInBatch,
+    ])
     if (duplicate) {
-      results.push({ row_number: candidate.row_number, status: 'SKIPPED', reason_code: duplicate })
+      results.push({
+        row_number: candidate.row_number,
+        status: 'SKIPPED',
+        reason_code: duplicate,
+      })
       continue
     }
 
@@ -183,24 +281,56 @@ export async function processStudentIntakeBatch(
         class_id: batch.class_id,
         start_date: batch.start_date,
       })
-      createdInBatch.push({ student_code: created.student_code, full_name: candidate.full_name, phone: candidate.phone || null })
-      results.push({ row_number: candidate.row_number, status: 'CREATED', ...created })
+      createdInBatch.push({
+        student_code: created.student_code,
+        full_name: candidate.full_name,
+        phone: candidate.phone || null,
+      })
+      results.push({
+        row_number: candidate.row_number,
+        status: 'CREATED',
+        ...created,
+      })
     } catch (error) {
       const code = errorCode(error)
-      if (code === 'STUDENT_CODE_ALREADY_EXISTS' || code === 'PHONE_ALREADY_EXISTS') {
+      if (
+        code === 'STUDENT_CODE_ALREADY_EXISTS' ||
+        code === 'PHONE_ALREADY_EXISTS'
+      ) {
         existingStudents = await dependencies.getExistingStudents()
-        const appearedDuplicate = isDuplicate(candidate, [...existingStudents, ...createdInBatch])
+        const appearedDuplicate = isDuplicate(candidate, [
+          ...existingStudents,
+          ...createdInBatch,
+        ])
         if (appearedDuplicate) {
-          results.push({ row_number: candidate.row_number, status: 'SKIPPED', reason_code: appearedDuplicate })
+          results.push({
+            row_number: candidate.row_number,
+            status: 'SKIPPED',
+            reason_code: appearedDuplicate,
+          })
           continue
         }
       }
       results.push({
         row_number: candidate.row_number,
         status: 'FAILED',
-        reason_code: ['USERNAME_ALREADY_EXISTS', 'EMAIL_ALREADY_EXISTS', 'PHONE_ALREADY_EXISTS', 'STUDENT_CODE_ALREADY_EXISTS'].includes(code)
+        reason_code: [
+            'USERNAME_ALREADY_EXISTS',
+            'EMAIL_ALREADY_EXISTS',
+            'PHONE_ALREADY_EXISTS',
+            'STUDENT_CODE_ALREADY_EXISTS',
+          ].includes(code)
           ? code
-          : code === 'ACCOUNT_ROLLBACK_FAILED' ? 'ACCOUNT_ROLLBACK_FAILED' : 'STUDENT_CREATE_FAILED',
+          : [
+              'ACCOUNT_ROLLBACK_FAILED',
+              'MEMBERSHIP_ROSTER_SYNC_CONFLICT',
+              'STUDENT_ALREADY_IN_CLASS',
+              'CLASS_NOT_ACTIVE',
+              'STUDENT_NOT_ACTIVE',
+            ].includes(code)
+          ? code
+          : 'STUDENT_CREATE_FAILED',
+        ...(code === 'MEMBERSHIP_ROSTER_SYNC_CONFLICT' && errorDetails(error) ? { details: errorDetails(error) } : {}),
       })
     }
   }

@@ -62,6 +62,30 @@ function membershipStartDateErrorMessage(error: unknown): string {
   return userErrorMessage(error, 'Không thể sửa ngày bắt đầu. Ngày và roster buổi học được giữ nguyên.')
 }
 
+function membershipAddErrorMessage(error: unknown): string {
+  const value = error && typeof error === 'object'
+    ? error as { code?: unknown; details?: unknown }
+    : {}
+  if (value.code === 'MEMBERSHIP_ROSTER_SYNC_CONFLICT') {
+    let detail: Record<string, unknown> = {}
+    if (typeof value.details === 'string') {
+      try { detail = JSON.parse(value.details) as Record<string, unknown> } catch { detail = {} }
+    } else if (value.details && typeof value.details === 'object') {
+      detail = value.details as Record<string, unknown>
+    }
+    const date = typeof detail.session_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(detail.session_date)
+      ? detail.session_date
+      : null
+    const reason = detail.reason === 'ROOM_REQUIRED_FOR_OVERLAP'
+      ? 'cần khai báo phòng cho hai buổi trùng giờ'
+      : detail.reason === 'ROOM_ALREADY_BOOKED'
+        ? 'phòng đã có lịch khác trong khung giờ'
+        : 'học sinh có buổi học khác trùng giờ'
+    return `Không thể thêm học sinh: buổi${date ? ` ngày ${date}` : ''} ${reason}. Membership và roster chưa được thay đổi.`
+  }
+  return userErrorMessage(error, 'Không thể thêm học sinh vào lớp.')
+}
+
 async function load() {
   if (!classId.value) return
   loading.value = true
@@ -89,14 +113,15 @@ async function addStudent() {
   errorMessage.value = ''
   membershipBusy.value = true
   try {
-    await addClassMembership({ class_id: classId.value, student_id: membershipForm.value.student_id, start_date: membershipForm.value.start_date })
+    const result = await addClassMembership({ class_id: classId.value, student_id: membershipForm.value.student_id, start_date: membershipForm.value.start_date })
     membershipForm.value = { student_id: '', start_date: localDate() }
     membershipBusy.value = false
     showMembership.value = false
     membershipDirty.value = false
-    toast.success('Đã thêm học sinh vào lớp.')
+    const skipped = result.sessions_skipped_with_attendance
+    toast.success(`Đã thêm học sinh vào lớp và đồng bộ ${result.sessions_updated} buổi còn lại trong tháng${skipped ? `; giữ nguyên ${skipped} buổi có attendance` : ''}.`)
     await load()
-  } catch (error) { errorMessage.value = error instanceof Error ? error.message : 'Không thể thêm học sinh vào lớp.' }
+  } catch (error) { errorMessage.value = membershipAddErrorMessage(error) }
   finally { membershipBusy.value = false }
 }
 

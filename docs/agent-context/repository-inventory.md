@@ -97,6 +97,7 @@
 | frontend/src/modules/admin/components/BulkPasswordResetModal.vue | Frontend / Admin | Vue SFC | Giao diện xác nhận và thu thập lựa chọn reset mật khẩu hàng loạt. |
 | frontend/src/modules/admin/components/CompletedSessionAttendanceEditor.vue | Frontend / Admin | Vue SFC | Component luồng Admin: Completed Session Attendance Editor. |
 | frontend/src/modules/admin/components/RoomRentalModal.vue | Frontend / Admin | Vue SFC | Component luồng Admin: Room Rental Modal. |
+| frontend/src/modules/admin/components/StudentQuickEnrollmentModal.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho Student Quick Enrollment Modal trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/admin/components/StudentQuickEnrollmentModal.vue | Frontend / Admin | Vue SFC | Component luồng Admin: Student Quick Enrollment Modal. |
 | frontend/src/modules/admin/components/TeacherPicker.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho Teacher Picker trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/admin/components/TeacherPicker.vue | Frontend / Admin | Vue SFC | Chọn hoặc chỉnh danh sách teacher được giao cho lịch/buổi. |
@@ -178,10 +179,18 @@
 | supabase/AGENTS.md | Chỉ dẫn agent | Markdown | Quy tắc agent riêng cho migration, RLS, RPC, Edge Function và dữ liệu thật. |
 | supabase/config.toml | Supabase / cấu hình và seed | TOML/config | Cấu hình Supabase local, Auth và Edge Functions. |
 | supabase/functions/_shared/auth.ts | Supabase / Edge Functions | TypeScript | Helper Edge Function: xác thực caller và kiểm tra hồ sơ/quyền dùng chung. |
+| supabase/functions/_shared/class-membership-enrollment.ts | Supabase / Edge Functions | TypeScript | Helper Edge Function: class membership enrollment. |
 | supabase/functions/_shared/cors.ts | Supabase / Edge Functions | TypeScript | Helper Edge Function: xử lý CORS và preflight dùng chung. |
 | supabase/functions/_shared/password-reset.ts | Supabase / Edge Functions | TypeScript | Helper Edge Function: tiện ích chung cho reset mật khẩu. |
 | supabase/functions/_shared/response.ts | Supabase / Edge Functions | TypeScript | Helper Edge Function: chuẩn hóa response thành công/lỗi và trace id. |
 | supabase/functions/admin-account-status/index.ts | Supabase / Edge Functions | TypeScript | HTTP entrypoint cho route: đổi trạng thái tài khoản theo quyền Admin. |
+| supabase/functions/admin-class-membership/config.toml | Supabase / Edge Functions | TOML/config | Cấu hình JWT/deploy riêng cho route admin-class-membership. |
+| supabase/functions/admin-class-membership/database.integration.test.ts | Supabase / Edge Functions | TypeScript | Test hồi quy cho database integration. |
+| supabase/functions/admin-class-membership/deno.json | Supabase / Edge Functions | JSON/config | Cấu hình deno. |
+| supabase/functions/admin-class-membership/deno.lock | Supabase / Edge Functions | Deno lockfile | File Deno lockfile thuộc Supabase / Edge Functions: deno. |
+| supabase/functions/admin-class-membership/handler.test.ts | Supabase / Edge Functions | TypeScript | Kiểm thử handler của route admin-class-membership với phụ thuộc giả lập. |
+| supabase/functions/admin-class-membership/handler.ts | Supabase / Edge Functions | TypeScript | Logic có thể kiểm thử tách biệt cho route: Edge Function admin class membership. |
+| supabase/functions/admin-class-membership/index.ts | Supabase / Edge Functions | TypeScript | HTTP entrypoint cho route: Edge Function admin class membership. |
 | supabase/functions/admin-create-user/index.ts | Supabase / Edge Functions | TypeScript | HTTP entrypoint cho route: tạo tài khoản và hồ sơ theo role được phép. |
 | supabase/functions/admin-create-user/student-intake-handler.test.ts | Supabase / Edge Functions | TypeScript | Test hồi quy cho student intake handler. |
 | supabase/functions/admin-create-user/student-intake-handler.ts | Supabase / Edge Functions | TypeScript | File TypeScript thuộc Supabase / Edge Functions: student intake handler. |
@@ -328,4 +337,4 @@
 | supabase/tests/student_future_session_roster_sync.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra student future session roster sync bằng fixture database cô lập. |
 | supabase/tests/timesheet_workflow.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra timesheet workflow bằng fixture database cô lập. |
 
-Tổng: 321 đường dẫn có trong inventory.
+Tổng: 330 đường dẫn có trong inventory.

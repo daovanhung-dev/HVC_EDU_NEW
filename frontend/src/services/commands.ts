@@ -102,9 +102,9 @@ export interface AdminStudentIntakeCandidate {
 }
 
 export type AdminStudentIntakeResult =
-  | { row_number: number; status: 'CREATED'; student_code: string; username: string; temporary_password: string }
+  | { row_number: number; status: 'CREATED'; student_code: string; username: string; temporary_password: string; sessions_updated: number; students_added: number; sessions_skipped_with_attendance: number }
   | { row_number: number; status: 'SKIPPED'; reason_code: string }
-  | { row_number: number; status: 'FAILED'; reason_code: string }
+  | { row_number: number; status: 'FAILED'; reason_code: string; details?: unknown }
 
 export function adminEnrollStudents(input: {
   class_id: string
@@ -275,11 +275,18 @@ export async function archiveStudent(id: string) {
   return data
 }
 
-export async function addClassMembership(input: { class_id: string; student_id: string; start_date: string; end_date?: string | null }) {
-  const { data, error } = await supabase.from('class_memberships').insert({ ...input, status: 'ACTIVE' }).select('*').single()
-  if (error) throw error
-  await generateUpcomingSessions()
-  return data
+export interface ClassMembershipEnrollmentResult {
+  membership_id: string
+  sessions_updated: number
+  students_added: number
+  sessions_skipped_with_attendance: number
+}
+
+export function addClassMembership(input: { class_id: string; student_id: string; start_date: string }) {
+  return invokeFunction<typeof input & { operation: 'add' }, ClassMembershipEnrollmentResult>(
+    'admin-class-membership',
+    { operation: 'add', ...input },
+  )
 }
 
 export async function updateClassMembership(id: string, input: { start_date: string; end_date?: string | null; status?: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' }) {

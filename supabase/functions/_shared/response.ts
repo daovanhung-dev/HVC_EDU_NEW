@@ -103,6 +103,11 @@ const knownCodes = [
   "PHONE_ALREADY_EXISTS",
   "STAFF_CODE_ALREADY_EXISTS",
   "STUDENT_CODE_ALREADY_EXISTS",
+  "STUDENT_ALREADY_IN_CLASS",
+  "STUDENT_NOT_ACTIVE",
+  "CLASS_NOT_ACTIVE",
+  "MEMBERSHIP_CREATE_FAILED",
+  "MEMBERSHIP_ROSTER_SYNC_CONFLICT",
   "AUTH_CREATE_FAILED",
   "PROFILE_CREATE_FAILED",
   "STAFF_CREATE_FAILED",
@@ -134,6 +139,11 @@ const publicMessages: Record<string, string> = {
   PHONE_ALREADY_EXISTS: "Số điện thoại đã được sử dụng.",
   STAFF_CODE_ALREADY_EXISTS: "Mã nhân sự đã tồn tại.",
   STUDENT_CODE_ALREADY_EXISTS: "Mã học sinh đã tồn tại.",
+  STUDENT_ALREADY_IN_CLASS: "Học sinh đã được xếp vào lớp trong khoảng ngày này.",
+  STUDENT_NOT_ACTIVE: "Chỉ có thể xếp học sinh đang hoạt động vào lớp.",
+  CLASS_NOT_ACTIVE: "Chỉ có thể xếp học sinh vào lớp đang hoạt động.",
+  MEMBERSHIP_CREATE_FAILED: "Không thể lưu lượt xếp lớp.",
+  MEMBERSHIP_ROSTER_SYNC_CONFLICT: "Có buổi học trong tháng bị xung đột; membership và roster đã được giữ nguyên.",
   AUTH_CREATE_FAILED: "Không thể tạo tài khoản đăng nhập.",
   PROFILE_CREATE_FAILED: "Không thể tạo hồ sơ tài khoản.",
   STAFF_CREATE_FAILED: "Không thể tạo hồ sơ nhân sự.",
@@ -305,7 +315,9 @@ export function fromError(
         classified.code === "ROOM_REQUIRED_FOR_OVERLAP" ||
         classified.code === "ROOM_ALREADY_BOOKED" ||
         classified.code === "ROOM_RENTAL_NOT_BOOKED" ||
-        classified.code === "ROOM_RENTAL_CANNOT_CHANGE_STARTED"
+        classified.code === "ROOM_RENTAL_CANNOT_CHANGE_STARTED" ||
+        classified.code === "STUDENT_ALREADY_IN_CLASS" ||
+        classified.code === "MEMBERSHIP_ROSTER_SYNC_CONFLICT"
     ? 409
     : classified.code === "ROOM_RENTAL_NOT_FOUND"
     ? 404

@@ -77,7 +77,12 @@ describe('ClassDetailPage membership start date', () => {
     mocks.getClassDetail.mockReset().mockResolvedValue(classRow)
     mocks.getClassActiveMemberships.mockReset().mockResolvedValue([membership])
     mocks.getStudents.mockReset().mockResolvedValue([membership.students])
-    mocks.addClassMembership.mockReset().mockResolvedValue({})
+    mocks.addClassMembership.mockReset().mockResolvedValue({
+      membership_id: 'qa-membership-new',
+      sessions_updated: 2,
+      students_added: 2,
+      sessions_skipped_with_attendance: 1,
+    })
     mocks.updateClassMembership.mockReset().mockResolvedValue({})
     mocks.updateClassMembershipStartDateAndSyncFutureRosters.mockReset().mockResolvedValue({
       membership_id: membership.id,
@@ -100,6 +105,53 @@ describe('ClassDetailPage membership start date', () => {
     wrapper = null
     document.body.querySelectorAll('.modal-backdrop').forEach((backdrop) => backdrop.remove())
     document.body.classList.remove('modal-open')
+  })
+
+  it('adds a student and reports the number of remaining month sessions synchronized', async () => {
+    const newStudent = { id: 'qa-student-2', student_code: 'QA-S-002', full_name: 'QA- Học sinh mới', phone: null }
+    wrapper!.unmount()
+    mocks.getClassActiveMemberships.mockResolvedValue([])
+    mocks.getStudents.mockResolvedValue([newStudent])
+    wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper!.get('button.btn-primary.mb-3').trigger('click')
+    await flushPromises()
+    await activeModal().get('#membership-student').setValue(newStudent.id)
+    await activeModal().get('button.btn-primary').trigger('click')
+    await flushPromises()
+
+    expect(mocks.addClassMembership).toHaveBeenCalledWith(expect.objectContaining({
+      class_id: 'qa-class-1',
+      student_id: newStudent.id,
+    }))
+    expect(mocks.success).toHaveBeenCalledWith(expect.stringContaining('đồng bộ 2 buổi còn lại trong tháng'))
+    expect(modalBody().find('.modal.show').exists()).toBe(false)
+  })
+
+  it('keeps enrollment open and reports the conflicting session date after rollback', async () => {
+    const newStudent = { id: 'qa-student-3', student_code: 'QA-S-003', full_name: 'QA- Học sinh trùng lịch', phone: null }
+    mocks.getClassActiveMemberships.mockResolvedValue([])
+    mocks.getStudents.mockResolvedValue([newStudent])
+    mocks.addClassMembership.mockRejectedValueOnce(Object.assign(new Error('Không thể thêm học sinh.'), {
+      code: 'MEMBERSHIP_ROSTER_SYNC_CONFLICT',
+      details: { session_date: '2026-11-20', reason: 'SCHEDULE_CONFLICT' },
+    }))
+    wrapper!.unmount()
+    mocks.getClassActiveMemberships.mockResolvedValue([])
+    mocks.getStudents.mockResolvedValue([newStudent])
+    wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper!.get('button.btn-primary.mb-3').trigger('click')
+    await flushPromises()
+    await activeModal().get('#membership-student').setValue(newStudent.id)
+    await activeModal().get('button.btn-primary').trigger('click')
+    await flushPromises()
+
+    expect(modalBody().find('.modal.show').exists()).toBe(true)
+    expect(activeModal().text()).toContain('buổi ngày 2026-11-20')
+    expect(activeModal().text()).toContain('roster chưa được thay đổi')
   })
 
   it('prefills the selected membership and reports the atomic future-roster update', async () => {

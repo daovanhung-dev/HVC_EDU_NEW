@@ -5,6 +5,10 @@ import {
   syntheticEmail,
   temporaryPassword,
 } from "../_shared/auth.ts";
+import {
+  type ClassMembershipEnrollmentStore,
+  createClassMembershipEnrollmentStore,
+} from "../_shared/class-membership-enrollment.ts";
 import { handleOptions } from "../_shared/cors.ts";
 import { appError, fail, fromError, ok, traceId } from "../_shared/response.ts";
 import {
@@ -29,6 +33,15 @@ interface CreateUserBody {
 }
 
 type AdminClient = ReturnType<typeof adminClient>;
+
+let membershipStore: ClassMembershipEnrollmentStore | null = null;
+
+function getMembershipStore(): ClassMembershipEnrollmentStore {
+  if (!membershipStore) {
+    membershipStore = createClassMembershipEnrollmentStore();
+  }
+  return membershipStore;
+}
 
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -59,11 +72,19 @@ async function ensureAvailable(
 
 async function rollbackCreatedAccount(admin: AdminClient, userId: string) {
   const failures: string[] = [];
-  const student = await admin.from("students").select("id").eq("user_id", userId).maybeSingle();
+  const student = await admin.from("students").select("id").eq(
+    "user_id",
+    userId,
+  ).maybeSingle();
   if (student.error) failures.push(`students.lookup: ${student.error.message}`);
   if (student.data?.id) {
-    const memberships = await admin.from("class_memberships").delete().eq("student_id", student.data.id);
-    if (memberships.error) failures.push(`class_memberships: ${memberships.error.message}`);
+    const memberships = await admin.from("class_memberships").delete().eq(
+      "student_id",
+      student.data.id,
+    );
+    if (memberships.error) {
+      failures.push(`class_memberships: ${memberships.error.message}`);
+    }
   }
   const removals = [
     ["staff", () => admin.from("staff").delete().eq("user_id", userId)],
@@ -84,6 +105,7 @@ async function rollbackCreatedAccount(admin: AdminClient, userId: string) {
 
 async function createStudentAccountForIntake(
   admin: AdminClient,
+  enrollmentStore: ClassMembershipEnrollmentStore,
   caller: Awaited<ReturnType<typeof requireCaller>>,
   input: StudentIntakeCandidate & { class_id: string; start_date: string },
 ) {
@@ -111,17 +133,47 @@ async function createStudentAccountForIntake(
     }
     if (!username) throw appError("USERNAME_GENERATION_FAILED");
 
-    await ensureAvailable(admin, "profiles", "username", username, "USERNAME_ALREADY_EXISTS");
+    await ensureAvailable(
+      admin,
+      "profiles",
+      "username",
+      username,
+      "USERNAME_ALREADY_EXISTS",
+    );
     const email = syntheticEmail(username);
-    await ensureAvailable(admin, "profiles", "email", email, "EMAIL_ALREADY_EXISTS");
-    await ensureAvailable(admin, "profiles", "phone", phone, "PHONE_ALREADY_EXISTS");
+    await ensureAvailable(
+      admin,
+      "profiles",
+      "email",
+      email,
+      "EMAIL_ALREADY_EXISTS",
+    );
+    await ensureAvailable(
+      admin,
+      "profiles",
+      "phone",
+      phone,
+      "PHONE_ALREADY_EXISTS",
+    );
     if (studentCodeInput) {
-      await ensureAvailable(admin, "students", "student_code", studentCodeInput, "STUDENT_CODE_ALREADY_EXISTS");
+      await ensureAvailable(
+        admin,
+        "students",
+        "student_code",
+        studentCodeInput,
+        "STUDENT_CODE_ALREADY_EXISTS",
+      );
     }
 
     const password = temporaryPassword();
-    const created = await admin.auth.admin.createUser({ email, password, email_confirm: true });
-    if (created.error || !created.data.user) throw created.error || appError("AUTH_CREATE_FAILED");
+    const created = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    });
+    if (created.error || !created.data.user) {
+      throw created.error || appError("AUTH_CREATE_FAILED");
+    }
     createdUserId = created.data.user.id;
 
     const profile = await admin.from("profiles").insert({
@@ -133,14 +185,22 @@ async function createStudentAccountForIntake(
       phone: phone || null,
       created_by: caller.profile.id,
       force_password_change: false,
-    }).select("id,user_id,role,username,display_name,force_password_change").single();
-    if (profile.error || !profile.data) throw profile.error || appError("PROFILE_CREATE_FAILED");
+    }).select("id,user_id,role,username,display_name,force_password_change")
+      .single();
+    if (profile.error || !profile.data) {
+      throw profile.error || appError("PROFILE_CREATE_FAILED");
+    }
 
     let studentCode = studentCodeInput || undefined;
     if (!studentCode) {
       for (let attempt = 0; attempt < 8; attempt += 1) {
-        const candidate = `HS${String(Math.floor(100000 + Math.random() * 900000))}`;
-        const exists = await admin.from("students").select("id").eq("student_code", candidate).maybeSingle();
+        const candidate = `HS${
+          String(Math.floor(100000 + Math.random() * 900000))
+        }`;
+        const exists = await admin.from("students").select("id").eq(
+          "student_code",
+          candidate,
+        ).maybeSingle();
         if (exists.error) throw exists.error;
         if (!exists.data) {
           studentCode = candidate;
@@ -160,27 +220,27 @@ async function createStudentAccountForIntake(
       phone: phone || null,
       created_by: caller.user.id,
     }).select("id,student_code").single();
-    if (student.error || !student.data) throw student.error || appError("STUDENT_CREATE_FAILED");
+    if (student.error || !student.data) {
+      throw student.error || appError("STUDENT_CREATE_FAILED");
+    }
 
-    const membership = await admin.from("class_memberships").insert({
+    const enrollment = await enrollmentStore.enroll({
       class_id: input.class_id,
       student_id: student.data.id,
       start_date: input.start_date,
-      status: "ACTIVE",
-      created_by: caller.user.id,
+      actor_user_id: caller.user.id,
+      account_audit: { profile_id: profile.data.id, username },
     });
-    if (membership.error) throw membership.error;
 
-    const audit = await admin.rpc("write_audit", {
-      p_actor_user_id: caller.user.id,
-      p_action: "ACCOUNT_CREATE",
-      p_entity_type: "profiles",
-      p_entity_id: profile.data.id,
-      p_new_data: { role: "STUDENT", username, class_id: input.class_id },
-    });
-    if (audit.error) throw audit.error;
-
-    return { student_code: student.data.student_code, username, temporary_password: password };
+    return {
+      student_code: student.data.student_code,
+      username,
+      temporary_password: password,
+      sessions_updated: enrollment.sessions_updated,
+      students_added: enrollment.students_added,
+      sessions_skipped_with_attendance:
+        enrollment.sessions_skipped_with_attendance,
+    };
   } catch (error) {
     if (createdUserId) {
       try {
@@ -188,7 +248,9 @@ async function createStudentAccountForIntake(
       } catch (rollbackError) {
         throw appError(
           "ACCOUNT_ROLLBACK_FAILED",
-          rollbackError instanceof Error ? rollbackError.message : "rollback failed",
+          rollbackError instanceof Error
+            ? rollbackError.message
+            : "rollback failed",
         );
       }
     }
@@ -214,27 +276,33 @@ Deno.serve(async (req) => {
     const body = rawBody as CreateUserBody;
     if (body.operation === "batch_student_intake") {
       admin = adminClient();
+      const enrollmentStore = getMembershipStore();
       const outcome = await processStudentIntakeBatch(caller, body, {
-        todayDate: () => new Intl.DateTimeFormat("sv-SE", {
-          timeZone: "Asia/Ho_Chi_Minh",
-        }).format(new Date()),
+        todayDate: () =>
+          new Intl.DateTimeFormat("sv-SE", {
+            timeZone: "Asia/Ho_Chi_Minh",
+          }).format(new Date()),
         hasPermission: async (userId, permission) => {
-          const result = await admin!.rpc("actor_has_permission", {
-            p_user_id: userId,
-            p_permission_code: permission,
-          });
-          if (result.error) throw result.error;
-          return result.data === true;
+          return enrollmentStore.hasPermission(userId, permission);
         },
         isActiveClass: async (classId) => {
-          const result = await admin!.from("classes").select("id,status").eq("id", classId).maybeSingle();
+          const result = await admin!.from("classes").select("id,status").eq(
+            "id",
+            classId,
+          ).maybeSingle();
           if (result.error) throw result.error;
           return result.data?.status === "ACTIVE";
         },
         getExistingStudents: async () => {
           const pageSize = 1000;
-          const students: Array<{ student_code: string | null; full_name: string; phone: string | null }> = [];
-          for (let offset = 0; ; offset += pageSize) {
+          const students: Array<
+            {
+              student_code: string | null;
+              full_name: string;
+              phone: string | null;
+            }
+          > = [];
+          for (let offset = 0;; offset += pageSize) {
             const result = await admin!.from("students")
               .select("student_code,full_name,phone")
               .order("id")
@@ -244,9 +312,17 @@ Deno.serve(async (req) => {
             if ((result.data || []).length < pageSize) return students;
           }
         },
-        createStudent: (input) => createStudentAccountForIntake(admin!, caller, input),
+        createStudent: (input) =>
+          createStudentAccountForIntake(admin!, enrollmentStore, caller, input),
       });
-      if (!outcome.ok) return fail(outcome.code, outcome.message, outcome.status, requestTraceId);
+      if (!outcome.ok) {
+        return fail(
+          outcome.code,
+          outcome.message,
+          outcome.status,
+          requestTraceId,
+        );
+      }
       return ok({ results: outcome.results }, requestTraceId);
     }
     role = text(body.role);
