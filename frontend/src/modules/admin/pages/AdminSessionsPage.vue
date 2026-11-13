@@ -3142,7 +3142,7 @@ watch(sessionFormIsBackdated, (isBackdated) => {
     </div>
 
     <div class="col-12">
-      <DetailModal v-if="selected && selectedDetailOpen" v-model="selectedDetailOpen" :title="className(selected)" :description="`${formatDateTime(selected.scheduled_start_at)} · ${selected.status}`" size="xl" @hidden="handleSelectedDetailHidden">
+      <DetailModal v-if="selected && (selectedDetailOpen || openExcelAfterDetailHidden || returnToDetailAfterExcel)" v-model="selectedDetailOpen" :title="className(selected)" :description="`${formatDateTime(selected.scheduled_start_at)} · ${selected.status}`" size="xl" @hidden="handleSelectedDetailHidden">
           <CompletedSessionAttendanceEditor
             v-if="isCompletedAttendanceDetail"
             v-model:rows="learningRows"

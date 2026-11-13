@@ -902,6 +902,74 @@ describe('AdminSessionsPage calendar', () => {
     },
   )
 
+  it('opens the Excel attendance modal after the Admin session detail modal closes and restores the detail afterward', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-13T12:00:00+07:00'))
+    const pastDate = addCalendarDays(getBusinessDateKey(new Date()), -1)
+    const session = makeSession('qa-session-excel-attendance', 'QA Buổi điểm danh Excel', '17:30', '19:30', pastDate)
+    mockState.getMySessions.mockResolvedValue([session])
+    mockState.getSessionStudents.mockResolvedValue([{
+      student_id: 'qa-student-excel',
+      students: { full_name: 'QA Học sinh Excel', student_code: 'QA-S-EXCEL' },
+      assessment_snapshot: {},
+      student_attendances: [],
+    }])
+
+    const wrapper = mountPage()
+    await flushPromises()
+    await clickButtonWithText(wrapper, 'Hiện lịch sử')
+    await wrapper.get('.calendar-event').trigger('click')
+    await flushPromises()
+
+    const detail = findAllPageOrBody(wrapper, '.app-modal').find((modal) => modal.find('input[type="datetime-local"]').exists())
+    if (!detail) throw new Error('Selected session detail modal not found')
+    const excelButton = detail.findAll('button').find((button) => button.text().trim() === 'Điểm danh bằng Excel')
+    if (!excelButton) throw new Error('Excel attendance button not found')
+    expect(excelButton.attributes('disabled')).toBeUndefined()
+
+    await excelButton.trigger('click')
+    await flushPromises()
+
+    const excelModal = getPageOrBody(wrapper, '.session-attendance-excel-modal')
+    expect(excelModal.classes()).toContain('show')
+    expect(excelModal.text()).toContain('1 học sinh trong mẫu')
+    expect(detail.classes()).not.toContain('show')
+
+    await getPageOrBody(wrapper, '.session-attendance-excel-modal .modal-footer .btn-outline-secondary').trigger('click')
+    await flushPromises()
+
+    expect(excelModal.classes()).not.toContain('show')
+    const restoredDetail = findAllPageOrBody(wrapper, '.app-modal').find((modal) => modal.find('input[type="datetime-local"]').exists())
+    expect(restoredDetail?.classes()).toContain('show')
+    expect(mockState.recordAdminSessionAttendance).not.toHaveBeenCalled()
+    expect(mockState.correctSessionLearning).not.toHaveBeenCalled()
+  })
+
+  it('keeps the Excel attendance action disabled before a scheduled session ends', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-13T12:00:00+07:00'))
+    const session = makeSession('qa-session-excel-too-early', 'QA Buổi chưa kết thúc', '13:30', '15:30')
+    mockState.getMySessions.mockResolvedValue([session])
+    mockState.getSessionStudents.mockResolvedValue([{
+      student_id: 'qa-student-excel',
+      students: { full_name: 'QA Học sinh Excel', student_code: 'QA-S-EXCEL' },
+      assessment_snapshot: {},
+      student_attendances: [],
+    }])
+
+    const wrapper = mountPage()
+    await flushPromises()
+    await wrapper.get('.calendar-event').trigger('click')
+    await flushPromises()
+
+    const detail = findAllPageOrBody(wrapper, '.app-modal').find((modal) => modal.find('input[type="datetime-local"]').exists())
+    if (!detail) throw new Error('Selected session detail modal not found')
+    const excelButton = detail.findAll('button').find((button) => button.text().trim() === 'Điểm danh bằng Excel')
+    if (!excelButton) throw new Error('Excel attendance button not found')
+    expect(excelButton.attributes('disabled')).toBeDefined()
+    expect(getPageOrBody(wrapper, '.session-attendance-excel-modal').classes()).not.toContain('show')
+  })
+
   it('allows Admin to end an in-progress session early after entering the full roster and teacher decision', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-10-07T12:00:00+07:00'))
