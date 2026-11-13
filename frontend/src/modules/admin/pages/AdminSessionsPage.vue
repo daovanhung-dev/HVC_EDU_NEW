@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   addTeacherToClassSchedule,
   createClassSchedule,
@@ -104,6 +104,7 @@ import {
   type MonthWeekScheduleSlot,
 } from '@/modules/admin/utils/month-week-schedule-import'
 import type { AttendanceExcelPatchRow } from '@/modules/staff/session-attendance-excel'
+import { downloadSessionCommentsPng, toSessionCommentsImageRows } from '../utils/session-comments-image'
 
 type ViewMode = 'month' | 'week' | 'list'
 type EventFilter = 'all' | 'sessions' | 'rentals'
@@ -115,6 +116,7 @@ type WeeklyTemplateDayDraft = { day_of_week: number; slots: WeeklyTemplateSlotDr
 
 const weekdayLabels = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy', 'Chủ nhật']
 const route = useRoute()
+const router = useRouter()
 const toast = useToastStore()
 const sessions = ref<SessionRow[]>([])
 const roomRentals = ref<RoomRental[]>([])
@@ -143,6 +145,10 @@ const rosterEditorBusy = ref(false)
 const rosterEditorError = ref('')
 const selected = ref<SessionRow | null>(null)
 const selectedDetailOpen = ref(false)
+const attendedSessionPageOpen = ref(false)
+const attendedSessionDetailLoading = ref(false)
+const commentsExportBusy = ref(false)
+const commentsExportError = ref('')
 const selectedTeacherIds = ref<string[]>([])
 const teacherSaveBusy = ref(false)
 const scheduleSaveBusy = ref(false)
@@ -299,6 +305,17 @@ const completedTimesheetOnlyChange = computed(() => !!selected.value
   && lessonYoutubeInput.value.trim() === (selected.value.lesson_youtube_url || '').trim())
 const isCompletedAttendanceDetail = computed(() => completedSessionDetailMode.value
   && selected.value?.status === 'COMPLETED')
+const isAttendedSessionDetailPage = computed(() => attendedSessionPageOpen.value
+  && !!selected.value
+  && isCompletedAttendanceDetail.value)
+const commentsExportDisabled = computed(() => !learningRows.value.length
+  || completedSessionEditsDirty.value
+  || teacherEligibilityDirty.value
+  || learningBusy.value
+  || completedSessionCorrectionBusy.value
+  || completedTimesheetBusy.value
+  || scheduleSaveBusy.value
+  || commentsExportBusy.value)
 const dirtyLearningRows = computed(() => learningRows.value.filter(attendanceIsDirty))
 const attendanceDiagnostics = computed(() => {
   const records = students.value.map(attendanceRecordForStudent).filter((row): row is Record<string, unknown> => Boolean(row))
@@ -1040,7 +1057,7 @@ function changeClassFilter() {
 }
 
 watch(visibleSessions, (rows) => {
-  if (selected.value && !rows.some((session) => session.id === selected.value?.id)) {
+  if (!attendedSessionPageOpen.value && selected.value && !rows.some((session) => session.id === selected.value?.id)) {
     selected.value = null
     selectedDetailOpen.value = false
     completedSessionDetailMode.value = false
@@ -1052,10 +1069,16 @@ watch(visibleSessions, (rows) => {
 })
 
 async function selectSession(session: SessionRow, attendedDetail = showAttendedSessions.value) {
+  const openAttendedPage = attendedDetail && isFullyAttendedSession(session)
   selected.value = session
   deleteSessionPreview.value = null
-  completedSessionDetailMode.value = attendedDetail && isFullyAttendedSession(session)
-  selectedDetailOpen.value = true
+  completedSessionDetailMode.value = openAttendedPage
+  attendedSessionPageOpen.value = openAttendedPage
+  selectedDetailOpen.value = !openAttendedPage
+  attendedSessionDetailLoading.value = true
+  commentsExportError.value = ''
+  students.value = []
+  learningRows.value = []
   completedSessionEditOpen.value = false
   completedSessionCorrectionError.value = ''
   completedTimesheetError.value = ''
@@ -1077,26 +1100,102 @@ async function selectSession(session: SessionRow, attendedDetail = showAttendedS
   lessonYoutubeInput.value = session.lesson_youtube_url || ''
   errorMessage.value = ''
   attendanceSaveVerification.value = null
-  const [studentsResult, schedulesResult] = await Promise.allSettled([
-    getSessionStudents(session.id),
-    loadClassSchedules(session.class_id),
-  ])
-  if (studentsResult.status === 'fulfilled') {
-    students.value = studentsResult.value as any[]
-    learningRows.value = students.value.map(attendanceRowFromSource)
-  } else {
-    students.value = []
-    learningRows.value = []
-    errorMessage.value = studentsResult.reason instanceof Error ? studentsResult.reason.message : 'Không thể tải chi tiết buổi học.'
+  try {
+    const [studentsResult, schedulesResult] = await Promise.allSettled([
+      getSessionStudents(session.id),
+      loadClassSchedules(session.class_id),
+    ])
+    if (studentsResult.status === 'fulfilled') {
+      students.value = studentsResult.value as any[]
+      learningRows.value = students.value.map(attendanceRowFromSource)
+    } else {
+      errorMessage.value = studentsResult.reason instanceof Error ? studentsResult.reason.message : 'Không thể tải chi tiết buổi học.'
+    }
+    if (schedulesResult.status === 'rejected') {
+      scheduleLoadErrors.value = { ...scheduleLoadErrors.value, [session.class_id]: true }
+      if (!errorMessage.value) errorMessage.value = schedulesResult.reason instanceof Error ? schedulesResult.reason.message : 'Không thể tải phân công giáo viên của lớp.'
+    }
+  } finally {
+    attendedSessionDetailLoading.value = false
   }
-  if (schedulesResult.status === 'rejected') {
-    scheduleLoadErrors.value = { ...scheduleLoadErrors.value, [session.class_id]: true }
-    if (!errorMessage.value) errorMessage.value = schedulesResult.reason instanceof Error ? schedulesResult.reason.message : 'Không thể tải phân công giáo viên của lớp.'
+
+  if (openAttendedPage && route.query.session_id !== session.id) {
+    await router.push({ path: '/admin/sessions', query: { ...route.query, session_id: session.id } })
   }
+}
+
+function queryWithoutSessionId() {
+  const query = { ...route.query }
+  delete query.session_id
+  return query
+}
+
+async function openAttendedSessionFromRoute() {
+  const sessionId = typeof route.query.session_id === 'string' ? route.query.session_id : ''
+  if (!sessionId || !sessionsLoaded.value) return
+
+  const session = sessions.value.find((row) => row.id === sessionId)
+  if (!session || !isFullyAttendedSession(session)) {
+    errorMessage.value = 'Không tìm thấy buổi đã điểm danh đầy đủ.'
+    await router.replace({ path: '/admin/sessions', query: queryWithoutSessionId() })
+    return
+  }
+
+  showAttendedSessions.value = true
+  showHistory.value = false
+  eventFilter.value = 'sessions'
+  if (selected.value?.id === sessionId && isCompletedAttendanceDetail.value) {
+    attendedSessionPageOpen.value = true
+    selectedDetailOpen.value = false
+    return
+  }
+
+  await selectSession(session, true)
+}
+
+function returnToSessionsCalendar() {
+  const back = window.history.state?.back
+  if (typeof back === 'string' && back.startsWith('/admin/sessions') && !back.includes('session_id=')) {
+    void router.back()
+    return
+  }
+  void router.replace({ path: '/admin/sessions', query: queryWithoutSessionId() })
+}
+
+async function exportSessionComments() {
+  if (!selected.value || commentsExportDisabled.value) return
+  commentsExportBusy.value = true
+  commentsExportError.value = ''
+  try {
+    await downloadSessionCommentsPng({
+      className: className(selected.value),
+      dateLabel: formatBusinessDate(selectedSessionDate.value),
+      rows: toSessionCommentsImageRows(learningRows.value),
+    })
+  } catch (error) {
+    commentsExportError.value = userErrorMessage(error, 'Không thể xuất ảnh nhận xét.')
+  } finally {
+    commentsExportBusy.value = false
+  }
+}
+
+function clearAttendedSessionPage() {
+  attendedSessionPageOpen.value = false
+  completedSessionDetailMode.value = false
+  selectedDetailOpen.value = false
+  selected.value = null
+  students.value = []
+  learningRows.value = []
+  selectedTeacherIds.value = []
+  teacherEligibilityDraft.value = {}
 }
 
 function openExcelAttendance() {
   if (!selected.value || !canAdminFinalizeAttendance.value || learningBusy.value || rosterEditorBusy.value || !learningRows.value.length) return
+  if (isAttendedSessionDetailPage.value) {
+    excelAttendanceOpen.value = true
+    return
+  }
   openExcelAfterDetailHidden.value = true
   returnToDetailAfterExcel.value = true
   selectedDetailOpen.value = false
@@ -1111,7 +1210,7 @@ function handleSelectedDetailHidden() {
 function handleExcelAttendanceHidden() {
   if (!returnToDetailAfterExcel.value) return
   returnToDetailAfterExcel.value = false
-  selectedDetailOpen.value = Boolean(selected.value)
+  selectedDetailOpen.value = !isAttendedSessionDetailPage.value && Boolean(selected.value)
 }
 
 function applyExcelAttendance(patches: AttendanceExcelPatchRow[]) {
@@ -2369,10 +2468,14 @@ async function deleteSelectedSession() {
     confirmBusy.value = false
     confirmOpen.value = false
     selectedDetailOpen.value = false
+    attendedSessionPageOpen.value = false
     selected.value = null
     deleteSessionPreview.value = null
     students.value = []
     sessionRosterCandidates.value = []
+    if (typeof route.query.session_id === 'string') {
+      await router.replace({ path: '/admin/sessions', query: queryWithoutSessionId() })
+    }
     toast.success(`Đã xóa buổi học và dữ liệu liên quan: ${result.deleted_attendances} điểm danh, ${result.deleted_timesheets} chấm công, ${result.deleted_payroll_items} dòng payroll.`)
     await load()
   } catch (error) {
@@ -2412,13 +2515,23 @@ async function runConfirmation() {
   } finally { confirmBusy.value = false }
 }
 
-onMounted(load)
+onMounted(async () => {
+  await load()
+  await openAttendedSessionFromRoute()
+})
 watch(() => [viewMode.value, calendarAnchorDate.value] as const, () => {
   if (sessionsLoaded.value) void reloadRoomRentalsForCurrentRange()
 })
 watch(() => route.query.class_id, (value) => {
   selectedClassId.value = typeof value === 'string' ? value : ''
   changeClassFilter()
+})
+watch(() => route.query.session_id, (value) => {
+  if (typeof value === 'string' && value) {
+    void openAttendedSessionFromRoute()
+  } else if (attendedSessionPageOpen.value) {
+    clearAttendedSessionPage()
+  }
 })
 watch(sessionFormIsBackdated, (isBackdated) => {
   if (isBackdated) return
@@ -2433,7 +2546,7 @@ watch(sessionFormIsBackdated, (isBackdated) => {
 </script>
 
 <template>
-  <AppPageHeader title="Buổi học" eyebrow="Lịch giảng dạy" description="Xem lịch tuần, tháng hoặc danh sách; quản lý buổi, khung lịch lặp và lượt thuê phòng.">
+  <AppPageHeader v-if="!isAttendedSessionDetailPage" title="Buổi học" eyebrow="Lịch giảng dạy" description="Xem lịch tuần, tháng hoặc danh sách; quản lý buổi, khung lịch lặp và lượt thuê phòng.">
     <template #actions>
       <button class="btn btn-primary" @click="scheduleEditorOpen = !scheduleEditorOpen">Chỉnh sửa lịch</button>
       <button class="btn btn-outline-primary" :disabled="loading" @click="openWeeklyTemplate('replace')">Tạo lịch mẫu</button>
@@ -2448,6 +2561,63 @@ watch(sessionFormIsBackdated, (isBackdated) => {
       <button class="btn btn-outline-primary" :disabled="loading" @click="load">Làm mới</button>
     </template>
   </AppPageHeader>
+  <section v-if="isAttendedSessionDetailPage && selected" class="attended-session-page" aria-labelledby="attended-session-title">
+    <header class="attended-session-page__header">
+      <button class="btn btn-outline-secondary attended-session-page__back" type="button" @click="returnToSessionsCalendar">← Quay lại lịch</button>
+      <div class="attended-session-page__heading">
+        <span class="attended-session-page__eyebrow">BUỔI ĐÃ ĐIỂM DANH</span>
+        <h1 id="attended-session-title">{{ className(selected) }}</h1>
+        <p class="mb-0 text-secondary">
+          {{ formatBusinessDate(selectedSessionDate) }} · {{ formatBusinessTime(selected.scheduled_start_at) }}–{{ formatBusinessTime(selected.scheduled_end_at) }}
+          · Giáo viên: {{ teachers }} · {{ selected.status }}
+        </p>
+      </div>
+      <button
+        class="btn btn-primary attended-session-page__export"
+        type="button"
+        :disabled="commentsExportDisabled || attendedSessionDetailLoading"
+        :aria-busy="commentsExportBusy || undefined"
+        :title="commentsExportDisabled ? 'Lưu thay đổi trước khi xuất ảnh.' : 'Tải ảnh PNG nhận xét của cả lớp.'"
+        @click="exportSessionComments"
+      >
+        {{ commentsExportBusy ? 'Đang tạo ảnh…' : 'Xuất nhận xét' }}
+      </button>
+    </header>
+
+    <div v-if="errorMessage" class="alert alert-danger" role="alert">{{ errorMessage }}</div>
+    <div v-if="commentsExportError" class="alert alert-danger" role="alert">{{ commentsExportError }}</div>
+    <div class="attended-session-page__content">
+      <div v-if="attendedSessionDetailLoading" class="text-center text-secondary py-5" role="status">
+        <span class="app-button__spinner me-2" aria-hidden="true"></span>Đang tải kết quả học tập…
+      </div>
+      <CompletedSessionAttendanceEditor
+        v-else
+        v-model:rows="learningRows"
+        v-model:start-input="startInput"
+        v-model:end-input="endInput"
+        v-model:room-input="sessionRoomInput"
+        v-model:session-note-input="sessionNoteInput"
+        v-model:lesson-youtube-input="lessonYoutubeInput"
+        v-model:teacher-eligibility-draft="teacherEligibilityDraft"
+        :session="selected"
+        :editing="completedSessionEditOpen"
+        :saving="completedSessionCorrectionBusy"
+        :dirty="completedSessionEditsDirty"
+        :error="completedSessionCorrectionError"
+        :timesheet-saving="completedTimesheetBusy"
+        :timesheet-dirty="teacherEligibilityDirty"
+        :timesheet-error="completedTimesheetError"
+        :deletable="canDeleteSelectedSession"
+        :deleting="deleteSessionPreviewBusy"
+        @edit="completedSessionEditOpen = true; completedSessionCorrectionError = ''"
+        @cancel="cancelCompletedSessionEdit"
+        @save="saveCompletedSessionCorrection"
+        @save-timesheets="saveCompletedSessionTimesheets"
+        @delete="confirmDeleteSession"
+      />
+    </div>
+  </section>
+  <template v-else>
   <div v-if="errorMessage && sessionsLoaded" class="alert alert-danger" role="alert">{{ errorMessage }} <button class="btn btn-sm btn-outline-danger ms-2" type="button" :disabled="loading" @click="load">Thử lại</button></div>
   <div v-if="roomRentalLoadError && !errorMessage" class="alert alert-warning" role="alert">{{ roomRentalLoadError }} <button class="btn btn-sm btn-outline-warning ms-2" type="button" @click="reloadRoomRentalsForCurrentRange">Thử tải lại lịch thuê</button></div>
 
@@ -2749,7 +2919,6 @@ watch(sessionFormIsBackdated, (isBackdated) => {
     </form>
     <div v-if="errorMessage" class="alert alert-danger mt-3 mb-0" role="alert">{{ errorMessage }}</div>
   </FormModal>
-  <ConfirmModal v-model="confirmOpen" v-bind="confirmDetails" :busy="confirmBusy" :error="['delete-month-sessions', 'delete-session', 'sync-session-roster'].includes(confirmActionType) ? deleteError : ''" @confirm="runConfirmation" />
   <SessionAttendanceExcelModal
     v-model="excelAttendanceOpen"
     :session="selected"
@@ -2973,7 +3142,7 @@ watch(sessionFormIsBackdated, (isBackdated) => {
     </div>
 
     <div class="col-12">
-      <DetailModal v-if="selected" v-model="selectedDetailOpen" :title="className(selected)" :description="`${formatDateTime(selected.scheduled_start_at)} · ${selected.status}`" size="xl" @hidden="handleSelectedDetailHidden">
+      <DetailModal v-if="selected && selectedDetailOpen" v-model="selectedDetailOpen" :title="className(selected)" :description="`${formatDateTime(selected.scheduled_start_at)} · ${selected.status}`" size="xl" @hidden="handleSelectedDetailHidden">
           <CompletedSessionAttendanceEditor
             v-if="isCompletedAttendanceDetail"
             v-model:rows="learningRows"
@@ -3167,9 +3336,79 @@ watch(sessionFormIsBackdated, (isBackdated) => {
       </DetailModal>
     </div>
   </div>
+  </template>
+  <ConfirmModal v-model="confirmOpen" v-bind="confirmDetails" :busy="confirmBusy" :error="['delete-month-sessions', 'delete-session', 'sync-session-roster'].includes(confirmActionType) ? deleteError : ''" @confirm="runConfirmation" />
 </template>
 
 <style scoped>
+.attended-session-page {
+  width: 100%;
+  min-width: 0;
+}
+
+.attended-session-page__header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.15rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  padding: 1rem 1.15rem;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-surface);
+}
+
+.attended-session-page__back,
+.attended-session-page__export {
+  min-height: 44px;
+  white-space: nowrap;
+}
+
+.attended-session-page__heading {
+  min-width: 0;
+}
+
+.attended-session-page__heading h1 {
+  margin: 0.2rem 0 0.15rem;
+  font-size: clamp(1.3rem, 2vw, 1.8rem);
+}
+
+.attended-session-page__eyebrow {
+  color: var(--color-primary);
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+}
+
+.attended-session-page__content {
+  min-width: 0;
+}
+
+@media (max-width: 767.98px) {
+  .attended-session-page__header {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 0.8rem;
+    padding: 0.85rem;
+  }
+
+  .attended-session-page__back {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  .attended-session-page__heading {
+    grid-column: 1;
+  }
+
+  .attended-session-page__export {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: center;
+  }
+}
+
 .calendar-period-title {
   min-width: 13rem;
 }

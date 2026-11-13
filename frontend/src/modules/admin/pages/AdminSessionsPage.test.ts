@@ -8,7 +8,10 @@ import { MONTH_WEEK_SCHEDULE_HEADERS } from '@/modules/admin/utils/month-week-sc
 import AdminSessionsPage from './AdminSessionsPage.vue'
 
 const mockState = vi.hoisted(() => ({
-  route: { query: { class_id: '' } },
+  route: { query: { class_id: '', session_id: undefined as string | undefined } },
+  routerPush: vi.fn(),
+  routerBack: vi.fn(),
+  routerReplace: vi.fn(),
   getMySessions: vi.fn(),
   getRoomRentals: vi.fn(),
   getSessionAttendanceSummaries: vi.fn(),
@@ -107,7 +110,10 @@ vi.mock('bootstrap', () => ({
   },
 }))
 
-vi.mock('vue-router', () => ({ useRoute: () => mockState.route }))
+vi.mock('vue-router', () => ({
+  useRoute: () => mockState.route,
+  useRouter: () => ({ push: mockState.routerPush, back: mockState.routerBack, replace: mockState.routerReplace }),
+}))
 vi.mock('@/stores/toast.store', () => ({
   useToastStore: () => ({ success: mockState.toastSuccess, info: mockState.toastInfo, error: mockState.toastError }),
 }))
@@ -221,6 +227,10 @@ describe('AdminSessionsPage calendar', () => {
 
   beforeEach(() => {
     mockState.route.query.class_id = ''
+    mockState.route.query.session_id = undefined
+    mockState.routerPush.mockReset().mockResolvedValue(undefined)
+    mockState.routerBack.mockReset()
+    mockState.routerReplace.mockReset().mockResolvedValue(undefined)
     mockState.getMySessions.mockReset().mockResolvedValue([])
     mockState.getRoomRentals.mockReset().mockResolvedValue([])
     mockState.getSessionAttendanceSummaries.mockReset().mockImplementation(async (sessionIds: string[]) => Object.fromEntries(sessionIds.map((id) => [id, { roster_count: 0, attendance_count: 0 }])))
@@ -721,7 +731,7 @@ describe('AdminSessionsPage calendar', () => {
     expect(findPageOrBody(wrapper, '.app-modal iframe').attributes('src')).toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ')
   })
 
-  it('filters to fully attended completed sessions and opens the Excel-style correction table', async () => {
+  it('filters to fully attended completed sessions and opens the full student details page', async () => {
     const today = getBusinessDateKey(new Date())
     const completed = { ...makeSession('qa-completed-full', 'QA Buổi đủ điểm danh', '10:00', '12:00', today), status: 'COMPLETED' as const }
     const partial = { ...makeSession('qa-completed-partial', 'QA Buổi thiếu điểm danh', '13:00', '15:00', today), status: 'COMPLETED' as const }
@@ -754,7 +764,7 @@ describe('AdminSessionsPage calendar', () => {
 
     await wrapper.get('.session-list tbody tr').trigger('click')
     await flushPromises()
-    const detail = findAllPageOrBody(wrapper, '.app-modal').find((modal) => modal.text().includes('Mã học sinh'))
+    const detail = wrapper.find('.attended-session-page')
     expect(detail).toBeDefined()
     expect(detail?.text()).toContain('QA-S-001')
     expect(detail?.text()).toContain('QA Học sinh Một')
@@ -764,6 +774,49 @@ describe('AdminSessionsPage calendar', () => {
     expect(detail?.text()).toContain('Thái độ /5')
     expect(detail?.text()).toContain('Ghi nhận điểm cộng')
     expect(detail?.text()).toContain('QA nhận xét')
+    expect(detail?.findAll('.completed-session-student')).toHaveLength(1)
+    expect(detail?.find('.completed-session-table-wrap').exists()).toBe(false)
+    expect(detail?.find('button').text()).toContain('Quay lại lịch')
+    const exportButton = detail?.find('button.attended-session-page__export')
+    expect(exportButton?.text()).toBe('Xuất nhận xét')
+    expect(exportButton?.attributes('disabled')).toBeUndefined()
+    await clickButtonWithText(wrapper, 'Chỉnh sửa thông tin buổi')
+    await getPageOrBody(wrapper, 'textarea[aria-label^="Nhận xét"]').setValue('QA nhận xét chưa lưu')
+    expect(exportButton?.attributes('disabled')).toBeDefined()
+    await clickButtonWithText(wrapper, 'Hủy sửa')
+    expect(exportButton?.attributes('disabled')).toBeUndefined()
+    expect(mockState.routerPush).toHaveBeenCalledWith({
+      path: '/admin/sessions',
+      query: expect.objectContaining({ session_id: completed.id }),
+    })
+  })
+
+  it('opens a fully attended session from its URL and removes the session id when returning', async () => {
+    const today = getBusinessDateKey(new Date())
+    const completed = { ...makeSession('qa-completed-direct-link', 'QA Buổi mở từ URL', '10:00', '12:00', today), status: 'COMPLETED' as const }
+    mockState.route.query.session_id = completed.id
+    mockState.getMySessions.mockResolvedValue([completed])
+    mockState.getSessionAttendanceSummaries.mockResolvedValue({
+      [completed.id]: { roster_count: 1, attendance_count: 1 },
+    })
+    mockState.getSessionStudents.mockResolvedValue([{
+      student_id: 'qa-student-direct-link',
+      students: { full_name: 'QA Học sinh URL', student_code: 'QA-S-URL' },
+      assessment_snapshot: {},
+      student_attendances: [{ status: 'PRESENT', comment: 'QA nhận xét đã lưu' }],
+    }])
+
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.find('.attended-session-page').exists()).toBe(true)
+    expect(wrapper.find('.attended-session-page').text()).toContain('QA Học sinh URL')
+    expect(wrapper.find('.app-modal').exists()).toBe(false)
+    await wrapper.get('.attended-session-page__back').trigger('click')
+    expect(mockState.routerReplace).toHaveBeenCalledWith({
+      path: '/admin/sessions',
+      query: { class_id: '' },
+    })
   })
 
   it('saves corrections for a completed session through the RPC and verifies readback', async () => {
@@ -810,7 +863,7 @@ describe('AdminSessionsPage calendar', () => {
     await clickButtonWithText(wrapper, 'Lưu tất cả thay đổi')
     await flushPromises()
     expect((getPageOrBody(wrapper, 'input[aria-label^="Điểm BTVN"]').element as HTMLInputElement).value).toBe('9')
-    expect(findPageOrBody(wrapper, '.app-modal [role="alert"]').exists()).toBe(true)
+    expect(findPageOrBody(wrapper, '.attended-session-page [role="alert"]').exists()).toBe(true)
   })
 
   it.each(['SCHEDULED', 'IN_PROGRESS', 'COMPLETED'] as const)(
@@ -2053,6 +2106,7 @@ describe('AdminSessionsPage calendar', () => {
     })
     const wrapper = mountPage()
     await flushPromises()
+    await clickButtonWithText(wrapper, 'Tháng')
 
     const rentalEvent = wrapper.findAll('.calendar-event-rental').find((event) => event.text().includes(selectedRental.room))
     expect(rentalEvent?.exists()).toBe(true)

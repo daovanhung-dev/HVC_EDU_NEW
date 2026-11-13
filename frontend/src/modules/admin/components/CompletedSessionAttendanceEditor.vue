@@ -121,49 +121,69 @@ function rowText(row: AttendanceStudentRow, key: keyof AttendanceValue) {
       </div>
     </section>
 
-    <div class="table-responsive completed-session-table-wrap">
-      <table class="table table-sm table-bordered table-hover align-middle mb-0 completed-session-table" aria-label="Điểm danh và kết quả học tập theo cột Excel">
-        <thead class="table-light">
-          <tr>
-            <th scope="col">Mã học sinh</th>
-            <th scope="col">Họ và tên</th>
-            <th scope="col">Trạng thái điểm danh</th>
-            <th scope="col">Phút đi muộn</th>
-            <th scope="col">Lý do vắng</th>
-            <th scope="col">Điểm BTVN /10</th>
-            <th scope="col">Ghi chú BTVN</th>
-            <th scope="col">Hiểu bài /5</th>
-            <th scope="col">Thái độ /5</th>
-            <th scope="col">Điểm cộng</th>
-            <th scope="col">Ghi nhận điểm cộng</th>
-            <th scope="col">Nhận xét</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="row in rows" :key="row.student_id">
-            <td>{{ row.students?.student_code || '—' }}</td>
-            <td class="student-name-cell">{{ row.students?.full_name || '—' }}</td>
-            <td>
-              <select v-if="editing" v-model="row.attendance.status" class="form-select form-select-sm" :disabled="saving" :aria-label="`Trạng thái điểm danh của ${row.students?.full_name || 'học sinh'}`">
+    <section class="completed-session-students" aria-label="Điểm danh và kết quả học tập của học sinh">
+      <article v-for="row in rows" :key="row.student_id" class="completed-session-student card">
+        <header class="completed-session-student__heading">
+          <div>
+            <h3 class="h6 mb-1">{{ row.students?.full_name || '—' }}</h3>
+            <span class="small text-secondary">Mã học sinh: {{ row.students?.student_code || '—' }}</span>
+          </div>
+          <span v-if="!editing" class="badge rounded-pill" :class="row.attendance.status ? 'text-bg-success' : 'text-bg-light'">
+            {{ row.attendance.status ? attendanceStatusLabel(row.attendance.status) : 'Chưa điểm danh' }}
+          </span>
+        </header>
+
+        <dl class="completed-session-student__fields mb-0">
+          <div class="completed-session-student__field">
+            <dt><label v-if="editing" :for="`completed-status-${row.student_id}`">Điểm danh</label><span v-else>Điểm danh</span></dt>
+            <dd>
+              <select v-if="editing" :id="`completed-status-${row.student_id}`" v-model="row.attendance.status" class="form-select form-select-sm" :disabled="saving" :aria-label="`Trạng thái điểm danh của ${row.students?.full_name || 'học sinh'}`">
                 <option :value="null">Chọn trạng thái</option>
                 <option v-for="status in attendanceStatuses" :key="status" :value="status">{{ attendanceStatusLabel(status) }}</option>
               </select>
               <span v-else>{{ row.attendance.status ? attendanceStatusLabel(row.attendance.status) : '—' }}</span>
-            </td>
-            <td><input v-if="editing" class="form-control form-control-sm numeric-cell" type="number" min="0" step="1" :value="row.attendance.late_minutes ?? ''" :disabled="saving || row.attendance.status !== 'LATE'" :aria-label="`Phút đi muộn của ${row.students?.full_name || 'học sinh'}`" @input="updateNumber(row, 'late_minutes', $event)" /><span v-else>{{ formatNumber(row.attendance.late_minutes) }}</span></td>
-            <td><input v-if="editing" v-model="row.attendance.absence_reason" class="form-control form-control-sm" :disabled="saving || !['ABSENT', 'EXCUSED'].includes(row.attendance.status || '')" :aria-label="`Lý do vắng của ${row.students?.full_name || 'học sinh'}`" /><span v-else>{{ rowText(row, 'absence_reason') }}</span></td>
-            <td><input v-if="editing" class="form-control form-control-sm numeric-cell" type="number" min="0" max="10" step="0.1" :value="row.attendance.homework_score ?? ''" :disabled="saving" :aria-label="`Điểm BTVN của ${row.students?.full_name || 'học sinh'}`" @input="updateNumber(row, 'homework_score', $event)" /><span v-else>{{ formatNumber(row.attendance.homework_score) }}</span></td>
-            <td><input v-if="editing" v-model="row.attendance.homework_note" class="form-control form-control-sm" :disabled="saving" :aria-label="`Ghi chú BTVN của ${row.students?.full_name || 'học sinh'}`" /><span v-else>{{ rowText(row, 'homework_note') }}</span></td>
-            <td><input v-if="editing" class="form-control form-control-sm numeric-cell" type="number" min="1" max="5" step="1" :value="row.attendance.understanding_score ?? ''" :disabled="saving" :aria-label="`Điểm hiểu bài của ${row.students?.full_name || 'học sinh'}`" @input="updateNumber(row, 'understanding_score', $event)" /><span v-else>{{ formatNumber(row.attendance.understanding_score) }}</span></td>
-            <td><input v-if="editing" class="form-control form-control-sm numeric-cell" type="number" min="1" max="5" step="1" :value="row.attendance.attitude_score ?? ''" :disabled="saving" :aria-label="`Điểm thái độ của ${row.students?.full_name || 'học sinh'}`" @input="updateNumber(row, 'attitude_score', $event)" /><span v-else>{{ formatNumber(row.attendance.attitude_score) }}</span></td>
-            <td><input v-if="editing" class="form-control form-control-sm numeric-cell" type="number" min="0" step="1" :value="row.attendance.positive_feedback_count ?? ''" :disabled="saving" :aria-label="`Điểm cộng của ${row.students?.full_name || 'học sinh'}`" @input="updateNumber(row, 'positive_feedback_count', $event)" /><span v-else>{{ formatNumber(row.attendance.positive_feedback_count) }}</span></td>
-            <td><input v-if="editing" v-model="row.attendance.positive_feedback_raw" class="form-control form-control-sm" :disabled="saving" :aria-label="`Ghi nhận điểm cộng của ${row.students?.full_name || 'học sinh'}`" /><span v-else>{{ rowText(row, 'positive_feedback_raw') }}</span></td>
-            <td><textarea v-if="editing" v-model="row.attendance.comment" class="form-control form-control-sm comment-cell" rows="2" maxlength="2000" :disabled="saving" :aria-label="`Nhận xét của ${row.students?.full_name || 'học sinh'}`" /><span v-else>{{ rowText(row, 'comment') }}</span></td>
-          </tr>
-          <tr v-if="!rows.length"><td colspan="12" class="text-center text-secondary py-4">Không có dữ liệu học sinh của buổi này.</td></tr>
-        </tbody>
-      </table>
-    </div>
+            </dd>
+          </div>
+          <div class="completed-session-student__field">
+            <dt><label v-if="editing" :for="`completed-late-${row.student_id}`">Phút đi muộn</label><span v-else>Phút đi muộn</span></dt>
+            <dd><input v-if="editing" :id="`completed-late-${row.student_id}`" class="form-control form-control-sm" type="number" min="0" step="1" :value="row.attendance.late_minutes ?? ''" :disabled="saving || row.attendance.status !== 'LATE'" :aria-label="`Phút đi muộn của ${row.students?.full_name || 'học sinh'}`" @input="updateNumber(row, 'late_minutes', $event)" /><span v-else>{{ formatNumber(row.attendance.late_minutes) }}</span></dd>
+          </div>
+          <div class="completed-session-student__field">
+            <dt><label v-if="editing" :for="`completed-absence-${row.student_id}`">Lý do vắng</label><span v-else>Lý do vắng</span></dt>
+            <dd><input v-if="editing" :id="`completed-absence-${row.student_id}`" v-model="row.attendance.absence_reason" class="form-control form-control-sm" :disabled="saving || !['ABSENT', 'EXCUSED'].includes(row.attendance.status || '')" :aria-label="`Lý do vắng của ${row.students?.full_name || 'học sinh'}`" /><span v-else>{{ rowText(row, 'absence_reason') }}</span></dd>
+          </div>
+          <div class="completed-session-student__field">
+            <dt><label v-if="editing" :for="`completed-homework-${row.student_id}`">Điểm BTVN /10</label><span v-else>Điểm BTVN /10</span></dt>
+            <dd><input v-if="editing" :id="`completed-homework-${row.student_id}`" class="form-control form-control-sm" type="number" min="0" max="10" step="0.1" :value="row.attendance.homework_score ?? ''" :disabled="saving" :aria-label="`Điểm BTVN của ${row.students?.full_name || 'học sinh'}`" @input="updateNumber(row, 'homework_score', $event)" /><span v-else>{{ formatNumber(row.attendance.homework_score) }}</span></dd>
+          </div>
+          <div class="completed-session-student__field completed-session-student__field--wide">
+            <dt><label v-if="editing" :for="`completed-homework-note-${row.student_id}`">Ghi chú BTVN</label><span v-else>Ghi chú BTVN</span></dt>
+            <dd><textarea v-if="editing" :id="`completed-homework-note-${row.student_id}`" v-model="row.attendance.homework_note" class="form-control form-control-sm completed-session-student__input-text" rows="2" :disabled="saving" :aria-label="`Ghi chú BTVN của ${row.students?.full_name || 'học sinh'}`" /><span v-else class="completed-session-student__value">{{ rowText(row, 'homework_note') }}</span></dd>
+          </div>
+          <div class="completed-session-student__field">
+            <dt><label v-if="editing" :for="`completed-understanding-${row.student_id}`">Hiểu bài /5</label><span v-else>Hiểu bài /5</span></dt>
+            <dd><input v-if="editing" :id="`completed-understanding-${row.student_id}`" class="form-control form-control-sm" type="number" min="1" max="5" step="1" :value="row.attendance.understanding_score ?? ''" :disabled="saving" :aria-label="`Điểm hiểu bài của ${row.students?.full_name || 'học sinh'}`" @input="updateNumber(row, 'understanding_score', $event)" /><span v-else>{{ formatNumber(row.attendance.understanding_score) }}</span></dd>
+          </div>
+          <div class="completed-session-student__field">
+            <dt><label v-if="editing" :for="`completed-attitude-${row.student_id}`">Thái độ /5</label><span v-else>Thái độ /5</span></dt>
+            <dd><input v-if="editing" :id="`completed-attitude-${row.student_id}`" class="form-control form-control-sm" type="number" min="1" max="5" step="1" :value="row.attendance.attitude_score ?? ''" :disabled="saving" :aria-label="`Điểm thái độ của ${row.students?.full_name || 'học sinh'}`" @input="updateNumber(row, 'attitude_score', $event)" /><span v-else>{{ formatNumber(row.attendance.attitude_score) }}</span></dd>
+          </div>
+          <div class="completed-session-student__field">
+            <dt><label v-if="editing" :for="`completed-feedback-count-${row.student_id}`">Điểm cộng</label><span v-else>Điểm cộng</span></dt>
+            <dd><input v-if="editing" :id="`completed-feedback-count-${row.student_id}`" class="form-control form-control-sm" type="number" min="0" step="1" :value="row.attendance.positive_feedback_count ?? ''" :disabled="saving" :aria-label="`Điểm cộng của ${row.students?.full_name || 'học sinh'}`" @input="updateNumber(row, 'positive_feedback_count', $event)" /><span v-else>{{ formatNumber(row.attendance.positive_feedback_count) }}</span></dd>
+          </div>
+          <div class="completed-session-student__field completed-session-student__field--wide">
+            <dt><label v-if="editing" :for="`completed-feedback-raw-${row.student_id}`">Ghi nhận điểm cộng</label><span v-else>Ghi nhận điểm cộng</span></dt>
+            <dd><textarea v-if="editing" :id="`completed-feedback-raw-${row.student_id}`" v-model="row.attendance.positive_feedback_raw" class="form-control form-control-sm completed-session-student__input-text" rows="2" :disabled="saving" :aria-label="`Ghi nhận điểm cộng của ${row.students?.full_name || 'học sinh'}`" /><span v-else class="completed-session-student__value">{{ rowText(row, 'positive_feedback_raw') }}</span></dd>
+          </div>
+          <div class="completed-session-student__field completed-session-student__field--wide completed-session-student__field--comment">
+            <dt><label v-if="editing" :for="`completed-comment-${row.student_id}`">Nhận xét</label><span v-else>Nhận xét</span></dt>
+            <dd><textarea v-if="editing" :id="`completed-comment-${row.student_id}`" v-model="row.attendance.comment" class="form-control form-control-sm completed-session-student__input-text" rows="3" maxlength="2000" :disabled="saving" :aria-label="`Nhận xét của ${row.students?.full_name || 'học sinh'}`" /><span v-else class="completed-session-student__value">{{ rowText(row, 'comment') }}</span></dd>
+          </div>
+        </dl>
+      </article>
+      <div v-if="!rows.length" class="text-center text-secondary py-4">Không có dữ liệu học sinh của buổi này.</div>
+    </section>
 
     <div v-if="error" class="alert alert-danger py-2 mt-3 mb-0" role="alert">{{ error }}</div>
     <div v-if="editing" class="d-flex flex-wrap justify-content-end gap-2 mt-3">
@@ -174,30 +194,91 @@ function rowText(row: AttendanceStudentRow, key: keyof AttendanceValue) {
 </template>
 
 <style scoped>
-.completed-session-table {
-  min-width: 150rem;
+.completed-session-students {
+  display: grid;
+  gap: 0.85rem;
 }
 
-.completed-session-table th,
-.completed-session-table td {
-  vertical-align: middle;
-  min-width: 8rem;
+.completed-session-student {
+  min-width: 0;
+  border-color: var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-surface);
 }
 
-.completed-session-table th:first-child,
-.completed-session-table td:first-child {
-  min-width: 11rem;
+.completed-session-student__heading {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--color-border);
+  padding: 0.9rem 1rem;
+  background: var(--color-surface-subtle);
 }
 
-.student-name-cell {
-  min-width: 14rem !important;
+.completed-session-student__fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.7rem 1rem;
+  padding: 1rem;
 }
 
-.numeric-cell {
-  min-width: 6rem;
+.completed-session-student__field {
+  min-width: 0;
 }
 
-.comment-cell {
-  min-width: 20rem;
+.completed-session-student__field dt {
+  margin-bottom: 0.3rem;
+  color: var(--color-text-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.completed-session-student__field dd {
+  min-width: 0;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.completed-session-student__field--wide {
+  grid-column: span 2;
+}
+
+.completed-session-student__field--comment {
+  grid-column: 1 / -1;
+}
+
+.completed-session-student__value {
+  display: block;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.completed-session-student__input-text {
+  min-height: 3rem;
+  resize: vertical;
+}
+
+@media (max-width: 991.98px) {
+  .completed-session-student__fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 575.98px) {
+  .completed-session-student__fields {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.8rem;
+    padding: 0.85rem;
+  }
+
+  .completed-session-student__field--wide,
+  .completed-session-student__field--comment {
+    grid-column: auto;
+  }
 }
 </style>

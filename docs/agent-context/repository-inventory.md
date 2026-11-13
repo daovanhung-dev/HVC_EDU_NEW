@@ -116,6 +116,8 @@
 | frontend/src/modules/admin/pages/StudentsPage.vue | Frontend / Admin | Vue SFC | Danh sách/quản lý học sinh và trạng thái tài khoản. |
 | frontend/src/modules/admin/utils/month-week-schedule-import.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho month week schedule import trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/admin/utils/month-week-schedule-import.ts | Frontend / Admin | TypeScript | Tiện ích nghiệp vụ Admin: month week schedule import. |
+| frontend/src/modules/admin/utils/session-comments-image.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho session comments image trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
+| frontend/src/modules/admin/utils/session-comments-image.ts | Frontend / Admin | TypeScript | Tiện ích nghiệp vụ Admin: session comments image. |
 | frontend/src/modules/admin/utils/student-account-export.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho student account export trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/admin/utils/student-account-export.ts | Frontend / Admin | TypeScript | Định dạng dữ liệu export tài khoản học sinh; rà quyền và dữ liệu nhạy cảm trước khi thay đổi. |
 | frontend/src/modules/admin/utils/student-class-roster-export.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho student class roster export trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
@@ -337,4 +339,4 @@
 | supabase/tests/student_future_session_roster_sync.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra student future session roster sync bằng fixture database cô lập. |
 | supabase/tests/timesheet_workflow.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra timesheet workflow bằng fixture database cô lập. |
 
-Tổng: 330 đường dẫn có trong inventory.
+Tổng: 332 đường dẫn có trong inventory.

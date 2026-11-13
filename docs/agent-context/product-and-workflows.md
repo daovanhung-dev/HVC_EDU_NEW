@@ -42,6 +42,8 @@ Trạng thái: `SCHEDULED` → `IN_PROGRESS` → `COMPLETED`; buổi tương lai
 
 Hoàn tất yêu cầu mỗi học sinh trong roster có một bản ghi attendance với trạng thái. Không đòi mọi điểm hoặc nhận xét phải có giá trị.
 
+Trong luồng Admin **Các buổi học đã điểm danh**, buổi `COMPLETED` có đủ attendance mở ở trang chi tiết theo query `session_id`; quay lại lịch giữ nguyên lịch và bộ lọc trong component. Trang hiển thị từng học sinh thành thẻ, gồm mã/họ tên, toàn bộ trường attendance và đánh giá, ghi chú và nhận xét; giá trị dài tự xuống dòng, trường trống hiện `—`. Admin vẫn dùng thao tác hiệu chỉnh hiện hành. Nút **Xuất nhận xét** tạo một PNG phía trình duyệt cho cả roster với lớp/ngày và các cột họ tên, điểm danh, điểm BTVN, nhận xét; ảnh dùng dữ liệu đã lưu và nút bị khóa khi còn thay đổi chưa lưu hoặc đang lưu.
+
 ### Quy tắc điểm danh và thang đánh giá
 
 | Trường | Giá trị/range hiện hành | Ý nghĩa |
