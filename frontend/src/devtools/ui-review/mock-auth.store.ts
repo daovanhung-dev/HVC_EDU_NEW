@@ -8,6 +8,7 @@ export const useAuthStore = defineStore('review-auth', () => {
   const requestedRole = reviewParams.get('role')
   const role = ref<ReviewRole>(requestedRole === 'STUDENT' || requestedRole === 'TEACHER' ? requestedRole : 'ADMIN')
   const forcePasswordChange = ref(['STUDENT', 'TEACHER'].includes(role.value) && reviewParams.get('forcePasswordChange') === 'true')
+  const teacherProfileComplete = ref<boolean | null>(null)
   const loading = ref(false)
   const displayName = ref('Tài khoản QA')
   const username = ref('qa-review')
@@ -21,7 +22,10 @@ export const useAuthStore = defineStore('review-auth', () => {
   async function signOut() { role.value = 'ADMIN' }
   async function updatePassword() { forcePasswordChange.value = false }
   async function refreshProfile() {}
+  function setTeacherProfileCompletion(staff: { full_name?: string | null; phone?: string | null } | null) {
+    if (isTeacher.value) teacherProfileComplete.value = Boolean(staff?.full_name?.trim() && staff?.phone?.trim())
+  }
   function setRole(value: ReviewRole) { role.value = value; if (!['STUDENT', 'TEACHER'].includes(value)) forcePasswordChange.value = false }
   async function initialize() {}
-  return { role, loading, displayName, username, isAdmin, isTeacher, isStaff, isStudent, forcePasswordChange, isLearner, isAuthenticated, login, signOut, updatePassword, refreshProfile, setRole, initialize }
+  return { role, loading, displayName, username, isAdmin, isTeacher, isStaff, isStudent, forcePasswordChange, teacherProfileComplete, isLearner, isAuthenticated, login, signOut, updatePassword, refreshProfile, setTeacherProfileCompletion, setRole, initialize }
 })

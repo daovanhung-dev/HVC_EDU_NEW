@@ -10,7 +10,7 @@
 |---|---|
 | `ROOT_ADMIN` | Dùng giao diện Admin, quản lý hoạt động và tài khoản quản trị. |
 | `ADMIN` | Quản lý học sinh, giáo viên, lớp, lịch/buổi và yêu cầu chấm công. |
-| `TEACHER` | Xem buổi được phân công; bắt đầu, cập nhật học tập, hoàn tất buổi; gửi chấm công; sửa thông tin liên hệ. |
+| `TEACHER` | Xem buổi được phân công; bắt đầu, cập nhật học tập, hoàn tất buổi; gửi chấm công; sửa thông tin liên hệ. Sau khi đăng nhập và hoàn thành đổi mật khẩu bắt buộc (nếu có), giáo viên phải có họ tên và số điện thoại mới được mở các màn hình khác; email và địa chỉ vẫn tùy chọn. |
 | `STUDENT` | Chỉ xem lịch sử/lịch, chuyên cần, kết quả, giáo viên, video và AI trong phạm vi hồ sơ của mình. |
 
 `ASSISTANT` và `PARENT` là role lịch sử. Migration 0039 chuyển Assistant sang Teacher; migration 0038 retire quyền Parent. Phụ huynh dùng chung tài khoản học sinh, không có role Parent đang hoạt động.

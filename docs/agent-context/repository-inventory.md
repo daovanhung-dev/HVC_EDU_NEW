@@ -134,6 +134,7 @@
 | frontend/src/modules/staff/components/StaffAttendanceModal.vue | Frontend / Giáo viên | Vue SFC | Form giáo viên sửa điểm danh, điểm và nhận xét theo học sinh. |
 | frontend/src/modules/staff/pages/SessionsPage.test.ts | Frontend / Giáo viên | TypeScript | Test hồi quy cho Sessions Page trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/staff/pages/SessionsPage.vue | Frontend / Giáo viên | Vue SFC | Màn hình giáo viên xem buổi được giao, cập nhật nội dung/đánh giá và hoàn tất buổi. |
+| frontend/src/modules/staff/pages/StaffProfilePage.test.ts | Frontend / Giáo viên | TypeScript | Test hồi quy cho Staff Profile Page trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/staff/pages/StaffProfilePage.vue | Frontend / Giáo viên | Vue SFC | Màn hình giáo viên xem/sửa thông tin liên hệ cá nhân. |
 | frontend/src/modules/staff/pages/StaffTimesheetsPage.test.ts | Frontend / Giáo viên | TypeScript | Test hồi quy cho Staff Timesheets Page trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/staff/pages/StaffTimesheetsPage.vue | Frontend / Giáo viên | Vue SFC | Màn hình giáo viên gửi/xem yêu cầu chấm công theo buổi. |
@@ -251,6 +252,14 @@
 | supabase/functions/teacher-comment-optimize/handler.test.ts | Supabase / Edge Functions | TypeScript | Kiểm thử handler của route teacher-comment-optimize với phụ thuộc giả lập. |
 | supabase/functions/teacher-comment-optimize/handler.ts | Supabase / Edge Functions | TypeScript | Logic có thể kiểm thử tách biệt cho route: gợi ý viết lại nhận xét giáo viên qua Gemini. |
 | supabase/functions/teacher-comment-optimize/index.ts | Supabase / Edge Functions | TypeScript | HTTP entrypoint cho route: gợi ý viết lại nhận xét giáo viên qua Gemini. |
+| supabase/functions/teacher-update-my-profile/deno.json | Supabase / Edge Functions | JSON/config | Cấu hình deno. |
+| supabase/functions/teacher-update-my-profile/deno.lock | Supabase / Edge Functions | Deno lockfile | File Deno lockfile thuộc Supabase / Edge Functions: deno. |
+| supabase/functions/teacher-update-my-profile/handler.test.ts | Supabase / Edge Functions | TypeScript | Kiểm thử handler của route teacher-update-my-profile với phụ thuộc giả lập. |
+| supabase/functions/teacher-update-my-profile/handler.ts | Supabase / Edge Functions | TypeScript | Logic có thể kiểm thử tách biệt cho route: Edge Function teacher update my profile. |
+| supabase/functions/teacher-update-my-profile/index.ts | Supabase / Edge Functions | TypeScript | HTTP entrypoint cho route: Edge Function teacher update my profile. |
+| supabase/functions/teacher-update-my-profile/store.test.ts | Supabase / Edge Functions | TypeScript | Test hồi quy cho store. |
+| supabase/functions/teacher-update-my-profile/store.ts | Supabase / Edge Functions | TypeScript | File TypeScript thuộc Supabase / Edge Functions: store. |
+| supabase/functions/teacher-update-my-profile/types.ts | Supabase / Edge Functions | TypeScript | File TypeScript thuộc Supabase / Edge Functions: types. |
 | supabase/functions/timesheet-review/index.ts | Supabase / Edge Functions | TypeScript | HTTP entrypoint cho route: Admin duyệt/từ chối yêu cầu chấm công qua server. |
 | supabase/functions/timesheet-submit/index.ts | Supabase / Edge Functions | TypeScript | HTTP entrypoint cho route: giáo viên gửi yêu cầu chấm công cho buổi đã hoàn tất. |
 | supabase/migrations/0001_extensions.sql | Supabase / migrations | SQL | Bật các PostgreSQL extension nền tảng được schema sử dụng. |
@@ -339,4 +348,4 @@
 | supabase/tests/student_future_session_roster_sync.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra student future session roster sync bằng fixture database cô lập. |
 | supabase/tests/timesheet_workflow.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra timesheet workflow bằng fixture database cô lập. |
 
-Tổng: 332 đường dẫn có trong inventory.
+Tổng: 341 đường dẫn có trong inventory.

@@ -25,6 +25,7 @@ import {
   recordAdminSessionAttendance,
   setCompletedSessionTimesheets,
   updateClassMembershipStartDateAndSyncFutureRosters,
+  updateMyStaffProfile,
   updateSessionOccurrence,
 } from './commands'
 
@@ -41,6 +42,23 @@ describe('session room scheduling commands', () => {
     expect(mockState.invokeFunction).toHaveBeenCalledWith('admin-reset-password-bulk', {
       user_ids: ['qa-user-1', 'qa-user-2'],
     })
+  })
+
+  it('updates the teacher profile through its Edge Function without RPC', async () => {
+    await updateMyStaffProfile({
+      full_name: 'QA Teacher',
+      phone: '0900000000',
+      email: '',
+      address: '',
+    })
+
+    expect(mockState.invokeFunction).toHaveBeenCalledWith('teacher-update-my-profile', {
+      full_name: 'QA Teacher',
+      phone: '0900000000',
+      email: '',
+      address: '',
+    })
+    expect(mockState.rpc).not.toHaveBeenCalled()
   })
 
   it('requests Auth login emails through the dedicated export function once', async () => {

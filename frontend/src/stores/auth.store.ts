@@ -16,6 +16,7 @@ export const useAuthStore = defineStore('auth', () => {
   const session = ref<Session | null>(null)
   const user = ref<User | null>(null)
   const profile = ref<Profile | null>(null)
+  const teacherProfileComplete = ref<boolean | null>(null)
   const initialized = ref(false)
   const loading = ref(false)
   let hydrateVersion = 0
@@ -35,15 +36,31 @@ export const useAuthStore = defineStore('auth', () => {
     const version = ++hydrateVersion
     const nextUser = currentSession?.user || null
     let nextProfile: Profile | null = null
+    let nextTeacherProfileComplete: boolean | null = null
     if (nextUser) {
       const { data, error } = await supabase.from('profiles').select('*').eq('user_id', nextUser.id).maybeSingle()
       if (error) throw error
       nextProfile = data as Profile | null
+      if (nextProfile?.role === 'TEACHER') {
+        try {
+          const { data: staff, error: staffError } = await supabase.from('staff')
+            .select('full_name,phone')
+            .eq('user_id', nextUser.id)
+            .eq('staff_type', 'TEACHER')
+            .maybeSingle()
+          if (!staffError) {
+            nextTeacherProfileComplete = Boolean(staff?.full_name?.trim() && staff?.phone?.trim())
+          }
+        } catch {
+          // Unknown completion state stays gated until the profile can be read.
+        }
+      }
     }
     if (version !== hydrateVersion) return
     session.value = currentSession
     user.value = nextUser
     profile.value = nextProfile
+    teacherProfileComplete.value = nextTeacherProfileComplete
   }
 
   async function initialize() {
@@ -95,16 +112,22 @@ export const useAuthStore = defineStore('auth', () => {
     await hydrate(session.value)
   }
 
+  function setTeacherProfileCompletion(staff: { full_name?: string | null; phone?: string | null } | null) {
+    if (!isTeacher.value) return
+    teacherProfileComplete.value = Boolean(staff?.full_name?.trim() && staff?.phone?.trim())
+  }
+
   async function signOut() {
     await supabase.auth.signOut()
     session.value = null
     user.value = null
     profile.value = null
+    teacherProfileComplete.value = null
   }
 
   return {
-    session, user, profile, initialized, loading, isAuthenticated, role, username, displayName,
+    session, user, profile, teacherProfileComplete, initialized, loading, isAuthenticated, role, username, displayName,
     forcePasswordChange, isAdmin, isStaff, isTeacher, isStudent, isLearner,
-    initialize, login, updatePassword, refreshProfile, signOut,
+    initialize, login, updatePassword, refreshProfile, setTeacherProfileCompletion, signOut,
   }
 })

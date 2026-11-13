@@ -250,9 +250,18 @@ export async function updateStaff(id: string, input: { staff_code?: string | nul
   return data
 }
 
-export function updateMyStaffProfile(input: { full_name: string; phone?: string | null; email?: string | null; address?: string | null }) {
-  return supabase.rpc('update_my_staff_profile', { p_full_name: input.full_name, p_phone: input.phone || null, p_email: input.email || null, p_address: input.address || null })
-    .then(({ data, error }) => { if (error) throw error; return data })
+export interface UpdateMyStaffProfileInput {
+  full_name: string
+  phone: string
+  email?: string | null
+  address?: string | null
+}
+
+export function updateMyStaffProfile(input: UpdateMyStaffProfileInput) {
+  return invokeFunction<UpdateMyStaffProfileInput, { staff_id: string; full_name: string }>(
+    'teacher-update-my-profile',
+    input,
+  )
 }
 
 export async function archiveStaff(id: string) {

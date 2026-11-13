@@ -6,14 +6,27 @@ import { useAuthStore } from '@/stores/auth.store'
 
 const mocks = vi.hoisted(() => {
   const profileRows: unknown[] = []
+  const staffRows: unknown[] = []
   return {
     profileRows,
+    staffRows,
     supabase: {
       auth: {
         getSession: vi.fn(),
         onAuthStateChange: vi.fn(() => ({ data: { subscription: { unsubscribe: vi.fn() } } })),
       },
-      from: vi.fn(() => ({ select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle: vi.fn(async () => ({ data: profileRows.shift() ?? null, error: null })) })) })) })),
+      from: vi.fn((table: string) => {
+        const rows = table === 'staff' ? staffRows : profileRows
+        const query: Record<string, any> = {}
+        query.select = vi.fn(() => query)
+        query.eq = vi.fn(() => query)
+        query.maybeSingle = vi.fn(async () => {
+          const result = rows.shift()
+          if (result && typeof result === 'object' && 'error' in result) return result
+          return { data: result ?? null, error: null }
+        })
+        return query
+      }),
     },
   }
 })
@@ -35,6 +48,7 @@ describe('authentication route guard', () => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
     mocks.profileRows.length = 0
+    mocks.staffRows.length = 0
     mocks.supabase.auth.getSession.mockResolvedValue({ data: { session }, error: null })
   })
 
@@ -46,12 +60,28 @@ describe('authentication route guard', () => {
 
   it('routes teachers to assigned sessions and personal profile', async () => {
     mocks.profileRows.push(profile('TEACHER'))
+    mocks.staffRows.push({ full_name: 'QA Teacher', phone: '0900000000' })
     await router.push('/staff/profile?case=teacher')
     expect(router.currentRoute.value.path).toBe('/staff/profile')
     await router.push('/staff/timesheets?case=teacher')
     expect(router.currentRoute.value.path).toBe('/staff/timesheets')
     await router.push('/admin/classes?case=teacher')
     expect(router.currentRoute.value.path).toBe('/staff/sessions')
+  })
+
+  it('forces incomplete teachers into their profile and fails closed when it cannot be read', async () => {
+    mocks.profileRows.push(profile('TEACHER'))
+    mocks.staffRows.push({ full_name: 'QA Teacher', phone: null })
+    await router.push('/staff/sessions?case=incomplete-profile')
+    expect(router.currentRoute.value.path).toBe('/staff/profile')
+    await router.push('/staff/timesheets?case=incomplete-profile')
+    expect(router.currentRoute.value.path).toBe('/staff/profile')
+
+    setActivePinia(createPinia())
+    mocks.profileRows.push(profile('TEACHER'))
+    mocks.staffRows.push({ data: null, error: new Error('QA profile read failure') })
+    await router.push('/staff/sessions?case=profile-read-failure')
+    expect(router.currentRoute.value.path).toBe('/staff/profile')
   })
 
   it('allows students to use their own learning portal and blocks admin routes', async () => {

@@ -24,6 +24,9 @@ verify_jwt = true
 [functions.admin-room-rentals]
 verify_jwt = true
 
+[functions.teacher-update-my-profile]
+verify_jwt = true
+
 [auth]
 enabled = true
 site_url = "http://localhost:5173"

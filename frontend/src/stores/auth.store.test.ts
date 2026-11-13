@@ -6,6 +6,7 @@ import { useAuthStore } from './auth.store'
 const mocks = vi.hoisted(() => {
   let authStateCallback: ((event: string, session: Session | null) => void) | undefined
   const profileRows: unknown[] = []
+  const staffRows: unknown[] = []
   const invokeFunction = vi.fn()
   const supabase = {
     auth: {
@@ -18,18 +19,20 @@ const mocks = vi.hoisted(() => {
       updateUser: vi.fn(),
       signOut: vi.fn(),
     },
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          maybeSingle: vi.fn(async () => ({ data: await profileRows.shift() ?? null })),
-        })),
-      })),
-    })),
+    from: vi.fn((table: string) => {
+      const rows = table === 'staff' ? staffRows : profileRows
+      const query: Record<string, any> = {}
+      query.select = vi.fn(() => query)
+      query.eq = vi.fn(() => query)
+      query.maybeSingle = vi.fn(async () => ({ data: await rows.shift() ?? null, error: null }))
+      return query
+    }),
     rpc: vi.fn(),
   }
   return {
     supabase,
     profileRows,
+    staffRows,
     invokeFunction,
     emitAuthState(session: Session | null) {
       authStateCallback?.('USER_UPDATED', session)
@@ -72,6 +75,7 @@ describe('auth store password-change flow', () => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
     mocks.profileRows.length = 0
+    mocks.staffRows.length = 0
     mocks.supabase.auth.getSession.mockResolvedValue({ data: { session: null } })
     mocks.supabase.auth.updateUser.mockResolvedValue({ error: null })
     mocks.supabase.rpc.mockResolvedValue({ error: null })
@@ -87,6 +91,28 @@ describe('auth store password-change flow', () => {
 
     expect(auth.isAuthenticated).toBe(true)
     expect(auth.forcePasswordChange).toBe(true)
+  })
+
+  it('loads teacher profile completion from the linked staff record', async () => {
+    mocks.profileRows.push(profile(false, 'TEACHER'))
+    mocks.staffRows.push({ full_name: 'QA Teacher', phone: '0900000000' })
+    mocks.supabase.auth.getSession.mockResolvedValue({ data: { session } })
+    const auth = useAuthStore()
+
+    await auth.initialize()
+
+    expect(auth.teacherProfileComplete).toBe(true)
+  })
+
+  it('treats a missing teacher phone as an incomplete profile', async () => {
+    mocks.profileRows.push(profile(false, 'TEACHER'))
+    mocks.staffRows.push({ full_name: 'QA Teacher', phone: '  ' })
+    mocks.supabase.auth.getSession.mockResolvedValue({ data: { session } })
+    const auth = useAuthStore()
+
+    await auth.initialize()
+
+    expect(auth.teacherProfileComplete).toBe(false)
   })
 
   it('clears the flag in the database before refreshing local profile state', async () => {

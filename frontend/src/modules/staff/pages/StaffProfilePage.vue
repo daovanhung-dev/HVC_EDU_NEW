@@ -24,6 +24,7 @@ async function load() {
     const staff: any = await getMyStaff()
     if (!staff) throw new Error('Không tìm thấy hồ sơ giáo viên.')
     form.value = { full_name: staff.full_name || '', phone: staff.phone || '', email: staff.email || '', address: staff.address || '' }
+    auth.setTeacherProfileCompletion(staff)
     loaded.value = true
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'Không thể tải thông tin cá nhân.'
@@ -35,7 +36,7 @@ async function load() {
 onMounted(load)
 
 async function save() {
-  if (saving.value || !form.value.full_name.trim()) return
+  if (saving.value || !form.value.full_name.trim() || !form.value.phone.trim()) return
   saving.value = true
   errorMessage.value = ''
   try {
@@ -61,6 +62,9 @@ async function save() {
     <AppState v-else-if="!loaded" kind="error" title="Không thể tải hồ sơ giáo viên" :message="errorMessage"><button class="btn btn-outline-primary" type="button" @click="load">Thử tải lại</button></AppState>
     <template v-else>
       <div v-if="errorMessage" class="alert alert-danger teacher-alert" role="alert">{{ errorMessage }}</div>
+      <div v-if="auth.isTeacher && auth.teacherProfileComplete !== true" class="alert alert-info teacher-alert" role="status">
+        Để tiếp tục sử dụng hệ thống, vui lòng hoàn thiện họ tên và số điện thoại rồi lưu hồ sơ.
+      </div>
       <div class="teacher-profile__layout">
         <aside class="teacher-profile-card">
           <div class="teacher-profile-card__avatar" aria-hidden="true">{{ initials }}</div>
@@ -81,8 +85,8 @@ async function save() {
               <input id="profile-full-name" v-model="form.full_name" class="form-control" autocomplete="name" maxlength="200" required placeholder="Nhập họ và tên" />
             </div>
             <div class="teacher-profile-form__field">
-              <label class="form-label" for="profile-phone">Số điện thoại</label>
-              <input id="profile-phone" v-model="form.phone" type="tel" inputmode="tel" class="form-control" autocomplete="tel" maxlength="50" placeholder="Ví dụ: 09xx xxx xxx" />
+              <label class="form-label" for="profile-phone">Số điện thoại <i aria-hidden="true">*</i></label>
+              <input id="profile-phone" v-model="form.phone" type="tel" inputmode="tel" class="form-control" autocomplete="tel" maxlength="50" required placeholder="Ví dụ: 09xx xxx xxx" />
             </div>
             <div class="teacher-profile-form__field">
               <label class="form-label" for="profile-email">Email</label>
@@ -95,7 +99,7 @@ async function save() {
           </div>
           <footer class="teacher-profile-form__footer">
             <p>Các thay đổi chỉ được lưu sau khi bạn xác nhận.</p>
-            <button class="btn btn-primary" type="submit" :disabled="saving || !form.full_name.trim()">
+            <button class="btn btn-primary" type="submit" :disabled="saving || !form.full_name.trim() || !form.phone.trim()">
               <span v-if="saving" class="app-button__spinner" aria-hidden="true"></span>{{ saving ? 'Đang lưu…' : 'Lưu thông tin' }}
             </button>
           </footer>
