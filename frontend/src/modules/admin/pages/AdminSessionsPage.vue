@@ -453,6 +453,23 @@ const isHiddenByHistoryFilter = (session: SessionRow) => session.status === 'CAN
 const isFullyAttendedSession = (session: SessionRow) => session.status === 'COMPLETED'
   && (session.attendance_summary?.roster_count || 0) > 0
   && session.attendance_summary?.attendance_count === session.attendance_summary?.roster_count
+const pendingAttendanceDateKeys = computed(() => {
+  const pendingDates = new Set<string>()
+  const now = Date.now()
+  for (const session of classSessions.value) {
+    const scheduledEnd = Date.parse(session.scheduled_end_at)
+    const summary = session.attendance_summary
+    if (session.status === 'CANCELLED'
+      || !Number.isFinite(scheduledEnd)
+      || scheduledEnd > now
+      || !summary
+      || summary.roster_count <= 0
+      || summary.attendance_count >= summary.roster_count) continue
+    pendingDates.add(getBusinessDateKey(session.scheduled_start_at))
+  }
+  return pendingDates
+})
+const hasPendingAttendance = (dateKey: string) => pendingAttendanceDateKeys.value.has(dateKey)
 const attendedSessions = computed(() => classSessions.value.filter(isFullyAttendedSession))
 const hiddenHistorySessions = computed(() => classSessions.value.filter(isHiddenByHistoryFilter))
 const hiddenHistoryRentals = computed(() => roomRentals.value.filter((rental) => rental.status === 'CANCELLED' || getBusinessDateKey(rental.starts_at) < todayDateKey.value))
@@ -869,7 +886,8 @@ async function load(): Promise<boolean> {
     if (sessionResult.status === 'fulfilled') {
       try {
         const summarySessionIds = sessionResult.value
-          .filter((session) => session.status === 'COMPLETED')
+          .filter((session) => session.status === 'COMPLETED'
+            || (session.status !== 'CANCELLED' && Date.parse(session.scheduled_end_at) <= Date.now()))
           .map((session) => session.id)
         const summaries = await getSessionAttendanceSummaries(summarySessionIds)
         sessions.value = sessionResult.value.map((session) => ({
@@ -3022,9 +3040,12 @@ watch(sessionFormIsBackdated, (isBackdated) => {
                   v-for="(dateKey, dayIndex) in weekDateKeys"
                   :key="`day-${dateKey}`"
                   class="week-timetable__day calendar-day"
-                  :class="{ 'calendar-day-today': dateKey === todayDateKey }"
+                  :class="{
+                    'calendar-day-today': dateKey === todayDateKey,
+                    'calendar-day-attendance-pending': hasPendingAttendance(dateKey),
+                  }"
                   :style="{ height: `${timetableHeightPx}px` }"
-                  :aria-label="`${weekdayLabels[dayIndex]}, ${formatBusinessDate(dateKey)}`"
+                  :aria-label="`${weekdayLabels[dayIndex]}, ${formatBusinessDate(dateKey)}${hasPendingAttendance(dateKey) ? ', chưa đủ điểm danh' : ''}`"
                 >
                   <div
                     v-for="tick in timetableTicks"
@@ -3088,8 +3109,9 @@ watch(sessionFormIsBackdated, (isBackdated) => {
                   :class="{
                     'calendar-day-outside': viewMode === 'month' && dateKey.slice(0, 7) !== calendarAnchorDate.slice(0, 7),
                     'calendar-day-today': dateKey === todayDateKey,
+                    'calendar-day-attendance-pending': hasPendingAttendance(dateKey),
                   }"
-                  :aria-label="formatBusinessDate(dateKey)"
+                  :aria-label="`${formatBusinessDate(dateKey)}${hasPendingAttendance(dateKey) ? ', chưa đủ điểm danh' : ''}`"
                 >
                   <div class="calendar-day-heading">
                     <span class="calendar-day-number">{{ Number(dateKey.slice(-2)) }}</span>
@@ -3520,6 +3542,12 @@ watch(sessionFormIsBackdated, (isBackdated) => {
 
 .calendar-day-today {
   box-shadow: inset 0 0 0 2px var(--bs-primary);
+}
+
+.calendar-day-attendance-pending {
+  border-color: var(--bs-danger);
+  outline: 2px solid var(--bs-danger);
+  outline-offset: -2px;
 }
 
 .calendar-day-heading {

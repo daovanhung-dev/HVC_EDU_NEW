@@ -407,6 +407,64 @@ describe('AdminSessionsPage calendar', () => {
     expect(previousWeek).toHaveLength(7)
   })
 
+  it('marks calendar days red when an ended session still has students without attendance', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-13T12:00:00+07:00'))
+    const today = getBusinessDateKey(new Date())
+    const pendingDate = addCalendarDays(today, -1)
+    const completedDate = addCalendarDays(today, -2)
+    const emptyRosterDate = addCalendarDays(today, -3)
+    const cancelledDate = addCalendarDays(today, -4)
+    const completedPartialDate = addCalendarDays(today, -5)
+    const futureDate = addCalendarDays(today, 1)
+    const pending = makeSession('qa-session-pending-attendance', 'Buổi thiếu điểm danh QA', '17:30', '19:30', pendingDate)
+    const completed = { ...makeSession('qa-session-attended', 'Buổi đủ điểm danh QA', '17:30', '19:30', completedDate), status: 'COMPLETED' as const }
+    const emptyRoster = makeSession('qa-session-empty-roster', 'Buổi chưa có học sinh QA', '17:30', '19:30', emptyRosterDate)
+    const cancelled = { ...makeSession('qa-session-cancelled-attendance', 'Buổi đã hủy QA', '17:30', '19:30', cancelledDate), status: 'CANCELLED' as const }
+    const completedPartial = { ...makeSession('qa-session-completed-partial', 'Buổi hoàn tất thiếu điểm danh QA', '17:30', '19:30', completedPartialDate), status: 'COMPLETED' as const }
+    const future = makeSession('qa-session-future-attendance', 'Buổi tương lai QA', '17:30', '19:30', futureDate)
+    mockState.getMySessions.mockResolvedValue([pending, completed, emptyRoster, cancelled, completedPartial, future])
+    mockState.getSessionAttendanceSummaries.mockResolvedValue({
+      [pending.id]: { roster_count: 2, attendance_count: 1 },
+      [completed.id]: { roster_count: 2, attendance_count: 2 },
+      [emptyRoster.id]: { roster_count: 0, attendance_count: 0 },
+      [cancelled.id]: { roster_count: 2, attendance_count: 0 },
+      [completedPartial.id]: { roster_count: 2, attendance_count: 1 },
+      [future.id]: { roster_count: 2, attendance_count: 0 },
+    })
+
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const requestedSessionIds = mockState.getSessionAttendanceSummaries.mock.calls[0]?.[0] as string[]
+    expect(requestedSessionIds).toContain(pending.id)
+    expect(requestedSessionIds).toContain(completed.id)
+    expect(requestedSessionIds).toContain(emptyRoster.id)
+    expect(requestedSessionIds).toContain(completedPartial.id)
+    expect(requestedSessionIds).not.toContain(cancelled.id)
+    expect(requestedSessionIds).not.toContain(future.id)
+
+    const findDay = (selector: string, date: string) => wrapper.findAll(selector)
+      .find((day) => day.attributes('aria-label')?.includes(formatBusinessDate(date)))
+    expect(findDay('.week-timetable__day', pendingDate)?.classes()).toContain('calendar-day-attendance-pending')
+    expect(findDay('.week-timetable__day', pendingDate)?.attributes('aria-label')).toContain('chưa đủ điểm danh')
+    expect(findDay('.week-timetable__day', completedDate)?.classes()).not.toContain('calendar-day-attendance-pending')
+    expect(findDay('.week-timetable__day', emptyRosterDate)?.classes()).not.toContain('calendar-day-attendance-pending')
+    expect(findDay('.week-timetable__day', cancelledDate)?.classes()).not.toContain('calendar-day-attendance-pending')
+    expect(findDay('.week-timetable__day', futureDate)?.classes()).not.toContain('calendar-day-attendance-pending')
+
+    await getPageOrBody(wrapper, '#session-event-filter').setValue('rentals')
+    expect(findDay('.week-timetable__day', pendingDate)?.classes()).toContain('calendar-day-attendance-pending')
+
+    await clickButtonWithText(wrapper, 'Tháng')
+    expect(findDay('.calendar-day', pendingDate)?.classes()).toContain('calendar-day-attendance-pending')
+    expect(findDay('.calendar-day', completedPartialDate)?.classes()).toContain('calendar-day-attendance-pending')
+    expect(findDay('.calendar-day', completedDate)?.classes()).not.toContain('calendar-day-attendance-pending')
+    expect(findDay('.calendar-day', emptyRosterDate)?.classes()).not.toContain('calendar-day-attendance-pending')
+    expect(findDay('.calendar-day', cancelledDate)?.classes()).not.toContain('calendar-day-attendance-pending')
+    expect(findDay('.calendar-day', futureDate)?.classes()).not.toContain('calendar-day-attendance-pending')
+  })
+
   it('renders overlapping lessons and room rentals in proportional parallel lanes', async () => {
     const date = getBusinessDateKey(new Date())
     mockState.getMySessions.mockResolvedValue([
