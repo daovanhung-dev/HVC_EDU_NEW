@@ -105,6 +105,7 @@ import {
 } from '@/modules/admin/utils/month-week-schedule-import'
 import type { AttendanceExcelPatchRow } from '@/modules/staff/session-attendance-excel'
 import { downloadSessionCommentsPng, toSessionCommentsImageRows } from '../utils/session-comments-image'
+import { downloadPendingAttendancePng } from '../utils/pending-attendance-image'
 
 type ViewMode = 'month' | 'week' | 'list'
 type EventFilter = 'all' | 'sessions' | 'rentals'
@@ -149,6 +150,8 @@ const attendedSessionPageOpen = ref(false)
 const attendedSessionDetailLoading = ref(false)
 const commentsExportBusy = ref(false)
 const commentsExportError = ref('')
+const pendingAttendanceExportBusy = ref(false)
+const pendingAttendanceExportError = ref('')
 const selectedTeacherIds = ref<string[]>([])
 const teacherSaveBusy = ref(false)
 const scheduleSaveBusy = ref(false)
@@ -220,6 +223,7 @@ let weeklyTemplateSlotSequence = 0
 const pendingDeleteMonthStart = ref('')
 const showHistory = ref(false)
 const showAttendedSessions = ref(false)
+const showPendingAttendance = ref(false)
 const confirmDetails = ref({ title: '', message: '', itemName: '', warning: '', confirmLabel: 'Xác nhận', destructive: false })
 const confirmActionType = ref<'archive-schedule' | 'cancel-session' | 'delete-session' | 'sync-session-roster' | 'delete-month-sessions' | 'replace-month-template' | ''>('')
 const pendingSchedule = ref<ClassScheduleRow | null>(null)
@@ -453,33 +457,57 @@ const isHiddenByHistoryFilter = (session: SessionRow) => session.status === 'CAN
 const isFullyAttendedSession = (session: SessionRow) => session.status === 'COMPLETED'
   && (session.attendance_summary?.roster_count || 0) > 0
   && session.attendance_summary?.attendance_count === session.attendance_summary?.roster_count
+const isPendingAttendanceSession = (session: SessionRow) => {
+  const scheduledEnd = Date.parse(session.scheduled_end_at)
+  const summary = session.attendance_summary
+  if (!summary || session.status === 'CANCELLED' || !Number.isFinite(scheduledEnd) || scheduledEnd > Date.now()) return false
+  return summary.roster_count > 0 && summary.attendance_count < summary.roster_count
+}
 const pendingAttendanceDateKeys = computed(() => {
   const pendingDates = new Set<string>()
-  const now = Date.now()
   for (const session of classSessions.value) {
-    const scheduledEnd = Date.parse(session.scheduled_end_at)
-    const summary = session.attendance_summary
-    if (session.status === 'CANCELLED'
-      || !Number.isFinite(scheduledEnd)
-      || scheduledEnd > now
-      || !summary
-      || summary.roster_count <= 0
-      || summary.attendance_count >= summary.roster_count) continue
+    if (!isPendingAttendanceSession(session)) continue
     pendingDates.add(getBusinessDateKey(session.scheduled_start_at))
   }
   return pendingDates
 })
 const hasPendingAttendance = (dateKey: string) => pendingAttendanceDateKeys.value.has(dateKey)
 const attendedSessions = computed(() => classSessions.value.filter(isFullyAttendedSession))
+const pendingAttendanceSessions = computed(() => classSessions.value
+  .filter(isPendingAttendanceSession)
+  .sort((left, right) => left.scheduled_start_at.localeCompare(right.scheduled_start_at)))
+const pendingAttendanceExportRows = computed(() => pendingAttendanceSessions.value.map((session) => ({
+  dateLabel: formatBusinessDate(getBusinessDateKey(session.scheduled_start_at)),
+  className: className(session),
+  timeLabel: `${formatBusinessTime(session.scheduled_start_at)}–${formatBusinessTime(session.scheduled_end_at)}`,
+  teacherNames: sessionTeacherNames(session),
+  room: eventRoom({
+    kind: 'session',
+    id: session.id,
+    startsAt: session.scheduled_start_at,
+    endsAt: session.scheduled_end_at,
+    session,
+  }),
+  missingStudentCount: pendingAttendanceCount(session),
+})))
+const pendingAttendanceScopeLabel = computed(() => selectedClassId.value
+  ? `Lớp: ${classes.value.find((row) => row.id === selectedClassId.value)?.name || 'Lớp đang chọn'}`
+  : 'Tất cả lớp')
+const pendingAttendanceExportDisabled = computed(() => loading.value
+  || pendingAttendanceExportBusy.value
+  || Boolean(attendanceSummaryError.value)
+  || pendingAttendanceSessions.value.length === 0)
 const hiddenHistorySessions = computed(() => classSessions.value.filter(isHiddenByHistoryFilter))
 const hiddenHistoryRentals = computed(() => roomRentals.value.filter((rental) => rental.status === 'CANCELLED' || getBusinessDateKey(rental.starts_at) < todayDateKey.value))
-const visibleSessions = computed(() => showAttendedSessions.value
-  ? attendedSessions.value
-  : showHistory.value
-    ? classSessions.value
-    : classSessions.value.filter((session) => !isHiddenByHistoryFilter(session)))
+const visibleSessions = computed(() => showPendingAttendance.value
+  ? pendingAttendanceSessions.value
+  : showAttendedSessions.value
+    ? attendedSessions.value
+    : showHistory.value
+      ? classSessions.value
+      : classSessions.value.filter((session) => !isHiddenByHistoryFilter(session)))
 const visibleRentals = computed(() => {
-  if (eventFilter.value === 'sessions' || showAttendedSessions.value) return []
+  if (eventFilter.value === 'sessions' || showAttendedSessions.value || showPendingAttendance.value) return []
   return roomRentals.value.filter((rental) => showHistory.value || (
     rental.status !== 'CANCELLED' && getBusinessDateKey(rental.starts_at) >= todayDateKey.value
   ))
@@ -495,7 +523,7 @@ const visibleEvents = computed<CalendarEvent[]>(() => {
       session,
     })))
   }
-  if (!showAttendedSessions.value) {
+  if (!showAttendedSessions.value && !showPendingAttendance.value) {
     events.push(...visibleRentals.value.map((rental) => ({
       kind: 'rental' as const,
       id: rental.id,
@@ -563,6 +591,9 @@ const listEmptyMessage = computed(() => {
   if (showAttendedSessions.value) {
     return attendanceSummaryError.value || 'Không có buổi đã hoàn tất với đủ điểm danh trong lịch.'
   }
+  if (showPendingAttendance.value) {
+    return attendanceSummaryError.value || 'Không có buổi học nào còn thiếu điểm danh.'
+  }
   if (classSessions.value.length) {
     const hiddenCount = hiddenHistorySessions.value.length + (eventFilter.value === 'all' ? hiddenHistoryRentals.value.length : 0)
     return hiddenCount
@@ -585,6 +616,9 @@ const calendarEmptyMessage = computed(() => {
   }
   if (showAttendedSessions.value) {
     return attendanceSummaryError.value || 'Không có buổi đã hoàn tất với đủ điểm danh trong kỳ này.'
+  }
+  if (showPendingAttendance.value) {
+    return attendanceSummaryError.value || 'Không có buổi học nào còn thiếu điểm danh trong kỳ này.'
   }
   const hiddenReasons = [
     hiddenHistorySessionsInView.value.length
@@ -654,6 +688,19 @@ function eventRoom(event: CalendarEvent) {
     : event.session.room || event.session.class_schedules?.room || 'Chưa xếp phòng'
 }
 
+function sessionTeacherNames(session: SessionRow) {
+  return (session.session_staff || [])
+    .filter((item) => !item.assignment_role || item.assignment_role === 'TEACHER')
+    .map((item) => item.staff?.full_name?.trim())
+    .filter((name): name is string => Boolean(name))
+    .join(', ') || 'Chưa phân công'
+}
+
+function pendingAttendanceCount(session: SessionRow) {
+  return Math.max(0,
+    (session.attendance_summary?.roster_count || 0) - (session.attendance_summary?.attendance_count || 0))
+}
+
 function eventStatusLabel(event: CalendarEvent) {
   return event.kind === 'rental' ? (event.rental.status === 'CANCELLED' ? 'Đã hủy' : 'Đã đặt') : event.session.status
 }
@@ -697,7 +744,10 @@ function selectCalendarEvent(event: CalendarEvent) {
 
 function setEventFilter(value: EventFilter) {
   eventFilter.value = value
-  if (value === 'rentals') showAttendedSessions.value = false
+  if (value === 'rentals') {
+    showAttendedSessions.value = false
+    showPendingAttendance.value = false
+  }
 }
 
 function errorDetails(error: unknown): RoomRentalConflictDetail[] {
@@ -846,12 +896,14 @@ function goToToday() {
 
 function revealHiddenHistory() {
   showAttendedSessions.value = false
+  showPendingAttendance.value = false
   showHistory.value = true
   if (!visibleSessionsInView.value.length && hiddenHistorySessions.value.length) viewMode.value = 'list'
 }
 
 function toggleHistory() {
   showAttendedSessions.value = false
+  showPendingAttendance.value = false
   showHistory.value = !showHistory.value
 }
 
@@ -859,10 +911,23 @@ function toggleAttendedSessions() {
   if (attendanceSummaryError.value) return
   showAttendedSessions.value = !showAttendedSessions.value
   if (showAttendedSessions.value) {
+    showPendingAttendance.value = false
     eventFilter.value = 'sessions'
     showHistory.value = false
     if (selected.value && isFullyAttendedSession(selected.value)) completedSessionDetailMode.value = true
   }
+}
+
+function togglePendingAttendance() {
+  if (attendanceSummaryError.value) return
+  showPendingAttendance.value = !showPendingAttendance.value
+  if (showPendingAttendance.value) {
+    showAttendedSessions.value = false
+    eventFilter.value = 'sessions'
+    showHistory.value = false
+    viewMode.value = 'list'
+  }
+  pendingAttendanceExportError.value = ''
 }
 
 async function load(): Promise<boolean> {
@@ -1194,6 +1259,25 @@ async function exportSessionComments() {
     commentsExportError.value = userErrorMessage(error, 'Không thể xuất ảnh nhận xét.')
   } finally {
     commentsExportBusy.value = false
+  }
+}
+
+async function exportPendingAttendance() {
+  if (!showPendingAttendance.value || pendingAttendanceExportDisabled.value) return
+  pendingAttendanceExportBusy.value = true
+  pendingAttendanceExportError.value = ''
+  try {
+    const exportDate = getBusinessDateKey(new Date())
+    await downloadPendingAttendancePng({
+      scopeLabel: pendingAttendanceScopeLabel.value,
+      exportDateLabel: formatBusinessDate(exportDate),
+      exportDate,
+      rows: pendingAttendanceExportRows.value,
+    })
+  } catch (error) {
+    pendingAttendanceExportError.value = userErrorMessage(error, 'Không thể xuất ảnh buổi chưa đủ điểm danh.')
+  } finally {
+    pendingAttendanceExportBusy.value = false
   }
 }
 
@@ -2972,8 +3056,26 @@ watch(sessionFormIsBackdated, (isBackdated) => {
             :title="attendanceSummaryError || 'Hiển thị các buổi hoàn tất có đủ bản ghi điểm danh trong CSDL'"
             @click="toggleAttendedSessions"
           >Các buổi học đã điểm danh</button>
+          <button
+            class="btn btn-sm"
+            :class="showPendingAttendance ? 'btn-primary' : 'btn-outline-primary'"
+            type="button"
+            :aria-pressed="showPendingAttendance"
+            :disabled="Boolean(attendanceSummaryError)"
+            :title="attendanceSummaryError || 'Hiển thị các buổi đã qua giờ kết thúc còn học sinh chưa có bản ghi điểm danh'"
+            @click="togglePendingAttendance"
+          >Buổi chưa đủ điểm danh</button>
+          <button
+            v-if="showPendingAttendance"
+            class="btn btn-sm btn-outline-primary"
+            type="button"
+            :disabled="pendingAttendanceExportDisabled"
+            :aria-busy="pendingAttendanceExportBusy || undefined"
+            @click="exportPendingAttendance"
+          >{{ pendingAttendanceExportBusy ? 'Đang tạo ảnh…' : 'Xuất ảnh danh sách' }}</button>
         </div>
         <small v-if="attendanceSummaryError" class="text-danger" role="alert">{{ attendanceSummaryError }}</small>
+        <small v-if="pendingAttendanceExportError" class="text-danger" role="alert">{{ pendingAttendanceExportError }}</small>
         <div v-if="viewMode !== 'list'" class="d-flex flex-wrap align-items-center gap-2">
           <button class="btn btn-outline-secondary btn-sm" aria-label="Kỳ trước" @click="changePeriod(-1)">‹ Trước</button>
           <h2 class="h6 mb-0 text-capitalize text-center calendar-period-title">{{ periodTitle }}</h2>
@@ -2995,19 +3097,25 @@ watch(sessionFormIsBackdated, (isBackdated) => {
             <div v-if="loading" class="text-center text-secondary py-4" role="status">Đang tải buổi học…</div>
             <div v-else-if="!loading && !errorMessage && !visibleEvents.length" class="text-center text-secondary py-5">
               <p class="mb-2">{{ listEmptyMessage }}</p>
-              <button v-if="!showHistory && (hiddenHistorySessions.length || (eventFilter !== 'sessions' && hiddenHistoryRentals.length))" type="button" class="btn btn-sm btn-outline-primary" @click="revealHiddenHistory">Xem lịch sử trong danh sách</button>
+              <button v-if="!showPendingAttendance && !showHistory && (hiddenHistorySessions.length || (eventFilter !== 'sessions' && hiddenHistoryRentals.length))" type="button" class="btn btn-sm btn-outline-primary" @click="revealHiddenHistory">Xem lịch sử trong danh sách</button>
             </div>
-            <div class="table-responsive">
+            <div v-if="visibleEvents.length" class="table-responsive">
               <table class="table align-middle mb-0">
-                <thead><tr><th>Ngày</th><th>Loại</th><th>Lớp / người thuê</th><th>Thời gian</th><th>Phòng</th><th>Trạng thái</th></tr></thead>
+                <thead>
+                  <tr v-if="showPendingAttendance"><th>Ngày</th><th>Lớp</th><th>Thời gian</th><th>Giáo viên</th><th>Phòng</th><th>Học sinh thiếu</th></tr>
+                  <tr v-else><th>Ngày</th><th>Loại</th><th>Lớp / người thuê</th><th>Thời gian</th><th>Phòng</th><th>Trạng thái</th></tr>
+                </thead>
                 <tbody>
                   <tr v-for="event in visibleEvents" :key="`${event.kind}-${event.id}`" :class="event.kind === 'session' && selected?.id === event.session.id ? 'table-primary' : event.kind === 'rental' ? 'room-rental-row' : ''" :aria-label="eventAriaLabel(event)" role="button" tabindex="0" @click="selectCalendarEvent(event)" @keydown.enter="selectCalendarEvent(event)">
                     <td>{{ formatBusinessDate(getBusinessDateKey(event.startsAt)) }}</td>
-                    <td><span class="badge" :class="event.kind === 'rental' ? 'text-bg-info' : 'text-bg-secondary'">{{ eventTypeLabel(event) }}</span></td>
-                    <td class="fw-semibold">{{ eventPrimaryLabel(event) }}</td>
+                    <td v-if="showPendingAttendance" class="fw-semibold">{{ event.kind === 'session' ? className(event.session) : '—' }}</td>
+                    <td v-else><span class="badge" :class="event.kind === 'rental' ? 'text-bg-info' : 'text-bg-secondary'">{{ eventTypeLabel(event) }}</span></td>
+                    <td v-if="!showPendingAttendance" class="fw-semibold">{{ eventPrimaryLabel(event) }}</td>
                     <td>{{ formatBusinessTime(event.startsAt) }}–{{ formatBusinessTime(event.endsAt) }}</td>
+                    <td v-if="showPendingAttendance">{{ event.kind === 'session' ? sessionTeacherNames(event.session) : '—' }}</td>
                     <td>{{ eventRoom(event) }}</td>
-                    <td><span class="badge" :class="eventStatusClass(event)">{{ eventStatusLabel(event) }}</span></td>
+                    <td v-if="showPendingAttendance"><span class="badge text-bg-danger">{{ event.kind === 'session' ? pendingAttendanceCount(event.session) : 0 }}</span></td>
+                    <td v-else><span class="badge" :class="eventStatusClass(event)">{{ eventStatusLabel(event) }}</span></td>
                   </tr>
                 </tbody>
               </table>
