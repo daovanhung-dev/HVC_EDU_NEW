@@ -1314,6 +1314,8 @@ describe('AdminSessionsPage calendar', () => {
   })
 
   it('preserves unsaved learning edits when the schedule group is saved', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-07T12:00:00+07:00'))
     const originalDate = addCalendarDays(getBusinessDateKey(new Date()), -2)
     const movedDate = addCalendarDays(originalDate, -1)
     const session = { ...makeSession('qa-session-independent-save', 'Lớp Lưu riêng QA', '10:00', '12:00', originalDate), status: 'COMPLETED' as const }
@@ -1354,6 +1356,8 @@ describe('AdminSessionsPage calendar', () => {
   })
 
   it('preserves unsaved learning edits when the teacher assignment group is saved', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-07T12:00:00+07:00'))
     const pastDate = addCalendarDays(getBusinessDateKey(new Date()), -2)
     const session = { ...makeSession('qa-session-teacher-independent-save', 'Lớp Giáo viên QA', '10:00', '12:00', pastDate, ['qa-teacher-1']), status: 'COMPLETED' as const }
     const updatedSession = {
@@ -2185,6 +2189,8 @@ describe('AdminSessionsPage calendar', () => {
   })
 
   it('opens past and cancelled rentals as read-only details when history is shown', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-07T12:00:00+07:00'))
     const pastDate = addCalendarDays(getBusinessDateKey(new Date()), -2)
     const futureDate = addCalendarDays(getBusinessDateKey(new Date()), 2)
     mockState.getRoomRentals.mockResolvedValue([
