@@ -30,6 +30,8 @@ const publicMessages: Record<string, string> = {
   REJECTION_REASON_REQUIRED: 'Nhập lý do trước khi từ chối chấm công.',
   SESSION_NOT_COMPLETED: 'Chỉ có thể gửi chấm công sau khi buổi học hoàn thành.',
   FEATURE_DISABLED: 'Chức năng này đã được ngừng sử dụng.',
+  RATE_LIMITED: 'Bạn đã gửi nhiều phản hồi trong thời gian ngắn. Vui lòng thử lại sau.',
+  RATE_LIMIT_UNAVAILABLE: 'Biểu mẫu đang tạm thời không nhận được phản hồi. Vui lòng thử lại sau.',
   SESSION_LOCKED: 'Buổi học đã khóa và không thể chỉnh sửa ở vai trò này.',
   SESSION_DELETE_NOT_ALLOWED: 'Buổi học đã hủy không thuộc phạm vi xóa này.',
   SESSION_HAS_HISTORY: 'Buổi học sắp tới đã có dữ liệu. Hãy dùng thao tác hủy để giữ dữ liệu liên quan.',

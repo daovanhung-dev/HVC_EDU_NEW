@@ -16,6 +16,8 @@ import StudentReviewPage from '@/modules/student/pages/StudentReviewPage.vue'
 import StudentAiChatPage from '@/modules/student/pages/StudentAiChatPage.vue'
 import StaffTimesheetsPage from '@/modules/staff/pages/StaffTimesheetsPage.vue'
 import AdminTimesheetsPage from '@/modules/admin/pages/AdminTimesheetsPage.vue'
+import ParentFeedbackInboxPage from '@/modules/admin/pages/ParentFeedbackInboxPage.vue'
+import ParentFeedbackPage from '@/modules/auth/pages/ParentFeedbackPage.vue'
 import { useAuthStore } from '@/stores/auth.store'
 import { useAppErrorStore } from '@/stores/app-error.store'
 
@@ -26,6 +28,7 @@ const router = createRouter({
     { path: '/dashboard', redirect: '/' },
     { path: '/auth', component: AuthLayout, children: [{ path: 'change-password', name: 'change-password', component: ChangePasswordPage, meta: { requiresAuth: true } }] },
     { path: '/login', component: AuthLayout, children: [{ path: '', name: 'login', component: LoginPage }] },
+    { path: '/parent-feedback', component: AuthLayout, children: [{ path: '', name: 'parent-feedback', component: ParentFeedbackPage, meta: { publicAccess: true } }] },
     { path: '/admin/students', component: AppLayout, children: [{ path: '', component: StudentsPage, meta: { requiresAuth: true, adminOnly: true } }] },
     { path: '/admin/students/:studentId', component: AppLayout, children: [{ path: '', component: StudentDetailPage, meta: { requiresAuth: true, adminOnly: true } }] },
     { path: '/admin/staff', component: AppLayout, children: [{ path: '', component: StaffPage, meta: { requiresAuth: true, adminOnly: true } }] },
@@ -33,6 +36,7 @@ const router = createRouter({
     { path: '/admin/classes/:classId', component: AppLayout, children: [{ path: '', component: ClassDetailPage, meta: { requiresAuth: true, adminOnly: true } }] },
     { path: '/admin/sessions', component: AppLayout, children: [{ path: '', component: SessionsPage, meta: { requiresAuth: true, adminOnly: true } }] },
     { path: '/admin/timesheets', component: AppLayout, children: [{ path: '', component: AdminTimesheetsPage, meta: { requiresAuth: true, adminOnly: true } }] },
+    { path: '/admin/parent-feedback', component: AppLayout, children: [{ path: '', name: 'admin-parent-feedback', component: ParentFeedbackInboxPage, meta: { requiresAuth: true, adminOnly: true } }] },
     { path: '/staff/sessions', component: AppLayout, children: [{ path: '', component: StaffSessionsPage, meta: { requiresAuth: true, staffOnly: true } }] },
     { path: '/staff/timesheets', component: AppLayout, children: [{ path: '', component: StaffTimesheetsPage, meta: { requiresAuth: true, staffOnly: true } }] },
     { path: '/staff/profile', component: AppLayout, children: [{ path: '', component: StaffProfilePage, meta: { requiresAuth: true, staffOnly: true } }] },
@@ -52,6 +56,8 @@ function landingPath(auth: ReturnType<typeof useAuthStore>) {
 }
 
 router.beforeEach(async (to) => {
+  if (to.meta.publicAccess === true) return true
+
   const auth = useAuthStore()
   const appErrors = useAppErrorStore()
   if (!auth.initialized) {

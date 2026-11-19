@@ -108,6 +108,8 @@
 | frontend/src/modules/admin/pages/ClassDetailPage.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho Class Detail Page trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/admin/pages/ClassDetailPage.vue | Frontend / Admin | Vue SFC | Chi tiết lớp, membership, lịch lặp và giáo viên theo lịch. |
 | frontend/src/modules/admin/pages/ClassesPage.vue | Frontend / Admin | Vue SFC | Danh sách/quản lý lớp và cấu hình chính sách sĩ số. |
+| frontend/src/modules/admin/pages/ParentFeedbackInboxPage.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho Parent Feedback Inbox Page trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
+| frontend/src/modules/admin/pages/ParentFeedbackInboxPage.vue | Frontend / Admin | Vue SFC | Màn hình Admin: Parent Feedback Inbox Page. |
 | frontend/src/modules/admin/pages/StaffPage.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho Staff Page trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/admin/pages/StaffPage.vue | Frontend / Admin | Vue SFC | Quản lý hồ sơ và tài khoản giáo viên từ giao diện Admin. |
 | frontend/src/modules/admin/pages/StudentDetailPage.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho Student Detail Page trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
@@ -116,6 +118,7 @@
 | frontend/src/modules/admin/pages/StudentsPage.vue | Frontend / Admin | Vue SFC | Danh sách/quản lý học sinh và trạng thái tài khoản. |
 | frontend/src/modules/admin/utils/month-week-schedule-import.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho month week schedule import trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/admin/utils/month-week-schedule-import.ts | Frontend / Admin | TypeScript | Tiện ích nghiệp vụ Admin: month week schedule import. |
+| frontend/src/modules/admin/utils/pending-attendance-image.ts | Frontend / Admin | TypeScript | Tiện ích nghiệp vụ Admin: pending attendance image. |
 | frontend/src/modules/admin/utils/session-comments-image.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho session comments image trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/admin/utils/session-comments-image.ts | Frontend / Admin | TypeScript | Tiện ích nghiệp vụ Admin: session comments image. |
 | frontend/src/modules/admin/utils/student-account-export.test.ts | Frontend / Admin | TypeScript | Test hồi quy cho student account export trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
@@ -128,6 +131,8 @@
 | frontend/src/modules/auth/pages/ChangePasswordPage.vue | Frontend / Đăng nhập | Vue SFC | Form hoàn tất đổi mật khẩu bắt buộc. |
 | frontend/src/modules/auth/pages/LoginPage.test.ts | Frontend / Đăng nhập | TypeScript | Test hồi quy cho Login Page trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/auth/pages/LoginPage.vue | Frontend / Đăng nhập | Vue SFC | Form đăng nhập bằng định danh tài khoản. |
+| frontend/src/modules/auth/pages/ParentFeedbackPage.test.ts | Frontend / Đăng nhập | TypeScript | Test hồi quy cho Parent Feedback Page trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
+| frontend/src/modules/auth/pages/ParentFeedbackPage.vue | Frontend / Đăng nhập | Vue SFC | Màn hình đăng nhập: Parent Feedback Page. |
 | frontend/src/modules/staff/attendance.test.ts | Frontend / Giáo viên | TypeScript | Test hồi quy cho attendance trong cùng thư mục; xem file source cạnh bên để biết phạm vi chính xác. |
 | frontend/src/modules/staff/attendance.ts | Frontend / Giáo viên | TypeScript | Chuẩn hóa, validate và chuyển attendance thành payload lưu. |
 | frontend/src/modules/staff/components/SessionAttendanceExcelModal.vue | Frontend / Giáo viên | Vue SFC | Component luồng giáo viên: Session Attendance Excel Modal. |
@@ -238,6 +243,12 @@
 | supabase/functions/bootstrap-root/index.ts | Supabase / Edge Functions | TypeScript | HTTP entrypoint cho route: bootstrap tài khoản ROOT trong luồng được bảo vệ. |
 | supabase/functions/login-by-identifier/config.toml | Supabase / Edge Functions | TOML/config | Cấu hình JWT/deploy riêng cho route login-by-identifier. |
 | supabase/functions/login-by-identifier/index.ts | Supabase / Edge Functions | TypeScript | HTTP entrypoint cho route: đăng nhập bằng username/định danh qua server. |
+| supabase/functions/parent-feedback-submit/config.toml | Supabase / Edge Functions | TOML/config | Cấu hình JWT/deploy riêng cho route parent-feedback-submit. |
+| supabase/functions/parent-feedback-submit/deno.json | Supabase / Edge Functions | JSON/config | Cấu hình deno. |
+| supabase/functions/parent-feedback-submit/handler.test.ts | Supabase / Edge Functions | TypeScript | Kiểm thử handler của route parent-feedback-submit với phụ thuộc giả lập. |
+| supabase/functions/parent-feedback-submit/handler.ts | Supabase / Edge Functions | TypeScript | Logic có thể kiểm thử tách biệt cho route: Edge Function parent feedback submit. |
+| supabase/functions/parent-feedback-submit/index.ts | Supabase / Edge Functions | TypeScript | HTTP entrypoint cho route: Edge Function parent feedback submit. |
+| supabase/functions/parent-feedback-submit/store.ts | Supabase / Edge Functions | TypeScript | File TypeScript thuộc Supabase / Edge Functions: store. |
 | supabase/functions/session-complete/index.ts | Supabase / Edge Functions | TypeScript | HTTP entrypoint cho route: xác nhận hoàn tất buổi qua RPC có kiểm tra server. |
 | supabase/functions/session-learning-update/index.ts | Supabase / Edge Functions | TypeScript | HTTP entrypoint cho route: lưu điểm danh/kết quả/nội dung buổi qua RPC. |
 | supabase/functions/session-learning-update/youtube.test.ts | Supabase / Edge Functions | TypeScript | Test hồi quy cho youtube. |
@@ -329,6 +340,7 @@
 | supabase/migrations/0065_remove_month_template_addition_rpcs.sql | Supabase / migrations | SQL | Migration schema; đọc toàn bộ thay đổi và migration sau này có thể thay thế object. |
 | supabase/migrations/0066_room_rentals.sql | Supabase / migrations | SQL | Migration schema; đọc toàn bộ thay đổi và migration sau này có thể thay thế object. |
 | supabase/migrations/0067_room_rental_month_overwrite.sql | Supabase / migrations | SQL | Migration schema; đọc toàn bộ thay đổi và migration sau này có thể thay thế object. |
+| supabase/migrations/0068_parent_feedback.sql | Supabase / migrations | SQL | Migration schema; đọc toàn bộ thay đổi và migration sau này có thể thay thế object. |
 | supabase/seed.sql | Supabase / cấu hình và seed | SQL | Seed cho database local; không dùng làm căn cứ dữ liệu production. |
 | supabase/tests/admin_monthly_session_planning.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra admin monthly session planning bằng fixture database cô lập. |
 | supabase/tests/admin_session_attendance_timesheets.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra admin session attendance timesheets bằng fixture database cô lập. |
@@ -341,6 +353,7 @@
 | supabase/tests/month_week_template_addition.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra month week template addition bằng fixture database cô lập. |
 | supabase/tests/month_week_template_replacement.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra month week template replacement bằng fixture database cô lập. |
 | supabase/tests/parallel_session_rooms.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra parallel session rooms bằng fixture database cô lập. |
+| supabase/tests/parent_feedback_security.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra parent feedback security bằng fixture database cô lập. |
 | supabase/tests/room_rentals.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra room rentals bằng fixture database cô lập. |
 | supabase/tests/schedule_reset.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra schedule reset bằng fixture database cô lập. |
 | supabase/tests/session_learning_commands.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra session learning commands bằng fixture database cô lập. |
@@ -348,4 +361,4 @@
 | supabase/tests/student_future_session_roster_sync.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra student future session roster sync bằng fixture database cô lập. |
 | supabase/tests/timesheet_workflow.test.sql | Supabase / kiểm thử SQL | SQL | SQL/pgTAP kiểm tra timesheet workflow bằng fixture database cô lập. |
 
-Tổng: 341 đường dẫn có trong inventory.
+Tổng: 354 đường dẫn có trong inventory.

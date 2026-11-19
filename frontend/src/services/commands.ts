@@ -18,6 +18,21 @@ export interface RoomRentalMonthSlotInput {
 
 export type RoomRentalMonthRange = 'FULL_MONTH' | 'REMAINING_MONTH'
 
+export interface ParentFeedbackSubmissionInput {
+  parent_name: string
+  student_name?: string
+  class_name?: string
+  feedback: string
+  website?: string
+}
+
+export function submitParentFeedback(input: ParentFeedbackSubmissionInput) {
+  return invokeFunction<ParentFeedbackSubmissionInput, { accepted: true }>(
+    'parent-feedback-submit',
+    input,
+  )
+}
+
 export interface RoomRentalConflictDetail {
   key: string
   type: 'REQUEST' | 'RENTAL' | 'SESSION' | 'RECURRING_SCHEDULE' | 'UNKNOWN'

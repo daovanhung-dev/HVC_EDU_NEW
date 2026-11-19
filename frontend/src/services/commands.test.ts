@@ -24,6 +24,7 @@ import {
   replaceMonthWithWeekTemplate,
   recordAdminSessionAttendance,
   setCompletedSessionTimesheets,
+  submitParentFeedback,
   updateClassMembershipStartDateAndSyncFutureRosters,
   updateMyStaffProfile,
   updateSessionOccurrence,
@@ -42,6 +43,21 @@ describe('session room scheduling commands', () => {
     expect(mockState.invokeFunction).toHaveBeenCalledWith('admin-reset-password-bulk', {
       user_ids: ['qa-user-1', 'qa-user-2'],
     })
+  })
+
+  it('submits public parent feedback through the Edge Function without RPC', async () => {
+    const input = {
+      parent_name: 'QA Parent',
+      student_name: 'QA Student',
+      class_name: 'QA-Class',
+      feedback: 'QA feedback',
+      website: '',
+    }
+
+    await submitParentFeedback(input)
+
+    expect(mockState.invokeFunction).toHaveBeenCalledWith('parent-feedback-submit', input)
+    expect(mockState.rpc).not.toHaveBeenCalled()
   })
 
   it('updates the teacher profile through its Edge Function without RPC', async () => {

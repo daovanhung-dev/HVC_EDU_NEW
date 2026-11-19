@@ -117,6 +117,18 @@ export interface RoomRental {
   staff?: { id: string; staff_code: string | null; full_name: string } | null
 }
 
+export interface ParentFeedbackListRow {
+  id: string
+  parent_name: string
+  student_name: string | null
+  class_name: string | null
+  created_at: string
+}
+
+export interface ParentFeedbackRow extends ParentFeedbackListRow {
+  feedback: string
+}
+
 export interface AttendanceHistoryRow {
   id: string
   student_id: string

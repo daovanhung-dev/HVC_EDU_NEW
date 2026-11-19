@@ -4,7 +4,7 @@
 
 ## Database và quyền
 
-- Migration hiện có chạy đến 0066 trong worktree này. Thêm migration mới với số tiếp theo; tuyệt đối không sửa, xóa hoặc đổi số migration lịch sử.
+- Migration hiện có chạy đến 0068 trong worktree này. Thêm migration mới với số tiếp theo; tuyệt đối không sửa, xóa hoặc đổi số migration lịch sử.
 - Rà quyền đọc/ghi, RLS policy, helper SQL nội bộ, SECURITY DEFINER, search_path, grants và vai trò bị ảnh hưởng cho mọi thay đổi schema hoặc API.
 - Không tạo hoặc gọi RPC API (`supabase.rpc`/PostgREST RPC), kể cả bên trong Edge Function. Các RPC/caller đã có chỉ là legacy; khi sửa luồng liên quan, chuyển phần nghiệp vụ đó sang Edge Function. Helper/trigger SQL nội bộ không được gọi như API vẫn được phép.
 - Không dùng client-side role, route, id từ trình duyệt hay hidden button làm căn cứ cấp quyền.

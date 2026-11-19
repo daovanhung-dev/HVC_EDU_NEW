@@ -11,6 +11,10 @@ HVC_EDU quản lý lớp học và hồ sơ học tập liên tục, không tạ
 - **Học sinh:** xem lịch, lịch sử, giáo viên, điểm và chuyên cần của chính mình; xem lại video buổi đã hoàn thành trong “Xem lại bài cũ”; hỏi AI bằng tiếng Việt và có thể chọn nội dung một bài học làm ngữ cảnh.
 - ROOT_ADMIN tiếp tục vào giao diện Admin. Tài khoản ASSISTANT hiện có được đổi thành TEACHER trong migration, giữ user id và lịch sử.
 
+## Phản hồi từ phụ huynh
+
+Phụ huynh gửi ý kiến không cần đăng nhập tại `/parent-feedback`; trang này cũng được liên kết từ màn hình đăng nhập. Họ tên phụ huynh và nội dung là bắt buộc; tên học sinh và lớp là tùy chọn. Biểu mẫu nêu rõ phản hồi được gửi riêng tư, kín đáo nhưng không ẩn danh: trung tâm lưu họ tên cùng nội dung, và chỉ tài khoản ADMIN/ROOT_ADMIN đang hoạt động đọc được trong inbox **Thêm → Phản hồi từ phụ huynh**. Inbox chỉ xem, không sửa/xóa và không tự động xóa phản hồi. Public submit đi qua Edge Function có giới hạn tần suất; frontend chỉ đọc bằng Data API dưới RLS.
+
 ## Lớp, lịch và buổi học
 
 Lịch thuê phòng dùng bảng `room_rentals`, không gắn với lớp hoặc hồ sơ học tập. Tạo đơn, tạo theo tháng, đổi, hủy và xóa vĩnh viễn chạy trong Edge Function `admin-room-rentals`; RLS chỉ cho Admin/ROOT_ADMIN đọc, còn frontend không có quyền ghi trực tiếp. Database kiểm tra trùng với buổi cụ thể, lịch lặp chưa được sinh và lượt thuê khác. Mẫu tháng có phạm vi cả tháng hoặc phần còn lại; xác nhận so khớp lại xung đột trong transaction. Lượt thuê trùng được cập nhật tại chỗ với audit; chồng lấp lịch lớp chỉ được mở cho đúng giáo viên của lớp sau khi xác nhận. Hủy giữ lượt trong lịch sử; xóa vĩnh viễn chỉ tác động lượt được chọn và audit lưu snapshot trước khi xóa.

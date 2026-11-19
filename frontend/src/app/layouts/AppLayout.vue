@@ -33,6 +33,7 @@ const pageTitle = computed(() => {
   const path = route.path
   if (/\/admin\/students\/[^/]+/.test(path)) return 'Hồ sơ học sinh'
   if (/\/admin\/classes\/[^/]+/.test(path)) return 'Chi tiết lớp'
+  if (path === '/admin/parent-feedback') return 'Phản hồi từ phụ huynh'
   if (path === '/student/review') return 'Xem lại bài cũ'
   if (path === '/student/ai') return 'Hỏi AI'
   return links.value.find((link) => path.startsWith(link.to))?.label || roleLabel.value
@@ -56,6 +57,12 @@ async function signOut() {
         <RouterLink v-for="link in links" :key="link.to" :to="link.to" class="app-nav__link">
           <AppIcon :name="link.icon" :size="20" /><span>{{ link.label }}</span>
         </RouterLink>
+        <details v-if="auth.isAdmin" class="app-nav__group" :class="{ 'app-nav__group--active': route.path === '/admin/parent-feedback' }" :open="route.path === '/admin/parent-feedback'">
+          <summary class="app-nav__link app-nav__group-trigger"><AppIcon name="more" :size="20" /><span>Thêm</span><AppIcon class="app-nav__chevron" name="chevron" :size="16" /></summary>
+          <div class="app-nav__group-items">
+            <RouterLink to="/admin/parent-feedback" class="app-nav__link app-nav__sublink"><AppIcon name="chat" :size="18" /><span>Phản hồi từ phụ huynh</span></RouterLink>
+          </div>
+        </details>
       </nav>
       <div class="app-account">
         <div class="app-account__person">
@@ -71,6 +78,9 @@ async function signOut() {
       <nav class="app-nav" aria-label="Chức năng">
         <RouterLink v-for="link in links" :key="link.to" :to="link.to" class="app-nav__link" :aria-label="link.label" :title="link.label">
           <AppIcon :name="link.icon" :size="20" /><span>{{ link.label }}</span>
+        </RouterLink>
+        <RouterLink v-if="auth.isAdmin" to="/admin/parent-feedback" class="app-nav__link" aria-label="Thêm: Phản hồi từ phụ huynh" title="Phản hồi từ phụ huynh">
+          <AppIcon name="more" :size="20" /><span>Thêm</span>
         </RouterLink>
       </nav>
       <details class="app-account-menu mt-auto">
@@ -105,6 +115,9 @@ async function signOut() {
     <nav class="app-mobile-nav" aria-label="Điều hướng chính">
       <RouterLink v-for="link in links" :key="link.to" :to="link.to" class="app-nav__link">
         <AppIcon :name="link.icon" :size="20" /><span>{{ link.label }}</span>
+      </RouterLink>
+      <RouterLink v-if="auth.isAdmin" to="/admin/parent-feedback" class="app-nav__link" aria-label="Thêm: Phản hồi từ phụ huynh" title="Phản hồi từ phụ huynh">
+        <AppIcon name="more" :size="20" /><span>Thêm</span>
       </RouterLink>
     </nav>
   </div>

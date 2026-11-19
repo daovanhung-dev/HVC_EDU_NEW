@@ -70,4 +70,10 @@ describe('LoginPage', () => {
     expect(errors.current).toBeNull()
     expect(mocks.push).toHaveBeenCalledWith('/dashboard')
   })
+
+  it('links parents to the public private feedback form', () => {
+    const wrapper = mount(LoginWithGlobalBanner, { global: { plugins: [createPinia()] } })
+
+    expect(wrapper.get('a[href="#/parent-feedback"]').text()).toContain('Gửi phản hồi riêng tư')
+  })
 })

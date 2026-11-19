@@ -14,6 +14,8 @@ const pages: Array<{ label: string; path: string; role: ReviewRole }> = [
   { label: 'Admin · Chi tiết lớp', path: '/admin/classes/qa-class-1', role: 'ADMIN' },
   { label: 'Admin · Lịch buổi học', path: '/admin/sessions', role: 'ADMIN' },
   { label: 'Admin · Duyệt công', path: '/admin/timesheets', role: 'ADMIN' },
+  { label: 'Admin · Phản hồi phụ huynh', path: '/admin/parent-feedback', role: 'ADMIN' },
+  { label: 'Phụ huynh · Gửi ý kiến', path: '/parent-feedback', role: 'ADMIN' },
   { label: 'Giáo viên · Buổi học', path: '/staff/sessions', role: 'TEACHER' },
   { label: 'Giáo viên · Hồ sơ', path: '/staff/profile', role: 'TEACHER' },
   { label: 'Giáo viên · Chấm công', path: '/staff/timesheets', role: 'TEACHER' },

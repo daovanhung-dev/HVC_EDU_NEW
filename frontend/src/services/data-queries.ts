@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { AttendanceHistoryRow, ClassDetailRow, ClassMembershipDetailRow, ClassScheduleRow, RoomRental, SessionRow, StudentCurrentClass, StudentCurrentClassSummary, StudentHistoryRow, TimesheetRow } from '@/shared/types/domain'
+import type { AttendanceHistoryRow, ClassDetailRow, ClassMembershipDetailRow, ClassScheduleRow, ParentFeedbackListRow, ParentFeedbackRow, RoomRental, SessionRow, StudentCurrentClass, StudentCurrentClassSummary, StudentHistoryRow, TimesheetRow } from '@/shared/types/domain'
 
 async function unwrap<T>(request: PromiseLike<{ data: T | null; error: Error | null }>): Promise<T> {
   const { data, error } = await request
@@ -319,6 +319,23 @@ export async function getRoomRentals(from?: string, to?: string): Promise<RoomRe
   if (to) query = query.lt('starts_at', to)
   const rows = await unwrap<any[]>(query)
   return rows.map((row) => ({ ...row, staff: oneRelation(row.staff) }) as RoomRental)
+}
+
+export async function getParentFeedbackList(offset = 0, limit = 21): Promise<ParentFeedbackListRow[]> {
+  const start = Math.max(0, Math.floor(offset))
+  const pageSize = Math.min(101, Math.max(1, Math.floor(limit)))
+  return unwrap<ParentFeedbackListRow[]>(supabase.from('parent_feedback')
+    .select('id,parent_name,student_name,class_name,created_at')
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .range(start, start + pageSize - 1))
+}
+
+export async function getParentFeedbackDetail(id: string): Promise<ParentFeedbackRow | null> {
+  return unwrap<ParentFeedbackRow | null>(supabase.from('parent_feedback')
+    .select('id,parent_name,student_name,class_name,feedback,created_at')
+    .eq('id', id)
+    .maybeSingle())
 }
 
 async function loadTimesheets(): Promise<TimesheetRow[]> {

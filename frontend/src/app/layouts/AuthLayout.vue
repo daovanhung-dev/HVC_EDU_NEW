@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { RouterView } from 'vue-router'
+import { RouterView, useRoute } from 'vue-router'
 import logoUrl from '../../../../assets/logo.jpg'
+
+const route = useRoute()
 </script>
 
 <template>
   <main class="auth-layout">
     <a class="skip-link" href="#auth-content">Bỏ qua phần giới thiệu</a>
-    <div class="auth-layout__content">
+    <div class="auth-layout__content" :class="{ 'auth-layout__content--wide': route.path === '/parent-feedback' }">
       <div class="auth-layout__brand">
         <img :src="logoUrl" alt="Logo Hùng Cường Education" />
         <h1>Hùng Cường Education</h1>

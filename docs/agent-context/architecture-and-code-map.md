@@ -38,8 +38,8 @@ Manifest là nguồn phiên bản dependency chính xác. Môi trường dự á
 | `frontend/src/app/router/` | Route hash và điều hướng theo role/trạng thái; không phải lớp bảo mật dữ liệu. |
 | `frontend/src/app/layouts/`, `components/` | Layout, modal, field, calendar, trạng thái, toast và component dùng chung. |
 | `frontend/src/stores/` | Auth/session, lỗi ứng dụng và toast; không có store nghiệp vụ tổng quát. |
-| `frontend/src/modules/auth/` | Đăng nhập và đổi mật khẩu bắt buộc. |
-| `frontend/src/modules/admin/` | Học sinh, hồ sơ, nhân sự, lớp (membership và ngày bắt đầu), lịch/buổi, thuê phòng (lượt đơn/mẫu tháng, đổi/hủy riêng) và duyệt/chỉnh quyết định chấm công. |
+| `frontend/src/modules/auth/` | Đăng nhập, đổi mật khẩu bắt buộc và form public gửi phản hồi phụ huynh. |
+| `frontend/src/modules/admin/` | Học sinh, hồ sơ, nhân sự, lớp (membership và ngày bắt đầu), lịch/buổi, thuê phòng (lượt đơn/mẫu tháng, đổi/hủy riêng), inbox phản hồi phụ huynh và duyệt/chỉnh quyết định chấm công. |
 | `frontend/src/modules/staff/` | Buổi được giao, điểm danh/đánh giá, nội dung bài học, hồ sơ và yêu cầu chấm công. |
 | `frontend/src/modules/student/` | Lịch, kết quả học tập, xem lại video và chat AI. |
 | `frontend/src/services/data-queries.ts` | Truy vấn/đọc dữ liệu và chuẩn hóa quan hệ Supabase. |
@@ -58,17 +58,17 @@ Manifest là nguồn phiên bản dependency chính xác. Môi trường dự á
 
 ### Route theo vai trò
 
-- Admin: `/admin/students`, `/admin/staff`, `/admin/classes`, `/admin/sessions`, `/admin/timesheets`.
+- Admin: `/admin/students`, `/admin/staff`, `/admin/classes`, `/admin/sessions`, `/admin/timesheets`, `/admin/parent-feedback` (nằm trong **Thêm**).
 - Giáo viên: `/staff/sessions`, `/staff/timesheets`, `/staff/profile`.
 - Học sinh: `/student/schedule`, `/student/attendance`, `/student/review`, `/student/ai`.
-- Auth: `/login`, `/auth/change-password`.
+- Auth/public: `/login`, `/auth/change-password`, `/parent-feedback` (không yêu cầu đăng nhập).
 - `ROOT_ADMIN` dùng giao diện Admin. Học sinh/giáo viên có cờ đổi mật khẩu phải vào màn hình đổi mật khẩu trước luồng khác.
 
 ## Supabase: database và Edge Functions
 
-- `supabase/migrations/` là schema, enum, constraints, helper/trigger SQL nội bộ, grants, RLS, index và thay đổi theo thứ tự; migration mới nhất trong repo là `0066`. RPC còn trong lịch sử/source là legacy, không phải cách triển khai cho thay đổi mới.
+- `supabase/migrations/` là schema, enum, constraints, helper/trigger SQL nội bộ, grants, RLS, index và thay đổi theo thứ tự; migration mới nhất trong repo là `0068`. RPC còn trong lịch sử/source là legacy, không phải cách triển khai cho thay đổi mới.
 - `supabase/functions/<name>/index.ts` là HTTP entrypoint; một số route tách `handler.ts` để kiểm thử logic. `_shared/` chứa auth, CORS, password-reset và response/error.
-- Các route hiện có bao phủ account status/create/reset, bootstrap/login, cập nhật trạng thái buổi và learning, AI học sinh, tối ưu nhận xét giáo viên, submit/review chấm công, và thuê phòng Admin. Danh sách từng file nằm trong inventory.
+- Các route hiện có bao phủ account status/create/reset, bootstrap/login, cập nhật trạng thái buổi và learning, AI học sinh, tối ưu nhận xét giáo viên, submit/review chấm công, thuê phòng Admin và submit public phản hồi phụ huynh. Danh sách từng file nằm trong inventory.
 - `supabase/tests/` chứa kiểm thử SQL cho lập buổi, conflict phòng, giới hạn teacher, learning/RLS, roster và timesheet. Đọc test liên quan cùng migration tạo/sửa object.
 - Cron và schedule generator được định nghĩa ở migration/config backend. Tài liệu source nói sinh trong 30 ngày theo `Asia/Ho_Chi_Minh`; xác minh cấu hình/backend trực tiếp trước khi khẳng định lịch Cron production đang hoạt động.
 

@@ -42,7 +42,7 @@ vi.mock('./supabase', () => ({
   },
 }))
 
-import { getClassActiveRosterSize, getClassRosterForExport, getMyAttendance, getMySessions, getMyTimesheets, getSessionAttendanceSummaries, getSessionStudents, getStudentCurrentClasses, getStudentHistory, getStudentIntakeDuplicateIdentities, getStudentsCurrentClassSummaries, getTimesheets } from './data-queries'
+import { getClassActiveRosterSize, getClassRosterForExport, getMyAttendance, getMySessions, getMyTimesheets, getParentFeedbackDetail, getParentFeedbackList, getSessionAttendanceSummaries, getSessionStudents, getStudentCurrentClasses, getStudentHistory, getStudentIntakeDuplicateIdentities, getStudentsCurrentClassSummaries, getTimesheets } from './data-queries'
 
 const assignedStaffRelation = 'staff!session_staff_staff_id_fkey('
 
@@ -359,5 +359,40 @@ describe('timesheet queries', () => {
   it('loads the admin review queue through the same RLS-protected query', async () => {
     await expect(getTimesheets()).resolves.toHaveLength(1)
     expect(mockState.selections.filter((item) => item.table === 'timesheets')).toHaveLength(1)
+  })
+})
+
+describe('parent feedback queries', () => {
+  beforeEach(() => {
+    mockState.selections.length = 0
+    mockState.calls.length = 0
+    mockState.responses = {}
+  })
+
+  it('loads inbox rows without the message body and applies stable pagination', async () => {
+    await getParentFeedbackList(20, 21)
+
+    const selection = mockState.selections.find((item) => item.table === 'parent_feedback')
+    expect(selection?.columns).toBe('id,parent_name,student_name,class_name,created_at')
+    expect(mockState.calls.filter((call) => call.table === 'parent_feedback' && call.method === 'order')).toEqual([
+      { table: 'parent_feedback', method: 'order', args: ['created_at', { ascending: false }] },
+      { table: 'parent_feedback', method: 'order', args: ['id', { ascending: false }] },
+    ])
+    expect(mockState.calls.find((call) => call.table === 'parent_feedback' && call.method === 'range')).toEqual({
+      table: 'parent_feedback',
+      method: 'range',
+      args: [20, 40],
+    })
+  })
+
+  it('fetches the full message only for the selected row', async () => {
+    await getParentFeedbackDetail('qa-feedback-id')
+
+    expect(mockState.selections.find((item) => item.table === 'parent_feedback')?.columns).toContain('feedback')
+    expect(mockState.calls.find((call) => call.table === 'parent_feedback' && call.method === 'eq')).toEqual({
+      table: 'parent_feedback',
+      method: 'eq',
+      args: ['id', 'qa-feedback-id'],
+    })
   })
 })

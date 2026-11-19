@@ -62,12 +62,14 @@ Migration phải được đọc theo thứ tự và kiểm tra migration sau c�
 - `0065`: gỡ hai RPC template và planner bền vững; luồng thêm lịch mẫu hiện dùng Edge Function `admin-month-week-template-addition` với transaction PostgreSQL trực tiếp.
 - `0066`: thêm `room_rentals`, RLS đọc Admin, trigger chặn xung đột với buổi/lịch lặp/lượt thuê, và kiểm tra ngược khi ghi lịch lớp; Edge Function `admin-room-rentals` xử lý tạo đơn/mẫu tháng, đổi lịch, hủy mềm và audit trong transaction.
 - `0067`: cho phép giao dịch tạo mẫu tháng lưu ngày đã qua theo quyền transaction-local; trigger vẫn chặn lịch lớp khác giáo viên và chỉ cho xung đột lớp cùng giáo viên khi Edge Function đã nhận xác nhận. Lịch thuê trùng được cập nhật tại chỗ và audit trước/sau.
+- `0068`: tạo bảng `parent_feedback` cho form public không cần JWT; chỉ ADMIN/ROOT_ADMIN có profile ACTIVE đọc qua RLS, không cấp ghi Data API. `parent-feedback-submit` ghi bằng transaction PostgreSQL trực tiếp. Bảng private chỉ giữ HMAC địa chỉ nguồn phục vụ giới hạn gửi 5 lần/10 phút; Cron xóa digest sau 24 giờ.
 
 Không sửa, xóa hoặc đổi số migration đã có thể chạy ở môi trường khác. Thay đổi schema bằng migration tiếp theo. Migration production cần nằm trong phạm vi công việc và phải kiểm tra target/backup/migration history trực tiếp; local test không cần áp vào production.
 
 ## Edge Functions
 
 - `supabase/functions/_shared/auth.ts`: xác thực caller/hồ sơ; `cors.ts`: preflight; `response.ts`: success/error/trace id; `password-reset.ts`: helper reset.
+- `parent-feedback-submit` là endpoint public `verify_jwt=false`; kiểm tra họ tên/nội dung, honeypot và giới hạn request, rồi ghi phản hồi cùng lượt giới hạn trong một transaction. Chỉ digest HMAC địa chỉ nguồn được lưu tạm trong schema `private`; thiếu secret hoặc header nguồn thì từ chối an toàn. Danh sách/nội dung đọc từ Data API theo RLS, không tạo RPC.
 - Account handlers tạo/khóa/reset tài khoản hoặc bootstrap ROOT là đường đặc quyền; chỉ trả thông tin cần thiết và giữ audit.
 - `session-start`, `session-complete`, `session-learning-update` hiện xác thực teacher rồi gọi RPC service-only legacy; không mở rộng cách làm này. `admin-month-week-template-addition` xác thực Admin có `CLASS_MANAGE`, dựng planner trong `pg_temp` của transaction hiện hành, rồi ghi buổi/roster/audit trực tiếp, không gọi PostgREST RPC; dùng mẫu Edge Function này cho luồng mới cần thay RPC.
 - `admin-room-rentals` xác thực role Admin/ROOT_ADMIN, kiểm tra giáo viên đang hoạt động, khóa cạnh tranh lịch, ghi các lượt tháng toàn bộ hoặc từ chối toàn bộ, và giữ hủy/audit trong cùng transaction; không gọi RPC API.

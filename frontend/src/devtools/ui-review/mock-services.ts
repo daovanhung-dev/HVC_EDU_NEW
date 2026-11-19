@@ -64,6 +64,11 @@ export const timesheets: any[] = [
   { id: 'qa-timesheet-2', session_id: 'qa-session-3', staff_id: 'qa-teacher-2', status: 'APPROVED', submitted_at: at(-1, '18:00'), approved_at: at(-1, '18:30'), approved_by: 'qa-admin', rejection_reason: null, notes: null, sessions: { ...sessions[2], classes: classes[1] }, staff: teachers[1] },
 ]
 
+export const parentFeedback: any[] = [
+  { id: 'qa-parent-feedback-1', parent_name: 'QA- Nguyễn Thu Hà', student_name: 'QA- Nguyễn Minh An', class_name: 'QA- Toán tư duy 5A', created_at: at(-1, '18:20'), feedback: 'QA- Phụ huynh xin thêm bài luyện tập ngắn để học sinh ôn lại phân số tại nhà.' },
+  { id: 'qa-parent-feedback-2', parent_name: 'QA- Trần Minh Đức', student_name: 'QA- Trần Gia Linh', class_name: 'QA- Tiếng Anh 8B', created_at: at(-3, '09:45'), feedback: 'QA- Cảm ơn thầy cô đã giúp con tự tin hơn khi nói tiếng Anh.' },
+]
+
 async function query<T>(value: T): Promise<T> {
   if (reviewState.mode === 'error') throw new Error('Lỗi mô phỏng QA. Hãy thử lại để kiểm tra trạng thái lỗi.')
   if (reviewState.mode === 'slow') await new Promise((resolve) => setTimeout(resolve, 1100))
@@ -359,6 +364,8 @@ export function getSessionStudents(sessionId: string) {
   }))
 }
 export function getTimesheets() { return query(timesheets) }
+export function getParentFeedbackList(offset = 0, limit = 21) { return query(parentFeedback.slice(offset, offset + limit).map(({ feedback: _feedback, ...row }) => row)) }
+export function getParentFeedbackDetail(id: string) { return query(parentFeedback.find((row) => row.id === id) || null) }
 export function getMyTimesheets() { return query(timesheets.filter((row) => row.staff_id === 'qa-teacher-1')) }
 export function getMyStaff() { return query(teachers[0]) }
 export function getMyStudent() { return query(students[0]) }
@@ -903,5 +910,11 @@ export async function optimizeTeacherComment(comment: string) {
   return { optimized_comment: `QA- Gợi ý diễn đạt: ${comment.trim().replace(/[.!?]+$/u, '')} với lời nhận xét rõ ràng và tích cực hơn.` }
 }
 export async function submitTimesheet(input: any) { const row = { id: `qa-timesheet-${Date.now()}`, session_id: input.session_id, staff_id: 'qa-teacher-1', status: 'PENDING', submitted_at: new Date().toISOString(), approved_at: null, approved_by: null, rejection_reason: null, notes: input.notes, sessions: sessions.find((item) => item.id === input.session_id), staff: teachers[0] }; timesheets.unshift(row); return row }
+export async function submitParentFeedback(input: any) {
+  await query(true)
+  const { website: _website, ...submission } = input
+  parentFeedback.unshift({ id: `qa-parent-feedback-${Date.now()}`, ...submission, created_at: new Date().toISOString() })
+  return { accepted: true as const }
+}
 export async function reviewTimesheet(input: any) { const row = timesheets.find((item) => item.id === input.timesheet_id); if (row) { row.status = input.approve ? 'APPROVED' : 'REJECTED'; row.rejection_reason = input.reason || null }; return row }
 export async function updateMyStaffProfile(input: any) { Object.assign(teachers[0], input) }

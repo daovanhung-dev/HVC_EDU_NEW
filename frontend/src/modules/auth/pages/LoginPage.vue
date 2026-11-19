@@ -43,6 +43,9 @@ async function submit() {
           <span v-if="auth.loading" class="spinner-border spinner-border-sm me-2" />Đăng nhập
         </button>
       </form>
+      <div class="text-center border-top mt-4 pt-3">
+        <a class="small fw-semibold text-decoration-none" href="#/parent-feedback">Phụ huynh muốn gửi ý kiến? Gửi phản hồi riêng tư</a>
+      </div>
     </div>
   </div>
 </template>

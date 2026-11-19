@@ -8,6 +8,7 @@ import ReviewApp from '../src/devtools/ui-review/ReviewApp.vue'
 import AuthLayout from '../src/app/layouts/AuthLayout.vue'
 import AppLayout from '../src/app/layouts/AppLayout.vue'
 import LoginPage from '../src/modules/auth/pages/LoginPage.vue'
+import ParentFeedbackPage from '../src/modules/auth/pages/ParentFeedbackPage.vue'
 import ChangePasswordPage from '../src/modules/auth/pages/ChangePasswordPage.vue'
 import StudentsPage from '../src/modules/admin/pages/StudentsPage.vue'
 import StudentDetailPage from '../src/modules/admin/pages/StudentDetailPage.vue'
@@ -16,6 +17,7 @@ import ClassesPage from '../src/modules/admin/pages/ClassesPage.vue'
 import ClassDetailPage from '../src/modules/admin/pages/ClassDetailPage.vue'
 import AdminSessionsPage from '../src/modules/admin/pages/AdminSessionsPage.vue'
 import AdminTimesheetsPage from '../src/modules/admin/pages/AdminTimesheetsPage.vue'
+import ParentFeedbackInboxPage from '../src/modules/admin/pages/ParentFeedbackInboxPage.vue'
 import StaffSessionsPage from '../src/modules/staff/pages/SessionsPage.vue'
 import StaffProfilePage from '../src/modules/staff/pages/StaffProfilePage.vue'
 import StaffTimesheetsPage from '../src/modules/staff/pages/StaffTimesheetsPage.vue'
@@ -26,6 +28,7 @@ import { useAuthStore } from '../src/devtools/ui-review/mock-auth.store'
 
 const routes = [
   { path: '/login', component: AuthLayout, children: [{ path: '', component: LoginPage }] },
+  { path: '/parent-feedback', component: AuthLayout, children: [{ path: '', component: ParentFeedbackPage }] },
   { path: '/auth/change-password', component: AuthLayout, children: [{ path: '', component: ChangePasswordPage }] },
   { path: '/admin/students', component: AppLayout, children: [{ path: '', component: StudentsPage }] },
   { path: '/admin/students/:studentId', component: AppLayout, children: [{ path: '', component: StudentDetailPage }] },
@@ -34,6 +37,7 @@ const routes = [
   { path: '/admin/classes/:classId', component: AppLayout, children: [{ path: '', component: ClassDetailPage }] },
   { path: '/admin/sessions', component: AppLayout, children: [{ path: '', component: AdminSessionsPage }] },
   { path: '/admin/timesheets', component: AppLayout, children: [{ path: '', component: AdminTimesheetsPage }] },
+  { path: '/admin/parent-feedback', component: AppLayout, children: [{ path: '', component: ParentFeedbackInboxPage }] },
   { path: '/staff/sessions', component: AppLayout, children: [{ path: '', component: StaffSessionsPage }] },
   { path: '/staff/profile', component: AppLayout, children: [{ path: '', component: StaffProfilePage }] },
   { path: '/staff/timesheets', component: AppLayout, children: [{ path: '', component: StaffTimesheetsPage }] },

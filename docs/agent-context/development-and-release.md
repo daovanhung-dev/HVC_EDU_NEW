@@ -42,6 +42,7 @@ Trước lệnh CLI tác động remote, xác minh project đang link đúng ref
 - Frontend: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_APP_BASE_PATH`. `frontend/.env.example` là mẫu.
 - Workflow Supabase: `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`, `SUPABASE_DB_PASSWORD` qua GitHub Secrets.
 - Edge Function bootstrap: `CUSTOM_BOOTSTRAP_SECRET`; các API key bên ngoài chỉ ở môi trường server.
+- Edge Function public phản hồi phụ huynh: `PARENT_FEEDBACK_RATE_LIMIT_SECRET` (tối thiểu 32 ký tự, chỉ lưu trong Supabase Secrets); thiếu secret thì endpoint fail closed.
 - Không đưa secret key/database password/access token/API key vào biến `VITE_`, source, log, context hoặc output. Publishable key là public; RLS/database là lớp bảo vệ.
 
 ## CI và deploy

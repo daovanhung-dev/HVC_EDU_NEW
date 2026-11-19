@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import { defineComponent, h, nextTick, onMounted } from 'vue'
 import { createMemoryHistory, createRouter, RouterView } from 'vue-router'
 import { describe, expect, it, vi } from 'vitest'
+import { useAuthStore } from '@/stores/auth.store'
 import AppLayout from './AppLayout.vue'
 
 const root = defineComponent({ render: () => h(RouterView) })
@@ -146,6 +147,33 @@ describe('AppLayout route view lifecycle', () => {
 
     expect(wrapper.find('[data-testid="sessions-query"]').exists()).toBe(true)
     expect(mountPage).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('shows parent feedback beneath the admin Thêm sidebar section', async () => {
+    const pinia = createPinia()
+    useAuthStore(pinia).profile = { role: 'ADMIN' } as any
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        ...adminPaths.map(([path, name]) => ({
+          path,
+          component: AppLayout,
+          children: [{ path: '', component: page(`nav-${name}`, vi.fn()) }],
+        })),
+        { path: '/admin/parent-feedback', component: AppLayout, children: [{ path: '', component: page('parent-feedback', vi.fn()) }] },
+        { path: '/auth/change-password', component: page('change-password', vi.fn()) },
+      ],
+    })
+    await router.push('/admin/parent-feedback')
+    await router.isReady()
+    const wrapper = mount(root, { global: { plugins: [pinia, router] } })
+    await flushPromises()
+
+    expect(wrapper.find('.app-sidebar .app-nav__group-trigger').text()).toContain('Thêm')
+    expect(wrapper.find('.app-sidebar .app-nav__sublink').text()).toContain('Phản hồi từ phụ huynh')
+    expect(wrapper.find('.app-sidebar .app-nav__sublink').classes()).toContain('router-link-active')
+
     wrapper.unmount()
   })
 })

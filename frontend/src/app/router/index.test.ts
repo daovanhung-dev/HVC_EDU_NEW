@@ -131,10 +131,20 @@ describe('authentication route guard', () => {
     expect(router.currentRoute.value.path).toBe('/login')
   })
 
+  it('allows the public parent feedback form without initializing an account session', async () => {
+    await router.push('/parent-feedback?case=public-feedback')
+
+    expect(router.currentRoute.value.path).toBe('/parent-feedback')
+    expect(router.currentRoute.value.meta.publicAccess).toBe(true)
+    expect(mocks.supabase.auth.getSession).not.toHaveBeenCalled()
+  })
+
   it('registers continuous class and student profile routes, not retired modules', () => {
     expect(router.resolve('/admin/classes/class-1').matched.some((record) => record.path === '/admin/classes/:classId')).toBe(true)
     expect(router.resolve('/admin/students/student-1').matched.some((record) => record.path === '/admin/students/:studentId')).toBe(true)
     expect(router.resolve('/admin/timesheets').matched.some((record) => record.path === '/admin/timesheets')).toBe(true)
+    expect(router.resolve('/admin/parent-feedback').matched.some((record) => record.path === '/admin/parent-feedback')).toBe(true)
+    expect(router.resolve('/parent-feedback').matched.some((record) => record.path === '/parent-feedback')).toBe(true)
     expect(router.resolve('/staff/timesheets').matched.some((record) => record.path === '/staff/timesheets')).toBe(true)
     expect(router.resolve('/student/review').matched.some((record) => record.path === '/student/review')).toBe(true)
     expect(router.resolve('/student/ai').matched.some((record) => record.path === '/student/ai')).toBe(true)

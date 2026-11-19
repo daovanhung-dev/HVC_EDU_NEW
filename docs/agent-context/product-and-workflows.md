@@ -15,6 +15,12 @@
 
 `ASSISTANT` và `PARENT` là role lịch sử. Migration 0039 chuyển Assistant sang Teacher; migration 0038 retire quyền Parent. Phụ huynh dùng chung tài khoản học sinh, không có role Parent đang hoạt động.
 
+## Phản hồi từ phụ huynh
+
+- Phụ huynh có thể gửi form public tại `/parent-feedback` mà không đăng nhập. Họ tên phụ huynh và nội dung bắt buộc; tên học sinh/lớp tùy chọn. Form ghi rõ đây là phản hồi riêng tư, kín đáo nhưng không ẩn danh: trung tâm biết họ tên người gửi.
+- ADMIN/ROOT_ADMIN đang hoạt động xem nội dung qua inbox **Thêm → Phản hồi từ phụ huynh**. Trang chỉ đọc; RLS chặn role khác và tài khoản không hoạt động. Phản hồi không bị tự động xóa.
+- Public write dùng Edge Function `parent-feedback-submit` không yêu cầu JWT, có honeypot, giới hạn kích thước/trường và tối đa năm lần gửi được nhận trong mười phút theo địa chỉ nguồn đã HMAC. Chỉ digest HMAC tạm thời được lưu trong schema `private`; job Cron xóa digest sau 24 giờ. Không lưu raw IP.
+
 ## Lớp, membership và sĩ số
 
 - `classes` nối môn/khối và trạng thái lớp. `class_memberships` là quan hệ học sinh-lớp có ngày bắt đầu/kết thúc; kết thúc membership không xóa lịch sử.
