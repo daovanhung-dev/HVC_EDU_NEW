@@ -2159,6 +2159,8 @@ describe('AdminSessionsPage calendar', () => {
   })
 
   it('reschedules and cancels only a selected future rental occurrence', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-07T12:00:00+07:00'))
     const date = addCalendarDays(getBusinessDateKey(new Date()), 2)
     const rescheduledDate = addCalendarDays(date, 2)
     let currentRentalDate = date
@@ -2263,6 +2265,8 @@ describe('AdminSessionsPage calendar', () => {
   })
 
   it('does not delete a rental when the deletion confirmation is cancelled', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-07T12:00:00+07:00'))
     const date = addCalendarDays(getBusinessDateKey(new Date()), 2)
     mockState.getRoomRentals.mockResolvedValue([makeRental('qa-delete-cancelled-confirm', date)])
     const wrapper = mountPage()
@@ -2279,6 +2283,8 @@ describe('AdminSessionsPage calendar', () => {
   })
 
   it('keeps the rental visible and reports an error when permanent deletion fails', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-07T12:00:00+07:00'))
     const date = addCalendarDays(getBusinessDateKey(new Date()), 2)
     mockState.getRoomRentals.mockResolvedValue([makeRental('qa-delete-failure', date)])
     mockState.deleteRoomRental.mockRejectedValueOnce(new Error('ROOM_RENTAL_NOT_FOUND'))

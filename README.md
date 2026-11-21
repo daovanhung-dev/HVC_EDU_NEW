@@ -15,7 +15,7 @@ Yêu cầu Node.js 22 và npm 10+.
 ```bash
 export VITE_SUPABASE_URL="https://YOUR_PROJECT_REF.supabase.co"
 export VITE_SUPABASE_PUBLISHABLE_KEY="YOUR_PUBLISHABLE_KEY"
-export VITE_APP_BASE_PATH="/hung-cuong-management/"
+export VITE_APP_BASE_PATH="/edu_center/"
 npm install
 npm run dev
 ```
@@ -50,18 +50,16 @@ Deploy production cần cấu hình `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_R
 
 ## Deploy GitHub Pages
 
-Tạo public repository tên `hung-cuong-management`, push branch `main`, sau đó vào `Settings → Pages` chọn `GitHub Actions`. Workflow `Deploy Frontend` sẽ tự chạy sau mỗi lần push.
+Repository hiện tại là `daovanhung-dev/edu_center`; GitHub Pages dùng URL `https://daovanhung-dev.github.io/edu_center/`. Trong `Settings → Pages`, chọn `GitHub Actions` làm nguồn deploy. Workflow `Deploy Frontend` tự chạy sau mỗi lần push lên `main`.
 
 Tạo GitHub Actions Variables (khuyến nghị) hoặc Repository secrets với đúng tên sau:
 
 ```text
 VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
-VITE_APP_BASE_PATH=/hung-cuong-management/
 ```
 
-Hai giá trị đầu tiên là bắt buộc để workflow build frontend. Workflow ưu tiên `Variables` và tự fallback sang `Repository secrets`, nên có thể dùng cấu hình hiện tại nếu bạn đã tạo secrets với đúng tên. Nếu chưa cấu hình, workflow sẽ dừng ở bước `Validate public build configuration` và hiển thị tên giá trị còn thiếu.
-`VITE_APP_BASE_PATH` là tùy chọn trong workflow; nếu bỏ trống, workflow tự dùng slug repository hiện tại (ví dụ repository `HVC_EDU_NEW` dùng `/HVC_EDU_NEW/`).
+Hai giá trị trên là bắt buộc để workflow build frontend. Workflow ưu tiên `Variables` và tự fallback sang `Repository secrets`, nên có thể dùng cấu hình hiện tại nếu bạn đã tạo secrets với đúng tên. Nếu chưa cấu hình, workflow sẽ dừng ở bước `Validate public build configuration` và hiển thị tên giá trị còn thiếu. Base path của GitHub Pages luôn được lấy từ slug repository hiện tại; không tạo biến `VITE_APP_BASE_PATH` trong GitHub Actions.
 
 Nếu muốn chạy workflow migration/function thủ công từ tab Actions, tạo thêm Actions Secrets:
 
@@ -74,8 +72,8 @@ SUPABASE_DB_PASSWORD
 Sau khi Pages deploy xong, đặt Supabase Auth `Site URL` và `Redirect URLs` thành:
 
 ```text
-https://YOUR_GITHUB_OWNER.github.io/hung-cuong-management/
-https://YOUR_GITHUB_OWNER.github.io/hung-cuong-management/**
+https://YOUR_GITHUB_OWNER.github.io/edu_center/
+https://YOUR_GITHUB_OWNER.github.io/edu_center/**
 ```
 
 Không đặt `SUPABASE_SECRET_KEYS`, database password hoặc `CUSTOM_BOOTSTRAP_SECRET` vào Variables hay source frontend. Đặt chúng ở Supabase/GitHub Secrets theo đúng workflow.

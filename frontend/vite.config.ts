@@ -5,7 +5,7 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '')
   return {
-    base: env.VITE_APP_BASE_PATH || '/hung-cuong-management/',
+    base: env.VITE_APP_BASE_PATH || '/edu_center/',
     plugins: [vue()],
     resolve: {
       alias: {
